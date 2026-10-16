@@ -1,0 +1,24 @@
+{
+  "id": "architecture-review",
+  "version": 1,
+  "description": "Exploración read-only con Claude, síntesis con Codex, judgment por orquestador activo",
+  "steps": [
+    {
+      "id": "explore",
+      "role": "explorer",
+      "promptTemplate": "explorer.md",
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "synthesize",
+      "role": "synthesizer",
+      "promptTemplate": "synthesize.md",
+      "inputFrom": ["explore"],
+      "outputContract": "markdown-report"
+    }
+  ],
+  "judgment": {
+    "promptTemplate": "judgment.md",
+    "artifact": "orchestrator-judgment.md"
+  }
+}

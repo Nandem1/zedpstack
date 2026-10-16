@@ -1,0 +1,19 @@
+{
+  "$schema": "./schemas/config.schema.json",
+  "roles": {
+    "explorer": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "synthesizer": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    }
+  },
+  "timeouts": {
+    "explorer": 600000,
+    "synthesizer": 600000
+  }
+}

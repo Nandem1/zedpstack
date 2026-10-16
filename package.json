@@ -1,0 +1,17 @@
+{
+  "name": "@nndsk/zedpstack",
+  "version": "0.1.2",
+  "description": "Portable multi-runtime orchestration over pstack playbooks (Zed, Cursor, CLI)",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "zedpstack": "./scripts/dispatch.mjs"
+  },
+  "scripts": {
+    "test": "node --test tests/**/*.test.mjs",
+    "run:architecture-review": "node scripts/dispatch.mjs run --playbook architecture-review"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

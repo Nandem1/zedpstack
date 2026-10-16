@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nndsk/zedpstack/schemas/manifest.schema.json",
+  "title": "ZedpstackRunManifest",
+  "type": "object",
+  "required": ["schemaVersion", "runId", "playbook", "status", "steps"],
+  "properties": {
+    "schemaVersion": { "type": "integer" },
+    "runId": { "type": "string" },
+    "repoRoot": { "type": "string" },
+    "gitCommit": { "type": ["string", "null"] },
+    "playbook": { "type": "string" },
+    "goal": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": [
+        "running",
+        "awaiting_judgment",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "createdAt": { "type": "string" },
+    "updatedAt": { "type": "string" },
+    "zedpstackVersion": { "type": "string" },
+    "upstream": { "type": "object" },
+    "bindings": { "type": "object" },
+    "steps": { "type": "array" }
+  }
+}

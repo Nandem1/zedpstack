@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkerResult",
+  "type": "object",
+  "required": ["ok", "text"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "text": { "type": "string", "minLength": 1 },
+    "format": { "type": "string", "enum": ["markdown", "text"] },
+    "exitCode": { "type": "integer" },
+    "runtime": { "type": "string" },
+    "model": { "type": "string" },
+    "cliVersion": { "type": ["string", "null"] },
+    "nativeSessionId": { "type": ["string", "null"] }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ZedpstackConfig",
+  "type": "object",
+  "properties": {
+    "roles": { "type": "object" },
+    "timeouts": { "type": "object" }
+  }
+}

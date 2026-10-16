@@ -1,0 +1,8 @@
+node_modules/
+zedpstack.config.json
+*.local.json
+.DS_Store
+docs/audit-*.txt
+docs/audit-*.err
+docs/session-*.log
+.audit-last-run.log
