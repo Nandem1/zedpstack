@@ -10,7 +10,7 @@ Orquestación portable multi-runtime sobre playbooks inspirados en pstack.
 ## Instalación
 
 ```bash
-git clone https://github.com/nndsk/zedpstack.git
+git clone https://github.com/Nandem1/zedpstack.git
 cd zedpstack
 cp zedpstack.config.example.json zedpstack.config.json
 # editar modelos según tu cuenta (archivo local, no se commitea)

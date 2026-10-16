@@ -30,8 +30,6 @@ node ~/.agents/skills/zedpstack/scripts/dispatch.mjs run \
   --tee-events
 ```
 
-Desde MH-Next sin symlink: `node ./zedpstack/scripts/dispatch.mjs` con `--repo .`.
-
 2. Observa progreso en `workers/*/stdout.log` y eventos resumidos en `.zedpstack/runs/<runId>/events.jsonl` (`worker.output` no se persiste por defecto; `--tee-events` para stderr en vivo).
 3. Cuando `manifest.status` sea `awaiting_judgment`, lee:
    - `workers/explore/result.json`

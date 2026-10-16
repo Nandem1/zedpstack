@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/nndsk/zedpstack/schemas/manifest.schema.json",
+  "$id": "https://github.com/Nandem1/zedpstack/schemas/manifest.schema.json",
   "title": "ZedpstackRunManifest",
   "type": "object",
   "required": ["schemaVersion", "runId", "playbook", "status", "steps"],
