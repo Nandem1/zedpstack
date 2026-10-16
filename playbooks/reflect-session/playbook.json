@@ -6,21 +6,21 @@
   "steps": [
     {
       "id": "reflect-judgment",
-      "role": "reflect-reviewer",
+      "role": "reflect-reviewer-judgment",
       "promptSource": "pstack-reflect-reviewer",
       "promptMeta": { "lens": "judgment" },
       "outputContract": "markdown-report"
     },
     {
       "id": "reflect-tooling",
-      "role": "reflect-reviewer",
+      "role": "reflect-reviewer-tooling",
       "promptSource": "pstack-reflect-reviewer",
       "promptMeta": { "lens": "tooling" },
       "outputContract": "markdown-report"
     },
     {
       "id": "reflect-divergent",
-      "role": "reflect-reviewer",
+      "role": "reflect-reviewer-divergent",
       "promptSource": "pstack-reflect-reviewer",
       "promptMeta": { "lens": "divergent" },
       "outputContract": "markdown-report"

@@ -10,4 +10,6 @@
 
 No adaptados (siguen en pstack nativo / futuro): swarm, arena fan-out paralelo, feature, bug-fix (escritura), babysit, shipping.
 
-Paralelismo pstack se modela como **pasos secuenciales** con el mismo prompt y distinto `promptMeta` (reviewer A/B/C, candidatos A/B).
+Paralelismo pstack se modela como **pasos secuenciales** con roles distintos por panel (`interrogate-reviewer-a/b/c`, `architect-runner-a/b`, reflect por lente). Configúralos con `/setup-zedpstack` → `dispatch setup apply`.
+
+Observabilidad: `--tee-events`, `dispatch watch`, [STREAMING.md](./STREAMING.md).

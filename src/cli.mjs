@@ -2,6 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { cancelRun } from './cancel.mjs';
 import { completeJudgment, runPlaybook } from './run.mjs';
+import {
+  applyModelSheetToConfig,
+  initModelSheet,
+  showSetupStatus,
+} from './setupConfig.mjs';
+import { watchRun } from './watchRun.mjs';
+import { zedpstackRoot } from './paths.mjs';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -17,12 +24,27 @@ function parseArgs(argv) {
     if (a.startsWith('--')) {
       const key = a.slice(2);
       args.shift();
-      if (['goal', 'playbook', 'repo', 'run-id', 'file', 'context-file'].includes(key)) {
+      if (
+        [
+          'goal',
+          'playbook',
+          'repo',
+          'run-id',
+          'file',
+          'context-file',
+          'model-sheet',
+          'config',
+        ].includes(key)
+      ) {
         opts[key] = args.shift();
       } else if (key === 'tee-events') {
         opts.teeEvents = true;
       } else if (key === 'persist-stream-events') {
         opts.persistStreamEvents = true;
+      } else if (key === 'from-start') {
+        opts.fromStart = true;
+      } else if (key === 'no-follow') {
+        opts['no-follow'] = true;
       } else {
         opts[key] = true;
       }
@@ -111,5 +133,52 @@ export async function main(argv) {
     return;
   }
 
-  throw new Error(`Unknown command: ${command}. Use: run | resume | judgment | cancel`);
+  if (command === 'watch') {
+    const runId = opts['run-id'];
+    if (!runId) throw new Error('watch requires --run-id');
+    await watchRun({
+      repoRoot,
+      runId,
+      fromStart: Boolean(opts.fromStart),
+      follow: !opts['no-follow'],
+    });
+    return;
+  }
+
+  if (command === 'list') {
+    const dir = path.join(zedpstackRoot(), 'playbooks');
+    const ids = fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+      .sort();
+    console.log(JSON.stringify({ playbooks: ids }, null, 2));
+    return;
+  }
+
+  if (command === 'setup') {
+    const sub = opts._[0] ?? 'show';
+    if (sub === 'show') {
+      console.log(JSON.stringify(showSetupStatus(), null, 2));
+      return;
+    }
+    if (sub === 'init') {
+      const target = initModelSheet(opts.file);
+      console.log(JSON.stringify({ modelSheet: target, created: true }, null, 2));
+      return;
+    }
+    if (sub === 'apply') {
+      const result = applyModelSheetToConfig({
+        sheetPath: opts.file ?? opts['model-sheet'],
+        configPath: opts.config,
+      });
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    throw new Error('setup subcommands: show | init | apply');
+  }
+
+  throw new Error(
+    `Unknown command: ${command}. Use: run | resume | judgment | cancel | watch | list | setup`,
+  );
 }

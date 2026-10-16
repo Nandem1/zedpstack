@@ -38,9 +38,17 @@ const ROLE_BINDING_ALIASES = {
   'architect-runner': 'explorer',
   'architect-synthesize': 'synthesizer',
   'interrogate-reviewer': 'explorer',
+  'interrogate-reviewer-a': 'interrogate-reviewer',
+  'interrogate-reviewer-b': 'interrogate-reviewer',
+  'interrogate-reviewer-c': 'interrogate-reviewer',
   'interrogate-lead': 'synthesizer',
   'reflect-reviewer': 'explorer',
+  'reflect-reviewer-judgment': 'reflect-reviewer',
+  'reflect-reviewer-tooling': 'reflect-reviewer',
+  'reflect-reviewer-divergent': 'reflect-reviewer',
   'reflect-synthesize': 'synthesizer',
+  'architect-runner-a': 'architect-runner',
+  'architect-runner-b': 'architect-runner',
 };
 
 export function resolveRoleBinding(config, role) {

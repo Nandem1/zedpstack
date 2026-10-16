@@ -40,6 +40,25 @@ node ~/Projects/zedpstack/scripts/dispatch.mjs run \
 
 Estado en `.zedpstack/runs/<runId>/`.
 
+### Modelos (`/setup-zedpstack`)
+
+```bash
+node scripts/dispatch.mjs setup init    # hoja pstack-models
+node scripts/dispatch.mjs setup apply   # → zedpstack.config.json
+node scripts/dispatch.mjs setup show
+```
+
+Skill: `setup-zedpstack/SKILL.md` (symlink opcional a `~/.agents/skills/setup-zedpstack`).
+
+### Ver progreso
+
+```bash
+node scripts/dispatch.mjs run ... --tee-events
+node scripts/dispatch.mjs watch --run-id <id> --repo <repo> --from-start
+```
+
+Ver [docs/STREAMING.md](./docs/STREAMING.md).
+
 ## Licencia
 
 MIT — ver `LICENSE`. Contenido upstream de pstack no está vendoreado; ver `docs/UPSTREAM.md`.

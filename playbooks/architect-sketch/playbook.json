@@ -12,7 +12,7 @@
     },
     {
       "id": "sketch-a",
-      "role": "architect-runner",
+      "role": "architect-runner-a",
       "promptSource": "pstack-architect-runner",
       "promptMeta": { "candidateLabel": "A" },
       "inputFrom": ["ground"],
@@ -20,7 +20,7 @@
     },
     {
       "id": "sketch-b",
-      "role": "architect-runner",
+      "role": "architect-runner-b",
       "promptSource": "pstack-architect-runner",
       "promptMeta": { "candidateLabel": "B" },
       "inputFrom": ["ground"],

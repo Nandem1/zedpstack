@@ -6,21 +6,21 @@
   "steps": [
     {
       "id": "review-a",
-      "role": "interrogate-reviewer",
+      "role": "interrogate-reviewer-a",
       "promptSource": "pstack-interrogate-reviewer",
       "promptMeta": { "reviewerLabel": "A" },
       "outputContract": "markdown-report"
     },
     {
       "id": "review-b",
-      "role": "interrogate-reviewer",
+      "role": "interrogate-reviewer-b",
       "promptSource": "pstack-interrogate-reviewer",
       "promptMeta": { "reviewerLabel": "B" },
       "outputContract": "markdown-report"
     },
     {
       "id": "review-c",
-      "role": "interrogate-reviewer",
+      "role": "interrogate-reviewer-c",
       "promptSource": "pstack-interrogate-reviewer",
       "promptMeta": { "reviewerLabel": "C" },
       "outputContract": "markdown-report"

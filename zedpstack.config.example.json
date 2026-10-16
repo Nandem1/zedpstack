@@ -21,12 +21,87 @@
       "model": "haiku",
       "permissionProfile": "read-only"
     },
+    "architect-ground": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "architect-runner-a": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "architect-runner-b": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "architect-synthesize": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "interrogate-reviewer-a": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "interrogate-reviewer-b": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "interrogate-reviewer-c": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "interrogate-lead": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "reflect-reviewer-tooling": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "reflect-reviewer-judgment": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "reflect-reviewer-divergent": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "reflect-synthesize": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
     "explorer": {
       "runtime": "claude",
       "model": "haiku",
       "permissionProfile": "read-only"
     },
     "synthesizer": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "interrogate-reviewer": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "reflect-reviewer": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "architect-runner": {
       "runtime": "codex",
       "model": "gpt-6.1-sol",
       "permissionProfile": "read-only"

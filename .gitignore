@@ -6,3 +6,4 @@ docs/audit-*.txt
 docs/audit-*.err
 docs/session-*.log
 .audit-last-run.log
+*.log

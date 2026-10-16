@@ -5,7 +5,15 @@ const EXPLORER_PROFILE = new Set([
   'architect-ground',
   'architect-runner',
   'interrogate-reviewer',
+  'interrogate-reviewer-a',
+  'interrogate-reviewer-b',
+  'interrogate-reviewer-c',
   'reflect-reviewer',
+  'reflect-reviewer-judgment',
+  'reflect-reviewer-tooling',
+  'reflect-reviewer-divergent',
+  'architect-runner-a',
+  'architect-runner-b',
 ]);
 
 const SYNTHESIZER_PROFILE = new Set([
