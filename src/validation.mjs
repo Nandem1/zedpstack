@@ -14,6 +14,13 @@ const BLOCKED_PHRASES = [
   'bloqueando las lecturas',
 ];
 
+function minTextLength(role) {
+  if (role === 'interrogate-reviewer' || role === 'reflect-reviewer') {
+    return 12;
+  }
+  return 32;
+}
+
 const EXPLORER_EVIDENCE = [
   'app',
   'features',
@@ -44,8 +51,10 @@ export function validateWorkerResult({
   outputContract,
   processExited,
   role = null,
+  validationProfile = null,
   stdoutLogPath = null,
 }) {
+  const profile = validationProfile ?? role;
   const errors = [];
   const stages = {
     processExited: false,
@@ -86,13 +95,20 @@ export function validateWorkerResult({
   const textIsString = typeof result.text === 'string';
   if (!textIsString) {
     errors.push('result.text must be a string');
-  } else if (result.text.trim().length < 32) {
+  } else if (result.text.trim().length < minTextLength(role)) {
     errors.push('result.text missing or too short');
   }
   if (result.ok !== true) {
     errors.push('result.ok is not true');
   }
-  if (textIsString && outputContract === 'markdown-report' && !result.text.includes('\n')) {
+  const allowSingleLine =
+    role === 'interrogate-reviewer' || role === 'reflect-reviewer';
+  if (
+    textIsString &&
+    outputContract === 'markdown-report' &&
+    !allowSingleLine &&
+    !result.text.includes('\n')
+  ) {
     errors.push('markdown-report expected multiline text');
   }
 
@@ -114,9 +130,11 @@ export function validateWorkerResult({
     errors.push('read tools denied without successful read');
   }
 
-  if ((role === 'explorer' || role === 'how-explorer') && textIsString) {
+  const skipReadSignal = role === 'interrogate-reviewer' || role === 'reflect-reviewer';
+
+  if (profile === 'explorer' && textIsString) {
     const reads = result.signals?.readSuccess ?? 0;
-    if (reads < 1) {
+    if (!skipReadSignal && reads < 1) {
       errors.push('explorer: requires at least one successful Read/Grep/Glob execution');
     }
     if (role === 'explorer' && !explorerShowsRepoEvidence(result.text)) {
@@ -124,10 +142,7 @@ export function validateWorkerResult({
     }
   }
 
-  if (
-    (role === 'synthesizer' || role === 'how-explainer') &&
-    result.signals?.shellInvoked === true
-  ) {
+  if (profile === 'synthesizer' && result.signals?.shellInvoked === true) {
     errors.push('synthesizer: shell/tool invocation detected (read-only policy)');
   }
 

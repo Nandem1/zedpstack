@@ -1,0 +1,25 @@
+{
+  "id": "why-rationale",
+  "version": 1,
+  "description": "pstack why (simple): code-archaeology investigator + synthesizer",
+  "upstream": { "pstackSkill": "why" },
+  "steps": [
+    {
+      "id": "investigate",
+      "role": "why-investigator",
+      "promptSource": "pstack-why-investigator",
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "synthesize",
+      "role": "why-synthesizer",
+      "promptSource": "pstack-why-synthesizer",
+      "inputFrom": ["investigate"],
+      "outputContract": "markdown-report"
+    }
+  ],
+  "judgment": {
+    "promptTemplate": "judgment.md",
+    "artifact": "orchestrator-judgment.md"
+  }
+}

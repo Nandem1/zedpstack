@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { cancelRun } from './cancel.mjs';
 import { completeJudgment, runPlaybook } from './run.mjs';
@@ -16,7 +17,7 @@ function parseArgs(argv) {
     if (a.startsWith('--')) {
       const key = a.slice(2);
       args.shift();
-      if (['goal', 'playbook', 'repo', 'run-id', 'file'].includes(key)) {
+      if (['goal', 'playbook', 'repo', 'run-id', 'file', 'context-file'].includes(key)) {
         opts[key] = args.shift();
       } else if (key === 'tee-events') {
         opts.teeEvents = true;
@@ -42,10 +43,16 @@ export async function main(argv) {
     if (!goal) {
       throw new Error('run requires --goal "..."');
     }
+    let context = '';
+    const contextFile = opts['context-file'];
+    if (contextFile) {
+      context = fs.readFileSync(path.resolve(contextFile), 'utf8');
+    }
     const result = await runPlaybook({
       playbookId: playbook,
       goal,
       repoRoot,
+      context,
       teeEvents: Boolean(opts.teeEvents),
       persistStreamEvents: Boolean(opts.persistStreamEvents),
     });
@@ -69,11 +76,16 @@ export async function main(argv) {
   if (command === 'resume') {
     const runId = opts['run-id'];
     if (!runId) throw new Error('resume requires --run-id');
+    let context = '';
+    if (opts['context-file']) {
+      context = fs.readFileSync(path.resolve(opts['context-file']), 'utf8');
+    }
     const result = await runPlaybook({
       playbookId: opts.playbook ?? 'how-investigation',
       goal: opts.goal ?? '',
       repoRoot,
       runId,
+      context,
       teeEvents: Boolean(opts.teeEvents),
       persistStreamEvents: Boolean(opts.persistStreamEvents),
     });

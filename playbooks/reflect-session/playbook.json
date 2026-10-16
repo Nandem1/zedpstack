@@ -1,0 +1,40 @@
+{
+  "id": "reflect-session",
+  "version": 1,
+  "description": "pstack reflect: 3 lenses + synthesizer (--context-file transcript digest)",
+  "upstream": { "pstackSkill": "reflect" },
+  "steps": [
+    {
+      "id": "reflect-judgment",
+      "role": "reflect-reviewer",
+      "promptSource": "pstack-reflect-reviewer",
+      "promptMeta": { "lens": "judgment" },
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "reflect-tooling",
+      "role": "reflect-reviewer",
+      "promptSource": "pstack-reflect-reviewer",
+      "promptMeta": { "lens": "tooling" },
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "reflect-divergent",
+      "role": "reflect-reviewer",
+      "promptSource": "pstack-reflect-reviewer",
+      "promptMeta": { "lens": "divergent" },
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "synthesize",
+      "role": "reflect-synthesize",
+      "promptSource": "pstack-reflect-synthesize",
+      "inputFrom": ["reflect-judgment", "reflect-tooling", "reflect-divergent"],
+      "outputContract": "markdown-report"
+    }
+  ],
+  "judgment": {
+    "promptTemplate": "judgment.md",
+    "artifact": "orchestrator-judgment.md"
+  }
+}

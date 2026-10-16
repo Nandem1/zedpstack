@@ -32,6 +32,15 @@ export function loadConfig() {
 const ROLE_BINDING_ALIASES = {
   'how-explorer': 'explorer',
   'how-explainer': 'synthesizer',
+  'why-investigator': 'explorer',
+  'why-synthesizer': 'synthesizer',
+  'architect-ground': 'explorer',
+  'architect-runner': 'explorer',
+  'architect-synthesize': 'synthesizer',
+  'interrogate-reviewer': 'explorer',
+  'interrogate-lead': 'synthesizer',
+  'reflect-reviewer': 'explorer',
+  'reflect-synthesize': 'synthesizer',
 };
 
 export function resolveRoleBinding(config, role) {

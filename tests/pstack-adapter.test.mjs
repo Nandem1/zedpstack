@@ -26,8 +26,10 @@ describe('pstack adapter', () => {
     assert.equal(pb.def.steps[0].promptSource, 'pstack-how-explorer');
   });
 
-  it('maps how roles for validation', () => {
+  it('maps adapter roles for validation', () => {
     assert.equal(validationProfileForRole('how-explorer'), 'explorer');
-    assert.equal(validationProfileForRole('how-explainer'), 'synthesizer');
+    assert.equal(validationProfileForRole('why-synthesizer'), 'synthesizer');
+    assert.equal(validationProfileForRole('interrogate-lead'), 'synthesizer');
+    assert.equal(validationProfileForRole('reflect-synthesize'), 'synthesizer');
   });
 });

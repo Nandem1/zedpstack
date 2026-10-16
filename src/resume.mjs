@@ -11,6 +11,7 @@ export function canReuseCompletedStep({
   resultPath,
   outputContract,
   role,
+  validationProfile = null,
   stdoutLogPath,
 }) {
   if (stepRecord.status !== 'completed' || stepRecord.validResult !== true) {
@@ -29,6 +30,7 @@ export function canReuseCompletedStep({
     outputContract,
     processExited: true,
     role,
+    validationProfile: validationProfile ?? role,
     stdoutLogPath: fs.existsSync(stdoutLogPath) ? stdoutLogPath : null,
   });
 

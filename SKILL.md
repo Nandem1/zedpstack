@@ -1,6 +1,6 @@
 ---
 name: zedpstack
-description: Orquestador portable que ejecuta playbooks pstack (how, Investigation, …) vía Claude/Codex CLI. Usar con /zedpstack o @zedpstack.
+description: Ejecuta skills pstack (how, why, architect, interrogate, reflect) vía Claude/Codex CLI. /zedpstack + objetivo.
 disable-model-invocation: true
 ---
 
@@ -8,63 +8,36 @@ disable-model-invocation: true
 
 > **The LLM decides; the dispatcher executes.**
 
-Eres el **orquestador** (equivalente a **poteto-mode** en pstack). zedpstack **reutiliza** la semántica pstack instalada localmente; tú eliges el playbook y el objetivo; el dispatcher lanza workers sin shell improvisado.
+Orquestador = **poteto-mode** (routing). Workers = `dispatch.mjs` (lee prompts desde `PSTACK_ROOT`).
 
-## Routing (reutiliza pstack)
+## Routing
 
-Antes de ejecutar, clasifica el pedido como haría **poteto-mode**:
+| Intención | `--playbook` |
+|-----------|----------------|
+| Cómo funciona X, capas, ownership | `how-investigation` (default) |
+| Por qué / rationale / historia | `why-rationale` |
+| Diseñar antes de codear | `architect-sketch` |
+| Review adversarial / stress test | `interrogate-review` + `--context-file` (diff) |
+| Reflect sobre sesión | `reflect-session` + `--context-file` (transcript digest) |
 
-| Pedido | Playbook zedpstack |
-|--------|-------------------|
-| "¿Cómo funciona X?", walkthrough, capas/ownership | `how-investigation` (skill **how**, path simple) |
-| Revisión arquitectura MH (legacy) | `architecture-review` → alias de `how-investigation` |
+`architecture-review` → alias deprecado de `how-investigation`.
 
-Para motivación ("¿por qué?") o cambios de código, indica al usuario que hace falta otro skill pstack (why, architect, feature) — aún no adaptados en el dispatcher.
-
-**No** invoques `claude`/`codex` manualmente para pasos del playbook. Usa `dispatch.mjs`.
+No uses playbooks de **escritura** (feature, bug-fix) aquí: zedpstack v0.3 es read-only.
 
 ## Comando
 
 ```bash
 node ~/.agents/skills/zedpstack/scripts/dispatch.mjs run \
-  --playbook how-investigation \
-  --goal "<pregunta u objetivo>" \
-  --repo "<ruta del repo bajo estudio>" \
+  --goal "<objetivo>" \
+  --repo "<repo>" \
+  --context-file /path/to/diff-or-transcript.md \
   --tee-events
 ```
 
-`--playbook` por defecto: `how-investigation`.
+`PSTACK_ROOT` opcional; default: cache Codex `pstack-claude`.
 
-## pstack en disco
+## Judgment
 
-- Auto: `~/.codex/plugins/cache/pstack-claude/pstack/<versión>/`
-- Override: `export PSTACK_ROOT=/ruta/a/0.9.67`
+Tras `awaiting_judgment`: lee workers, escribe `orchestrator-judgment.md`, `dispatch judgment`.
 
-Sin pstack instalado, `run` falla con mensaje claro.
-
-## Tras el run
-
-1. Logs: `workers/*/stdout.log`
-2. Eventos: `.zedpstack/runs/<runId>/events.jsonl`
-3. `awaiting_judgment` → lee resultados + `JUDGMENT_INSTRUCTIONS.md`
-4. Escribe `orchestrator-judgment.md`
-5. `dispatch judgment --run-id … --repo …`
-
-`dispatch cancel` / `resume` según `SKILL` previo.
-
-## Config
-
-`zedpstack.config.json` — roles `how-explorer` / `how-explainer` (o alias legacy `explorer` / `synthesizer`). Ver `zedpstack.config.example.json`.
-
-## Instalación
-
-```bash
-git clone https://github.com/Nandem1/zedpstack.git ~/Projects/zedpstack
-ln -sfn ~/Projects/zedpstack ~/.agents/skills/zedpstack
-```
-
-## Límites v0.2
-
-- Path **simple** de how (1 explorer, 1 explainer); sin fan-out 2–4 explorers.
-- Sin adaptador para architect / interrogate / swarm aún.
-- Judgment: orquestador activo + plantilla local; aplicar **unslop** al redactar.
+Ver [docs/PSTACK_ADAPTERS.md](./docs/PSTACK_ADAPTERS.md).

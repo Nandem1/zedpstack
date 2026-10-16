@@ -77,7 +77,8 @@ function buildInputRefs(runRoot, stepDef, playbookDef) {
       resultPath: prevResult,
       outputContract: 'markdown-report',
       processExited: true,
-      role: upstreamRole,
+      role: upstreamStep?.role ?? null,
+      validationProfile: upstreamRole,
       stdoutLogPath: stdoutLogForStep(runRoot, fromId),
     });
     if (!upstreamValidation.valid) {
@@ -90,19 +91,24 @@ function buildInputRefs(runRoot, stepDef, playbookDef) {
   return inputRefs;
 }
 
-function preparePromptText({ stepDef, playbook, runRoot, repoRoot, goal }) {
-  let exploreText;
-  if (stepDef.inputFrom?.includes('explore')) {
-    const exploreResult = resultPathForStep(runRoot, 'explore');
-    const explore = JSON.parse(fs.readFileSync(exploreResult, 'utf8'));
-    exploreText = explore.text;
+function loadPriorTexts(runRoot, stepDef) {
+  const priorTexts = {};
+  for (const fromId of stepDef.inputFrom ?? []) {
+    const p = resultPathForStep(runRoot, fromId);
+    priorTexts[fromId] = JSON.parse(fs.readFileSync(p, 'utf8')).text;
   }
+  return priorTexts;
+}
+
+function preparePromptText({ stepDef, playbook, runRoot, repoRoot, goal, context }) {
+  const priorTexts = stepDef.inputFrom?.length ? loadPriorTexts(runRoot, stepDef) : {};
   return loadStepPrompt({
     playbook,
     stepDef,
     goal,
     repoRoot,
-    exploreText,
+    context,
+    priorTexts,
   });
 }
 
@@ -111,6 +117,14 @@ function manifestWasCancelled(runRoot) {
     return false;
   }
   return readManifest(runRoot).status === 'cancelled';
+}
+
+function loadRunContext(runRoot) {
+  const p = path.join(runRoot, 'context-input.md');
+  if (!fs.existsSync(p)) {
+    return '';
+  }
+  return fs.readFileSync(p, 'utf8');
 }
 
 async function executeStep({
@@ -125,6 +139,7 @@ async function executeStep({
   eventSink,
   runId,
 }) {
+  const context = loadRunContext(runRoot);
   if (manifestWasCancelled(runRoot)) {
     return readManifest(runRoot);
   }
@@ -139,6 +154,7 @@ async function executeStep({
     runRoot,
     repoRoot,
     goal,
+    context,
   });
 
   const repoCommit = tryGitCommit(repoRoot);
@@ -164,7 +180,8 @@ async function executeStep({
     stepIdentityHash,
     resultPath,
     outputContract: stepDef.outputContract,
-    role: validationProfileForRole(stepDef.role),
+    role: stepDef.role,
+    validationProfile: validationProfileForRole(stepDef.role),
     stdoutLogPath: stdoutLog,
   });
 
@@ -251,7 +268,8 @@ async function executeStep({
     resultPath: outcome.resultPath,
     outputContract: stepDef.outputContract,
     processExited: outcome.processExited,
-    role: validationProfileForRole(stepDef.role),
+    role: stepDef.role,
+    validationProfile: validationProfileForRole(stepDef.role),
     stdoutLogPath: stdoutLog,
   });
 
@@ -319,6 +337,7 @@ export async function runPlaybook({
   runId: existingRunId,
   teeEvents = false,
   persistStreamEvents = false,
+  context = '',
 }) {
   const config = loadConfig();
   const playbook = loadPlaybook(playbookId);
@@ -330,6 +349,9 @@ export async function runPlaybook({
   const runId = existingRunId ?? randomUUID();
   const runRoot = runDir(repoRoot, runId);
   fs.mkdirSync(runRoot, { recursive: true });
+  if (context) {
+    fs.writeFileSync(path.join(runRoot, 'context-input.md'), context, 'utf8');
+  }
 
   const eventSink = new EventSink(runRoot, {
     tee: teeEvents,

@@ -11,6 +11,16 @@
       "model": "gpt-6.1-sol",
       "permissionProfile": "read-only"
     },
+    "why-investigator": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "why-synthesizer": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
     "explorer": {
       "runtime": "claude",
       "model": "haiku",

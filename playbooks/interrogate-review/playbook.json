@@ -1,0 +1,40 @@
+{
+  "id": "interrogate-review",
+  "version": 1,
+  "description": "pstack interrogate sequential: 3 reviewers + lead (pass --context-file diff)",
+  "upstream": { "pstackSkill": "interrogate" },
+  "steps": [
+    {
+      "id": "review-a",
+      "role": "interrogate-reviewer",
+      "promptSource": "pstack-interrogate-reviewer",
+      "promptMeta": { "reviewerLabel": "A" },
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "review-b",
+      "role": "interrogate-reviewer",
+      "promptSource": "pstack-interrogate-reviewer",
+      "promptMeta": { "reviewerLabel": "B" },
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "review-c",
+      "role": "interrogate-reviewer",
+      "promptSource": "pstack-interrogate-reviewer",
+      "promptMeta": { "reviewerLabel": "C" },
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "synthesize",
+      "role": "interrogate-lead",
+      "promptSource": "pstack-interrogate-lead",
+      "inputFrom": ["review-a", "review-b", "review-c"],
+      "outputContract": "markdown-report"
+    }
+  ],
+  "judgment": {
+    "promptTemplate": "judgment.md",
+    "artifact": "orchestrator-judgment.md"
+  }
+}

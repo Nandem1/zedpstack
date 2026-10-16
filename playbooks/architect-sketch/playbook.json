@@ -1,0 +1,41 @@
+{
+  "id": "architect-sketch",
+  "version": 1,
+  "description": "pstack architect Phase A+B read-only: ground (how) + 2 runners + synthesize",
+  "upstream": { "pstackSkill": "architect" },
+  "steps": [
+    {
+      "id": "ground",
+      "role": "architect-ground",
+      "promptSource": "pstack-how-explorer",
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "sketch-a",
+      "role": "architect-runner",
+      "promptSource": "pstack-architect-runner",
+      "promptMeta": { "candidateLabel": "A" },
+      "inputFrom": ["ground"],
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "sketch-b",
+      "role": "architect-runner",
+      "promptSource": "pstack-architect-runner",
+      "promptMeta": { "candidateLabel": "B" },
+      "inputFrom": ["ground"],
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "synthesize",
+      "role": "architect-synthesize",
+      "promptSource": "pstack-architect-synthesize",
+      "inputFrom": ["sketch-a", "sketch-b", "ground"],
+      "outputContract": "markdown-report"
+    }
+  ],
+  "judgment": {
+    "promptTemplate": "judgment.md",
+    "artifact": "orchestrator-judgment.md"
+  }
+}
