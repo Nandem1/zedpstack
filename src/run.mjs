@@ -20,7 +20,14 @@ import {
   updateManifestStep,
   writeManifestAtomic,
 } from './manifest.mjs';
-import { loadPlaybook, loadPrompt } from './playbook.mjs';
+import {
+  attachPstackUpstreamMeta,
+  loadPlaybook,
+  loadPrompt,
+  loadStepPrompt,
+} from './playbook.mjs';
+import { resolvePstackInstall } from './pstack.mjs';
+import { validationProfileForRole } from './roles.mjs';
 import { runDir, workerDir, zedpstackRoot } from './paths.mjs';
 import {
   canReuseCompletedStep,
@@ -50,7 +57,7 @@ function findStepDef(playbookDef, stepId) {
   return s;
 }
 
-function buildInputRefs(runRoot, stepDef) {
+function buildInputRefs(runRoot, stepDef, playbookDef) {
   const inputRefs = [];
   if (!stepDef.inputFrom?.length) return inputRefs;
 
@@ -61,7 +68,10 @@ function buildInputRefs(runRoot, stepDef) {
     }
     const raw = fs.readFileSync(prevResult, 'utf8');
     const parsed = JSON.parse(raw);
-    const upstreamRole = fromId === 'explore' ? 'explorer' : null;
+    const upstreamStep = playbookDef.steps.find((s) => s.id === fromId);
+    const upstreamRole = upstreamStep
+      ? validationProfileForRole(upstreamStep.role)
+      : null;
     const upstreamValidation = validateWorkerResult({
       exitCode: parsed.exitCode ?? 0,
       resultPath: prevResult,
@@ -80,14 +90,20 @@ function buildInputRefs(runRoot, stepDef) {
   return inputRefs;
 }
 
-function preparePromptText({ stepId, stepDef, playbook, runRoot, repoRoot, goal }) {
-  const vars = { GOAL: goal, REPO_ROOT: repoRoot };
-  if (stepId === 'synthesize') {
+function preparePromptText({ stepDef, playbook, runRoot, repoRoot, goal }) {
+  let exploreText;
+  if (stepDef.inputFrom?.includes('explore')) {
     const exploreResult = resultPathForStep(runRoot, 'explore');
     const explore = JSON.parse(fs.readFileSync(exploreResult, 'utf8'));
-    vars.EXPLORE_TEXT = explore.text;
+    exploreText = explore.text;
   }
-  return loadPrompt(playbook.root, stepDef.promptTemplate, vars);
+  return loadStepPrompt({
+    playbook,
+    stepDef,
+    goal,
+    repoRoot,
+    exploreText,
+  });
 }
 
 function manifestWasCancelled(runRoot) {
@@ -116,9 +132,8 @@ async function executeStep({
   const stepRecord = manifest.steps.find((s) => s.stepId === stepId);
   const stepDef = findStepDef(playbookDef, stepId);
   const binding = resolveRoleBinding(config, stepDef.role);
-  const inputRefs = buildInputRefs(runRoot, stepDef);
+  const inputRefs = buildInputRefs(runRoot, stepDef, playbookDef);
   const promptText = preparePromptText({
-    stepId,
     stepDef,
     playbook,
     runRoot,
@@ -138,6 +153,7 @@ async function executeStep({
     renderedPrompt: promptText,
     repoCommit,
     repoSourceFingerprint,
+    pstackVersion: playbookDef.upstream?.pstackVersion ?? null,
   });
 
   const resultPath = resultPathForStep(runRoot, stepId);
@@ -148,7 +164,7 @@ async function executeStep({
     stepIdentityHash,
     resultPath,
     outputContract: stepDef.outputContract,
-    role: stepDef.role,
+    role: validationProfileForRole(stepDef.role),
     stdoutLogPath: stdoutLog,
   });
 
@@ -235,7 +251,7 @@ async function executeStep({
     resultPath: outcome.resultPath,
     outputContract: stepDef.outputContract,
     processExited: outcome.processExited,
-    role: stepDef.role,
+    role: validationProfileForRole(stepDef.role),
     stdoutLogPath: stdoutLog,
   });
 
@@ -306,7 +322,10 @@ export async function runPlaybook({
 }) {
   const config = loadConfig();
   const playbook = loadPlaybook(playbookId);
-  const playbookDef = playbook.def;
+  const playbookDef = attachPstackUpstreamMeta(playbook.def);
+  if (playbookDef.upstream?.pstackSkill) {
+    resolvePstackInstall();
+  }
 
   const runId = existingRunId ?? randomUUID();
   const runRoot = runDir(repoRoot, runId);

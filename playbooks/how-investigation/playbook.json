@@ -1,0 +1,28 @@
+{
+  "id": "how-investigation",
+  "version": 2,
+  "description": "pstack Investigation → how (simple path): explorer + explainer prompts from upstream how skill",
+  "upstream": {
+    "pstackSkill": "how",
+    "pstackPlaybook": "investigation.md"
+  },
+  "steps": [
+    {
+      "id": "explore",
+      "role": "how-explorer",
+      "promptSource": "pstack-how-explorer",
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "synthesize",
+      "role": "how-explainer",
+      "promptSource": "pstack-how-explainer",
+      "inputFrom": ["explore"],
+      "outputContract": "markdown-report"
+    }
+  ],
+  "judgment": {
+    "promptTemplate": "judgment.md",
+    "artifact": "orchestrator-judgment.md"
+  }
+}

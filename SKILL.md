@@ -1,6 +1,6 @@
 ---
 name: zedpstack
-description: Orquestador portable multi-runtime (Claude/Codex workers + judgment humano/LLM). Usar con /zedpstack o @zedpstack para architecture-review y playbooks futuros.
+description: Orquestador portable que ejecuta playbooks pstack (how, Investigation, …) vía Claude/Codex CLI. Usar con /zedpstack o @zedpstack.
 disable-model-invocation: true
 ---
 
@@ -8,70 +8,63 @@ disable-model-invocation: true
 
 > **The LLM decides; the dispatcher executes.**
 
-Tú eres el **orquestador activo**. Esta skill define juicio; `scripts/dispatch.mjs` define mecánica.
+Eres el **orquestador** (equivalente a **poteto-mode** en pstack). zedpstack **reutiliza** la semántica pstack instalada localmente; tú eliges el playbook y el objetivo; el dispatcher lanza workers sin shell improvisado.
 
-## Cuándo invocar
+## Routing (reutiliza pstack)
 
-- `/zedpstack` + objetivo → playbook por defecto `architecture-review` (sesión 1).
-- No construyas comandos shell para workers.
-- No interpoles prompts en `sh -c`.
+Antes de ejecutar, clasifica el pedido como haría **poteto-mode**:
 
-## Flujo architecture-review
+| Pedido | Playbook zedpstack |
+|--------|-------------------|
+| "¿Cómo funciona X?", walkthrough, capas/ownership | `how-investigation` (skill **how**, path simple) |
+| Revisión arquitectura MH (legacy) | `architecture-review` → alias de `how-investigation` |
 
-1. Ejecuta el dispatcher (desde la raíz del repo bajo revisión):
+Para motivación ("¿por qué?") o cambios de código, indica al usuario que hace falta otro skill pstack (why, architect, feature) — aún no adaptados en el dispatcher.
 
-Con el paquete clonado o symlinked (`ln -sfn /ruta/zedpstack ~/.agents/skills/zedpstack`), el dispatcher resuelve playbooks y config vía `import.meta.url` (no hace falta exportar `ZEDPSTACK_ROOT` salvo override):
+**No** invoques `claude`/`codex` manualmente para pasos del playbook. Usa `dispatch.mjs`.
+
+## Comando
 
 ```bash
 node ~/.agents/skills/zedpstack/scripts/dispatch.mjs run \
-  --playbook architecture-review \
-  --goal "<objetivo en español>" \
-  --repo "<ruta repo>" \
+  --playbook how-investigation \
+  --goal "<pregunta u objetivo>" \
+  --repo "<ruta del repo bajo estudio>" \
   --tee-events
 ```
 
-2. Observa progreso en `workers/*/stdout.log` y eventos resumidos en `.zedpstack/runs/<runId>/events.jsonl` (`worker.output` no se persiste por defecto; `--tee-events` para stderr en vivo).
-3. Cuando `manifest.status` sea `awaiting_judgment`, lee:
-   - `workers/explore/result.json`
-   - `workers/synthesize/result.json`
-   - `JUDGMENT_INSTRUCTIONS.md` (instrucciones)
-4. Escribe **judgment final** en `.zedpstack/runs/<runId>/orchestrator-judgment.md`.
-5. Cierra el run:
+`--playbook` por defecto: `how-investigation`.
+
+## pstack en disco
+
+- Auto: `~/.codex/plugins/cache/pstack-claude/pstack/<versión>/`
+- Override: `export PSTACK_ROOT=/ruta/a/0.9.67`
+
+Sin pstack instalado, `run` falla con mensaje claro.
+
+## Tras el run
+
+1. Logs: `workers/*/stdout.log`
+2. Eventos: `.zedpstack/runs/<runId>/events.jsonl`
+3. `awaiting_judgment` → lee resultados + `JUDGMENT_INSTRUCTIONS.md`
+4. Escribe `orchestrator-judgment.md`
+5. `dispatch judgment --run-id … --repo …`
+
+`dispatch cancel` / `resume` según `SKILL` previo.
+
+## Config
+
+`zedpstack.config.json` — roles `how-explorer` / `how-explainer` (o alias legacy `explorer` / `synthesizer`). Ver `zedpstack.config.example.json`.
+
+## Instalación
 
 ```bash
-node ~/.agents/skills/zedpstack/scripts/dispatch.mjs judgment --run-id <runId> --repo <repo>
+git clone https://github.com/Nandem1/zedpstack.git ~/Projects/zedpstack
+ln -sfn ~/Projects/zedpstack ~/.agents/skills/zedpstack
 ```
 
-Cancelar un run en curso:
+## Límites v0.2
 
-```bash
-node ~/.agents/skills/zedpstack/scripts/dispatch.mjs cancel --run-id <runId> --repo <repo>
-```
-
-## Tu rol (judgment)
-
-- Veredicto breve con evidencia citando rutas del repo.
-- No modificar el repositorio bajo revisión durante workers; judgment es solo texto en el run dir.
-
-## Configuración
-
-- Copia `zedpstack.config.example.json` → `zedpstack.config.json` (gitignored).
-- Modelos y timeouts son **machine-local**, no van al repo público.
-
-## Resume
-
-```bash
-node .../dispatch.mjs resume --run-id <id> --repo <repo> --playbook architecture-review
-```
-
-Reutiliza pasos con `(playbook, stepId, stepIdentityHash, validResult)` solo tras revalidar `result.json`.
-
-## Instalación Zed
-
-```bash
-ln -sfn /path/to/zedpstack ~/.agents/skills/zedpstack
-```
-
-## Límites sesión 1
-
-Sin swarm, interrogate, DAG genérico, worktrees, tercer CLI, paralelismo, ni resume de sesiones nativas Claude/Codex.
+- Path **simple** de how (1 explorer, 1 explainer); sin fan-out 2–4 explorers.
+- Sin adaptador para architect / interrogate / swarm aún.
+- Judgment: orquestador activo + plantilla local; aplicar **unslop** al redactar.

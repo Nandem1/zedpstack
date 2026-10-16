@@ -37,7 +37,7 @@ export async function main(argv) {
   const repoRoot = path.resolve(opts.repo ?? process.cwd());
 
   if (command === 'run') {
-    const playbook = opts.playbook ?? 'architecture-review';
+    const playbook = opts.playbook ?? 'how-investigation';
     const goal = opts.goal ?? opts._[0];
     if (!goal) {
       throw new Error('run requires --goal "..."');
@@ -70,7 +70,7 @@ export async function main(argv) {
     const runId = opts['run-id'];
     if (!runId) throw new Error('resume requires --run-id');
     const result = await runPlaybook({
-      playbookId: opts.playbook ?? 'architecture-review',
+      playbookId: opts.playbook ?? 'how-investigation',
       goal: opts.goal ?? '',
       repoRoot,
       runId,

@@ -38,12 +38,14 @@ export function computeStepIdentity({
   renderedPrompt,
   repoCommit,
   repoSourceFingerprint,
+  pstackVersion = null,
 }) {
   const payload = JSON.stringify({
     playbookId,
     playbookVersion,
     stepId,
     goal,
+    pstackVersion,
     inputRefs: inputRefs.map((r) => ({
       path: r.path,
       hash: r.hash,

@@ -29,9 +29,15 @@ export function loadConfig() {
 /**
  * @returns {import('./types.mjs').RoleBinding}
  */
+const ROLE_BINDING_ALIASES = {
+  'how-explorer': 'explorer',
+  'how-explainer': 'synthesizer',
+};
+
 export function resolveRoleBinding(config, role) {
   const roles = config.data.roles ?? {};
-  const binding = roles[role];
+  const lookup = roles[role] ? role : ROLE_BINDING_ALIASES[role];
+  const binding = lookup ? roles[lookup] : undefined;
   if (!binding?.runtime || !binding?.model || !binding?.permissionProfile) {
     throw new Error(`Missing RoleBinding for role "${role}" in config`);
   }
@@ -43,6 +49,10 @@ export function resolveRoleBinding(config, role) {
 }
 
 export function resolveTimeout(config, role) {
-  const t = config.data.timeouts?.[role];
+  const key =
+    typeof config.data.timeouts?.[role] === 'number'
+      ? role
+      : (ROLE_BINDING_ALIASES[role] ?? role);
+  const t = config.data.timeouts?.[key];
   return typeof t === 'number' ? t : 600_000;
 }

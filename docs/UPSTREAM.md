@@ -1,6 +1,6 @@
 # Referencias upstream (no vendoreadas)
 
-zedpstack v0 no copia skills de pstack. El playbook `architecture-review` es propio.
+zedpstack v0.2 **lee** prompts del skill `how` de pstack en runtime (`PSTACK_ROOT`). No vendorea el contenido en GitHub. El playbook `how-investigation` es un adaptador; `architecture-review` es alias deprecado.
 
 Para alinear semántica con poteto-mode, la referencia documental es:
 

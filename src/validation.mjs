@@ -114,17 +114,20 @@ export function validateWorkerResult({
     errors.push('read tools denied without successful read');
   }
 
-  if (role === 'explorer' && textIsString) {
+  if ((role === 'explorer' || role === 'how-explorer') && textIsString) {
     const reads = result.signals?.readSuccess ?? 0;
     if (reads < 1) {
       errors.push('explorer: requires at least one successful Read/Grep/Glob execution');
     }
-    if (!explorerShowsRepoEvidence(result.text)) {
+    if (role === 'explorer' && !explorerShowsRepoEvidence(result.text)) {
       errors.push('explorer: missing architectural evidence in output');
     }
   }
 
-  if (role === 'synthesizer' && result.signals?.shellInvoked === true) {
+  if (
+    (role === 'synthesizer' || role === 'how-explainer') &&
+    result.signals?.shellInvoked === true
+  ) {
     errors.push('synthesizer: shell/tool invocation detected (read-only policy)');
   }
 
