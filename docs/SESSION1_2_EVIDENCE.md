@@ -6,7 +6,7 @@
 - Claude (explorer): `docs/audit-1.2-claude-plan.txt` — P2 en MH-Next → subtree; eventos filtrados; shellInvoked; cancel con SIGTERM.
 - Codex (synthesizer): salida en `docs/audit-1.2-codex-plan.err` / plan — repo GitHub limpio + CI; omitir stream en events; shellInvoked synthesizer; cancel; guard text.
 
-**Síntesis aplicada:** implementar P2 en el paquete `zedpstack/`, publicar repo `nndsk/zedpstack` con CI; eventos sin persistir `worker.output` por defecto; `signals.shellInvoked` en Codex; `dispatch cancel`; guard `result.text`; `.gitignore` de auditorías locales.
+**Síntesis aplicada:** implementar P2 en el paquete, publicar [Nandem1/zedpstack](https://github.com/Nandem1/zedpstack) (`v0.1.2`, ruta `~/Projects/zedpstack`); eventos sin persistir `worker.output` por defecto; `signals.shellInvoked` en Codex; `dispatch cancel`; guard `result.text`; `.gitignore` de auditorías locales.
 
 ## Cambios
 
