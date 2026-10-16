@@ -11,6 +11,20 @@ const CODEX_PSTACK_CACHE = path.join(
   'pstack',
 );
 
+/** @returns {number} positive if b > a (sort descending) */
+export function comparePstackVersions(a, b) {
+  const pa = a.split('.').map((n) => Number.parseInt(n, 10) || 0);
+  const pb = b.split('.').map((n) => Number.parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i += 1) {
+    const diff = (pb[i] ?? 0) - (pa[i] ?? 0);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
+}
+
 /**
  * Raíz de una instalación pstack (directorio que contiene `skills/`).
  * @returns {{ root: string, version: string | null, skillsDir: string }}
@@ -36,8 +50,7 @@ export function resolvePstackInstall() {
           return false;
         }
       })
-      .sort()
-      .reverse();
+      .sort(comparePstackVersions);
     if (versions.length > 0) {
       const root = path.join(CODEX_PSTACK_CACHE, versions[0]);
       return { root, version: versions[0], skillsDir: path.join(root, 'skills') };

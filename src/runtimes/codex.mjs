@@ -2,7 +2,11 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildCodexArgv, workerEnv } from '../permissions.mjs';
-import { detectCodexShellInvocation } from '../shellSignals.mjs';
+import {
+  accumulateCodexReadSignals,
+  detectCodexShellInvocation,
+  detectCodexShellMutation,
+} from '../shellSignals.mjs';
 import { appendChunk } from './stream.mjs';
 
 export async function runCodexWorker({
@@ -102,6 +106,10 @@ export async function runCodexWorker({
 
   const stderrText = fs.existsSync(stderrLog) ? fs.readFileSync(stderrLog, 'utf8') : '';
   const shellInvoked = detectCodexShellInvocation(stderrText);
+  const shellMutationInvoked = shellInvoked
+    ? detectCodexShellMutation(stderrText)
+    : false;
+  const readSignals = accumulateCodexReadSignals(stderrText);
 
   const result = {
     ok: exitCode === 0 && text.length >= 32,
@@ -112,7 +120,7 @@ export async function runCodexWorker({
     model: binding.model,
     cliVersion: null,
     nativeSessionId: null,
-    signals: { shellInvoked },
+    signals: { shellInvoked, shellMutationInvoked, ...readSignals },
   };
 
   fs.writeFileSync(resultPath, JSON.stringify(result, null, 2), 'utf8');

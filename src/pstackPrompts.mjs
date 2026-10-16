@@ -41,7 +41,7 @@ export function buildHowExplainerPrompt({ question, explorerFindings }) {
   });
   return (
     workerHeader('pstack how explainer') +
-    'Do not run shell unless verifying one detail.\n\n' +
+    'Prefer Read/Grep/Glob; read-only shell (rg/grep/cat/git log) only to verify a detail.\n\n' +
     body
   );
 }

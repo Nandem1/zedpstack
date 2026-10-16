@@ -11,22 +11,22 @@
 ## Cambios
 
 - `EventSink`: no persiste `worker.output`/`worker.stderr` salvo `--persist-stream-events`.
-- `validation.mjs`: guard tipo `text`; synthesizer rechaza `shellInvoked`.
+- `validation.mjs`: guard tipo `text`; synthesizer rechaza shell mutante (`shellMutationInvoked`), no verificación read-only (`rg`/grep).
 - `shellSignals.mjs` + Codex `result.signals`.
 - `cancel.mjs` + CLI `cancel`; resume desde `cancelled`.
 - `paths.mjs`: `ZEDPSTACK_ROOT` opcional + `dispatchScriptPath()`.
 - CI: `.github/workflows/test.yml`.
-- Versión `0.1.2`.
+- Versión `0.3.1` (semver pstack cache; validación explorer read-only shell).
 
 ## Tests
 
-`npm test` → **23/23**
+`npm test` → **43/43**
 
 ## Post-auditoría Codex (cierre)
 
 - `shellSignals`: líneas `exec` + `succeeded in Nms:` (formato real Codex).
 - `run.mjs`: re-lee manifest; corta en `cancelled`; no sobrescribe tras cancel.
-- Prompt synthesizer: prohibición explícita de shell.
+- Prompt synthesizer: shell read-only solo para verificar un detalle.
 
 ## Pendiente
 

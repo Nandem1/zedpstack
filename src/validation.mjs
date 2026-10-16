@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { synthesizerShellPolicyViolation } from './shellSignals.mjs';
 
 const BLOCKED_PHRASES = [
   'permiso de lectura',
@@ -121,7 +122,11 @@ export function validateWorkerResult({
 
   if (stdoutLogPath && fs.existsSync(stdoutLogPath)) {
     const log = fs.readFileSync(stdoutLogPath, 'utf8');
-    if (log.includes('Permission deny') || log.includes('"is_error":true')) {
+    const readSuccess = result.signals?.readSuccess ?? 0;
+    const stdoutPermissionBlocked =
+      log.includes('Permission deny') ||
+      (log.includes('"is_error":true') && readSuccess < 1);
+    if (stdoutPermissionBlocked) {
       errors.push('stdout indicates tool permission errors');
     }
   }
@@ -142,8 +147,8 @@ export function validateWorkerResult({
     }
   }
 
-  if (profile === 'synthesizer' && result.signals?.shellInvoked === true) {
-    errors.push('synthesizer: shell/tool invocation detected (read-only policy)');
+  if (profile === 'synthesizer' && synthesizerShellPolicyViolation(result.signals)) {
+    errors.push('synthesizer: mutating shell/tool invocation detected (read-only policy)');
   }
 
   stages.taskExecuted =
