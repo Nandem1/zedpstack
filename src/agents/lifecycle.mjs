@@ -83,9 +83,6 @@ export function spawnAgent(req) {
   if (resolved.effort) {
     if (binding.runtime === 'cursor') {
       notes.push(`Cursor CLI has no effort flag; effort "${resolved.effort}" ignored`);
-    } else if (binding.runtime === 'codex' && resolved.effort === 'max') {
-      binding.effort = 'xhigh';
-      notes.push('Codex has no "max" effort; using "xhigh"');
     } else {
       binding.effort = resolved.effort;
     }

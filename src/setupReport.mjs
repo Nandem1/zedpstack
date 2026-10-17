@@ -6,6 +6,7 @@ import { detectOrchestratorHost } from './orchestratorHost.mjs';
 import { RUNTIME_BINARIES } from './permissions.mjs';
 import { resolvePstackInstall } from './pstack.mjs';
 import { orchestratorModelSheetPath } from './setupConfig.mjs';
+import { readProbeCache } from './setupWizard.mjs';
 import { describeWorkerModels, loadWorkerModels } from './workerModels.mjs';
 
 function probeRuntimes() {
@@ -33,10 +34,15 @@ export function buildDoctorReport() {
   if (!models.sheetExists) {
     problems.push(`worker sheet missing (${models.sheetPath}); roles fall back to pstack defaults. Run /setup-zedpstack or "dispatch setup init"`);
   }
+  const probes = readProbeCache();
   for (const [label, { entries, source }] of Object.entries(models.roles)) {
-    if (source !== 'sheet') continue;
     for (const e of entries) {
       if (e.inherit) continue;
+      const probe = probes[`${e.runtime}:${e.model}`];
+      if (probe && !probe.ok) {
+        problems.push(`"${label}"${source === 'sheet' ? '' : ' (pstack default)'} uses ${e.model}, which does not run (${probe.error.replace(/\.$/, "")}). Run /setup-zedpstack`);
+      }
+      if (source !== 'sheet') continue;
       if (!runtimes[e.runtime]?.version) problems.push(`"${label}" uses ${e.runtime}:${e.model} but the ${RUNTIME_BINARIES[e.runtime]} CLI is not installed`);
       if (!e.confident) problems.push(`"${label}" slug "${e.model}" is unrecognized; prefix it with claude:, codex: or cursor:`);
     }

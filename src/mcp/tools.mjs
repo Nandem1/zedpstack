@@ -14,6 +14,7 @@ import {
 } from '../agents/lifecycle.mjs';
 import { RUNTIME_BINARIES } from '../permissions.mjs';
 import { listPstackSkills, readPstackSkillFile, resolvePstackInstall } from '../pstack.mjs';
+import { buildSetupPlan, writeSetup } from '../setupWizard.mjs';
 import { describeWorkerModels } from '../workerModels.mjs';
 import { zedpstackRoot } from '../paths.mjs';
 
@@ -166,6 +167,30 @@ export const TOOLS = [
       "Read it instead of your host's pstack-models.md when choosing spawn_agent roles; panel length sets the fan-out count.",
     inputSchema: { type: 'object', properties: {} },
     handler: () => ({ ...describeWorkerModels(), runtimes: runtimeAvailability() }),
+  },
+  {
+    name: 'setup_plan',
+    description:
+      'For /setup-zedpstack: the current worker sheet (every pstack role with its model, the model the CLI really runs, and problems), the usable models per provider (Claude aliases probed against the account, GPT from Codex, Cursor first-party), and ready-made questions (effort, change?, role groups, provider, models, panel) sized for a 4-option question tool.',
+    inputSchema: {
+      type: 'object',
+      properties: { refresh: { type: 'boolean', description: 'Re-probe Claude aliases instead of using the one-day cache.' } },
+    },
+    handler: (args) => buildSetupPlan({ refresh: Boolean(args.refresh) }),
+  },
+  {
+    name: 'setup_write',
+    description:
+      'For /setup-zedpstack: validate the answers and overwrite the worker sheet. roles maps a role line to its models, e.g. {"bug-fix": ["gpt-6.1-sol"], "architect runners": ["gpt-6.1-sol", "opus"], "arena": [...]} (arena sets runners and cross-judge pool). Unchanged roles are kept. Rejects models that were not detected or do not run.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        default_effort: { type: 'string', enum: ['default', 'session', 'low', 'medium', 'high', 'xhigh', 'max'] },
+        roles: { type: 'object', additionalProperties: { type: 'array', items: { type: 'string' } } },
+        dry_run: { type: 'boolean' },
+      },
+    },
+    handler: (args) => writeSetup({ defaultEffort: args.default_effort, roles: args.roles ?? {}, dryRun: Boolean(args.dry_run) }),
   },
   {
     name: 'read_skill',

@@ -1,5 +1,6 @@
 {
   "tiers": { "default": "opus", "strongest": "fable", "panel": ["opus", "fable", "sonnet"] },
+  "available": ["opus", "fable", "sonnet", "haiku"],
   "roles": [
     { "role": "feature, refactoring", "models": "default" },
     { "role": "bug-fix", "models": "strongest" },

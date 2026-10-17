@@ -4,7 +4,7 @@ import { PERMISSION_PROFILES } from './constants.mjs';
 const CLAUDE_READ_ONLY_TOOLS = 'Read,Grep,Glob';
 const CLAUDE_WRITE_TOOLS = 'Read,Grep,Glob,Edit,Write,Bash';
 const EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
-const CODEX_EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh']);
+const CODEX_EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 
 /**
  * Bash patterns a Claude writer may run without a prompt. `claude -p` denies

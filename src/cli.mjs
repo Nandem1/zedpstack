@@ -22,6 +22,7 @@ import { dispatchScriptPath, runDir, zedpstackRoot } from './paths.mjs';
 import { listPstackSkills, readPstackSkillFile, resolvePstackInstall } from './pstack.mjs';
 import { completeJudgment, runPlaybook } from './run.mjs';
 import { applyModelSheetToConfig, initModelSheet, showSetupStatus } from './setupConfig.mjs';
+import { buildSetupPlan, writeSetup } from './setupWizard.mjs';
 import { buildDoctorReport, formatDoctorReport } from './setupReport.mjs';
 import { followProgress, tailProgressOnce } from './tailProgress.mjs';
 import { watchRun } from './watchRun.mjs';
@@ -43,6 +44,8 @@ const BOOLEAN_FLAGS = new Set([
   'delete-branch',
   'any',
   'help',
+  'refresh',
+  'force',
 ]);
 
 export function parseArgs(argv) {
@@ -178,7 +181,7 @@ Subagents (same contract as the MCP tools):
 
 Batch playbooks (no orchestrator):
   run --playbook <id> --goal "..." [--detach] [--tee-events] | resume | judgment | cancel
-  follow | watch | list | setup show|init|apply
+  follow | watch | list | setup plan|write|show|init|apply
 
 Common: --repo <path> (default cwd)`;
 
@@ -234,7 +237,7 @@ export async function main(argv) {
     return;
   }
 
-  if (command === 'doctor' || (command === 'setup' && ['diagnose', 'plan', 'doctor'].includes(opts._[0]))) {
+  if (command === 'doctor' || (command === 'setup' && ['diagnose', 'doctor'].includes(opts._[0]))) {
     const report = buildDoctorReport();
     print(opts.human ? formatDoctorReport(report) : report);
     return;
@@ -340,6 +343,17 @@ export async function main(argv) {
       print(showSetupStatus());
       return;
     }
+    if (sub === 'plan') {
+      print(await buildSetupPlan({ refresh: Boolean(opts.refresh) }));
+      return;
+    }
+    if (sub === 'write') {
+      const raw = opts.answers;
+      if (!raw) throw new Error('setup write requires --answers \'{"defaultEffort":"medium","roles":{"bug-fix":["gpt-6.1-sol"]}}\' (or @file.json)');
+      const answers = JSON.parse(raw.startsWith('@') ? fs.readFileSync(raw.slice(1), 'utf8') : raw);
+      print(await writeSetup({ ...answers, dryRun: Boolean(opts['dry-run']), force: Boolean(opts.force) }));
+      return;
+    }
     if (sub === 'init') {
       print({ modelSheet: initModelSheet(opts.file), created: true });
       return;
@@ -355,7 +369,7 @@ export async function main(argv) {
       );
       return;
     }
-    throw new Error('setup subcommands: show | doctor | init | apply');
+    throw new Error('setup subcommands: plan | write | show | doctor | init | apply');
   }
 
   throw new Error(`Unknown command: ${command}. Run "dispatch help".`);

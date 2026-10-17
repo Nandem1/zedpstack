@@ -1,44 +1,58 @@
 ---
 name: setup-zedpstack
-description: Configure which worker CLI and model zedpstack spawns for each pstack role, and register zedpstack with the host. Use for /setup-zedpstack, "configure zedpstack models", or when doctor reports problems.
+description: Configure which worker CLI and model zedpstack spawns for each pstack role, the way /setup-pstack does it - effort first, then current roles, then which roles to change and which model each gets. Use for /setup-zedpstack, "configure zedpstack models", or when doctor or the agent board reports a model problem.
 disable-model-invocation: true
 ---
 
 # setup-zedpstack
 
-The worker sheet `~/.zedpstack/pstack-models.md` (override with `ZEDPSTACK_MODEL_SHEET`) uses the same role lines as `/setup-pstack`. What differs is the values: each one is a slug a worker CLI can spawn, not a slug for your host's subagent tool. `spawn_agent {"role": ...}` reads it on every call, so edits apply at once.
+The worker sheet `~/.zedpstack/pstack-models.md` uses the `/setup-pstack` role lines. Each value is a model a worker CLI runs: Claude aliases on `claude -p`, GPT models on `codex exec`, Cursor's own models (Composer) on `agent -p`. `spawn_agent` reads it on every call.
 
-`Z` below is `node <zedpstack>/scripts/dispatch.mjs`.
+Ask every question with your host's structured question tool (`AskUserQuestion` on Claude Code: at most 4 questions per call, 2 to 4 options each, "Other" is added for free text). On a host without one, ask the same questions as short numbered lists in plain text. Use the question text, options and descriptions from the plan as given; they are already sized for that limit.
 
-## 1. Inspect
+The MCP tools are `setup_plan` and `setup_write`. Without the MCP server use `node <zedpstack>/scripts/dispatch.mjs setup plan` and `setup write --answers '<json>'`.
 
-Run `$Z doctor --human`. It shows the pstack install, which worker CLIs exist, every role with the runtime and model it spawns, host registration, and problems. Show the user the roles section and the problems verbatim.
+## 1. Load the plan
 
-## 2. Detect models
+Call `setup_plan`. It probes each Claude alias against the account (cached a day; pass `refresh: true` after the user buys credits or upgrades the CLI), reads the GPT catalog Codex has for the account, and lists Cursor's first-party models. It returns:
 
-Never write a slug you have not seen listed. Per runtime:
+- `roles`: every role with its current slots, `effective` (the model the CLI really runs for an alias), `source` (`sheet`, or `pstack-default` when the sheet has no line), and `problems`.
+- `questions`: `effort`, `change`, `roleGroups`, `provider`, `models.<provider>`, `panel`.
 
-| Runtime | CLI | How to list | Typical slugs |
-|---------|-----|-------------|---------------|
-| `claude` | `claude -p` | the family aliases `claude --help` names under `--model` | `haiku`, `sonnet`, `opus`, `fable` |
-| `codex` | `codex exec` | the models configured in `~/.codex/config.toml` and the Codex model picker | `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-luna` |
-| `cursor` | `agent -p` | `agent --list-models` | `composer-2.5`, `grok-*`, plus Claude and GPT models served by Cursor |
+## 2. Effort first
 
-The runtime is inferred from the slug. When a slug exists on more than one CLI (Cursor also serves Claude and GPT models), prefix it: `cursor:claude-opus-5-5`, `codex:gpt-6-sol`, `claude:opus`.
+Ask `questions.effort`: `default`, `medium` or `high`. `default` keeps each CLI's own effort and is written as `session`. Remember the answer for step 6.
 
-## 3. Choose with the user
+## 3. Show the current configuration
 
-Start from the current sheet, or from `$Z setup init` if it is missing. Show every role with its current value and ask whether to keep it or change specific roles, offering the detected slugs. Prefer the host's structured question tool; plain text otherwise.
+Show one table: role, model, what runs, status. Write `opus → claude-opus-4-8` when `effective` differs from the alias, mark `pstack-default` rows as "(default de pstack)", and put every problem under the table verbatim, for example "bug-fix: fable no corre (Fable 5 requires usage credits)".
 
-- Panel rows (`arena runners`, `architect runners`, `interrogate reviewers`, `arena cross-judge pool`) are lists. One worker runs per entry, so the length sets the fan-out. Recommend different runtimes across a panel: the adversarial signal comes from model diversity.
-- A value may carry an effort, `gpt-6.1-sol @high`. `default effort` sets it for values without one; `session` sets none.
-- `inherit-parent` and `auto` cannot be honored by a separate CLI; zedpstack runs the pstack default instead. Recommend a concrete slug.
-- Rows only the batch playbooks use (`architect ground`, `architect synthesize`, `interrogate lead`, `reflect judgment`, `reflect divergent`, `reflect synthesizer`) may stay.
+## 4. Change anything?
 
-## 4. Write and verify
+Ask `questions.change`. When `problemCount` is above zero, say how many roles fail today, and make "Cambiar roles" the first option with "(Recommended)".
 
-Overwrite the whole sheet with the chosen rows, keeping the header comment. Then run `$Z models` and `$Z doctor --human` and confirm there are no problems. For the batch playbooks (`dispatch run`), also run `$Z setup apply --dry-run`, show the diff, and `$Z setup apply` after the user agrees.
+If the answer is "Mantener", skip to step 6 with no role changes.
 
-## 5. Register hosts
+## 5. Which roles, then which model
 
-If doctor shows a host as not ready, run `$Z install --host <host>` to preview and `--apply` to write. Claude Code, Codex and Cursor are automatic. Zed needs the printed `context_servers` snippet merged into its settings by hand. Tell the user to restart the host so it loads the MCP server.
+1. Ask all four `questions.roleGroups` in one call (multi-select). Name the roles with ⚠ in the text before the call. A role the user picks under "Other" is matched to the closest role line.
+2. For each chosen non-panel role, ask `questions.provider` (Claude, GPT (Codex), Cursor), up to four roles per call, one question each with the role as header. Then ask the model with `questions.models.<provider>`. If the provider has more models than options, mention the `more` list and accept one of them through "Other".
+3. For each chosen panel role (`architect runners`, `interrogate reviewers`, `arena`), ask `questions.panel` as a multi-select. Each selected option is one worker, so the count of selections sets the panel size. Recommend mixing providers for diversity. Accept an explicit ordered list such as `opus, gpt-6.1-sol, composer-2.5` through "Other".
+
+Never offer a model that is not in the plan. Unusable models (like an alias that needs credits) are already left out.
+
+## 6. Write
+
+Call `setup_write` with `default_effort` from step 2 and `roles` with only the changed roles, each mapped to a list of model values (use the option `value`, which carries a `cursor:`/`codex:` prefix when needed). Example:
+
+```json
+{ "default_effort": "medium", "roles": { "bug-fix": ["gpt-6.1-sol"], "arena": ["opus", "gpt-6.1-sol", "composer-2.5"] } }
+```
+
+Roles you do not send keep their current line. If the call rejects a value, show the reason and ask that role again.
+
+## 7. Confirm
+
+Call `setup_plan` again and show the final table. It must report `problemCount: 0`; if not, go back to step 5 for the roles still listed. Tell the user where the sheet lives, that effort reaches Claude (`--effort`) and Codex but Cursor ignores it, and that the agent board shows the model each worker actually ran.
+
+For the batch playbooks (`dispatch run`) also run `dispatch setup apply` so `zedpstack.config.json` follows the sheet.

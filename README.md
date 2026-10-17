@@ -68,6 +68,8 @@ architect runners: gpt-6.1-sol, opus
 interrogate reviewers: opus, gpt-6.1-sol, composer-2.5
 ```
 
+Para elegirlos, usa `/setup-zedpstack`, que sigue el mismo flujo que `/setup-pstack`: primero el effort (default, medium o high), después muestra los roles actuales con el modelo que corre de verdad y sus problemas, pregunta qué roles cambiar y, para cada uno, el proveedor (Claude, GPT por Codex o Cursor) y el modelo. Los alias de Claude se prueban contra tu cuenta, así que un modelo que no puedes usar (por ejemplo, uno que exige créditos) ni siquiera se ofrece. Por debajo usa `setup_plan` y `setup_write` (MCP) o `dispatch setup plan|write`.
+
 El runtime se deduce del slug. Para forzarlo, usa un prefijo: `cursor:claude-opus-5-5`. La hoja del host (por ejemplo `~/.cursor/rules/pstack-models.mdc`) nunca se usa para los workers.
 
 ## Seguridad

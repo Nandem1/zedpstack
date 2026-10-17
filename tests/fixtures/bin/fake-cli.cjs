@@ -8,6 +8,10 @@ if (args.includes('--version') || args.includes('-v')) {
   console.log(`9.9.9 (fake ${runtime})`);
   process.exit(0);
 }
+if (runtime === 'cursor' && args.includes('--list-models')) {
+  console.log('Available models\n\nauto - Auto (default)\ncomposer-2.5 - Composer 2.5 (current)\ngpt-5.2 - GPT-5.2\ncomposer-2.5-fast - Composer 2.5 Fast');
+  process.exit(0);
+}
 if (args.includes('--help')) {
   console.log('  --tools <tools...>  fake help');
   process.exit(0);
@@ -36,6 +40,11 @@ process.stdin.on('end', () => {
     fs.writeFileSync(path.join(process.cwd(), 'fake-output.txt'), `written by fake ${runtime}\n`);
   }
   const model = flag('--model') ?? flag('-m');
+  if (runtime === 'claude' && model === 'fable') {
+    process.stdout.write(`${JSON.stringify({ type: 'system', subtype: 'init', model: 'claude-fable-5' })}\n`);
+    process.stdout.write(`${JSON.stringify({ type: 'result', is_error: true, result: 'Fable 5 requires usage credits.' })}\n`);
+    process.exit(1);
+  }
   const report = `fake ${runtime} report\nmodel=${model}\nreadonly=${input.includes('You are read-only')}\nsrc/index.mjs:1 cited`;
   if (runtime === 'codex') {
     fs.writeFileSync(flag('-o'), report);
