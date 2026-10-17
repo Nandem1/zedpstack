@@ -27,7 +27,7 @@ Las versiones 0.1–0.5 iban en la dirección contraria: playbooks fijos (`how-i
 |-------|---------|----------|
 | Servidor MCP | `src/mcp/server.mjs`, `src/mcp/tools.mjs` | JSON-RPC por stdio, sin dependencias. Ofrece las herramientas y el prompt `/zedpstack` |
 | Ciclo de vida de agentes | `src/agents/lifecycle.mjs` | spawn → runner separado → worker → snapshot → result |
-| Registro en disco | `src/agents/store.mjs` | `<repo>/.zedpstack/agents/<id>/agent.json` y logs; `.zedpstack/` se auto-ignora |
+| Registro en disco | `src/agents/store.mjs` | `<repo>/.zedpstack/agents/<id>/`, un archivo por actor y estado derivado al leer (ver D-09); `.zedpstack/` se auto-ignora |
 | Worktrees | `src/agents/worktree.mjs` | `~/.zedpstack/worktrees/<repo>-<hash>/<id>` en la rama `zedpstack/<id>` |
 | Prompt del worker | `src/agents/prompt.mjs` | `subagent_type` → qué archivo de pstack lee primero; reglas de solo lectura o escritura |
 | Ejecución del CLI | `src/runtimes/worker.mjs` | Un único ejecutor para los tres CLIs, prompt siempre por stdin |
@@ -48,7 +48,7 @@ El runtime se deduce del slug (`haiku` → claude, `gpt-*`/`*-sol` → codex, `c
 
 ### D-03. Siempre en segundo plano, con un runner separado
 
-`spawn_agent` crea el registro, lanza `dispatch agent exec` en su propio grupo de procesos y devuelve el control al instante. El runner sobrevive a reinicios del servidor MCP o del host, y `list_agents` lo vuelve a encontrar. `close_agent` mata el grupo completo (runner y worker). Si el runner muere sin terminar, `status` lo detecta y marca el agente como `failed` (reconcile por PID).
+`spawn_agent` crea el registro, lanza `dispatch agent exec` en su propio grupo de procesos y devuelve el control al instante. El runner sobrevive a reinicios del servidor MCP o del host, y `list_agents` lo vuelve a encontrar. `close_agent` mata el grupo completo (runner y worker). Si el runner muere sin terminar, la lectura deriva `failed` por PID sin escribir nada (D-09).
 
 ### D-04. Los writers trabajan en worktrees por defecto
 
@@ -82,6 +82,26 @@ La lista de subagentes de Cursor es interfaz nativa de su herramienta `Task`, y 
 4. **Terminal**: `dispatch top` la redibuja en vivo.
 
 La actividad sale de la salida del propio CLI (herramientas y narración) sin llamadas extra a modelos. El modelo efectivo que reporta el CLI se muestra junto al alias pedido.
+
+### D-09. Almacén de agentes: un escritor por archivo, estado derivado
+
+Varios procesos tocan el mismo agente: el servidor MCP o el CLI que lo lanza, el runner, quien lo detiene y quien lee el tablero. En vez de cerrojos, cada archivo de `<repo>/.zedpstack/agents/<id>/` tiene un solo escritor:
+
+| Archivo | Escritor | Cómo |
+|---|---|---|
+| `agent.json` (AgentSpec, versión 2) | `spawnAgent`, una vez | creación exclusiva; nunca se reescribe |
+| `launch.json` `{runnerPid}` | `spawnAgent`, una vez | creación exclusiva |
+| `run.json` (RunState) | solo el runner (`execAgent`) | reemplazo completo con tmp+rename |
+| `stop.json` `{requestedAt, by}` | `stopAgent`/`closeAgent` | creación exclusiva; el segundo stop no hace nada |
+| `cleanup.json` `{removedAt, branchDeleted}` | `closeAgent` | creación exclusiva |
+
+La creación exclusiva escribe un temporal y lo enlaza con `link`, que falla si el destino existe. Un lector nunca ve el archivo a medio escribir, cosa que un `open` con `wx` no garantiza.
+
+El spec guarda `origin {frontend, sessionId, pid}`: `acp` cuando el proceso tiene `ZEDPSTACK_ACP_SESSION`, `cli` desde `dispatch agent spawn` y `mcp` en otro caso. `expectedModel` queda en `null` hasta el corte 5 de `docs/ACP_DESIGN.md`.
+
+`loadAgent` une los archivos en un AgentView `{spec, run, launch, stop, cleanup, status, error, finishedAt}`. `deriveStatus` es pura y sigue este orden: `stop.json` da `stopped` aunque el runner escriba después un resultado; un `outcome` da `completed` o `failed`; un runner vivo con `run.json` da `running`; sin `run.json`, un runner vivo o un spec de menos de 15 s da `starting`; cualquier otro caso da `failed` (el runner murió sin terminar). Ninguna lectura escribe, así que `status`, `list_agents` y el tablero no compiten con el runner.
+
+Un `agent.json` cuya versión difiere de 2 se lee con el adaptador v1. Los registros v1 guardaban `status` y podían no declarar versión. El adaptador produce el mismo AgentView sin reescribir el archivo. En versión 2, `loadAgent` ignora los campos heredados `status`, `error`, `finishedAt` y `updatedAt` que un proceso antiguo haya añadido a `agent.json`.
 
 ## Límites conocidos
 

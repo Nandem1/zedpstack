@@ -44,29 +44,30 @@ export function lastActivity(repoRoot, id) {
   return null;
 }
 
-/** @param {object[]} records agent.json records */
-export function boardRows(repoRoot, records, now = Date.now()) {
-  return records.map((r) => {
-    const start = Date.parse(r.startedAt ?? r.createdAt);
-    const end = r.finishedAt ? Date.parse(r.finishedAt) : now;
+/** @param {object[]} views AgentViews from `loadAgent` */
+export function boardRows(repoRoot, views, now = Date.now()) {
+  return views.map((v) => {
+    const { spec, run } = v;
+    const start = Date.parse(run?.startedAt ?? spec.createdAt);
+    const end = v.finishedAt ? Date.parse(v.finishedAt) : now;
     let detail;
-    if (r.status === 'completed') {
-      const files = r.changes?.files?.length;
-      detail = `done in ${formatElapsed(end - start)}${files ? ` · ${files} file${files === 1 ? '' : 's'} changed on ${r.worktree?.branch ?? 'branch'}` : ''}`;
-    } else if (r.status === 'failed') {
-      detail = `failed: ${r.error ?? 'unknown error'}`;
-    } else if (r.status === 'stopped') {
+    if (v.status === 'completed') {
+      const files = run.outcome.changes?.files?.length;
+      detail = `done in ${formatElapsed(end - start)}${files ? ` · ${files} file${files === 1 ? '' : 's'} changed on ${spec.worktree?.branch ?? 'branch'}` : ''}`;
+    } else if (v.status === 'failed') {
+      detail = `failed: ${v.error ?? 'unknown error'}`;
+    } else if (v.status === 'stopped') {
       detail = 'stopped';
     } else {
-      detail = lastActivity(repoRoot, r.id) ?? (r.status === 'starting' ? 'Starting…' : 'Working…');
+      detail = lastActivity(repoRoot, spec.id) ?? (v.status === 'starting' ? 'Starting…' : 'Working…');
     }
     return {
-      id: r.id,
-      status: r.status,
-      title: r.description ?? r.role ?? r.id,
-      model: modelLabel(r.model, r.effectiveModel),
-      runtime: RUNTIME_LABEL[r.runtime] ?? r.runtime,
-      readonly: r.permissionProfile === 'read-only',
+      id: spec.id,
+      status: v.status,
+      title: spec.description ?? spec.role ?? spec.id,
+      model: modelLabel(spec.binding.model, run?.effectiveModel),
+      runtime: RUNTIME_LABEL[spec.binding.runtime] ?? spec.binding.runtime,
+      readonly: spec.binding.permissionProfile === 'read-only',
       elapsed: formatElapsed(end - start),
       detail,
     };

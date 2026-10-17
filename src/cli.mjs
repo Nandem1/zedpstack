@@ -109,7 +109,7 @@ async function agentCommand(sub, opts, repoRoot) {
         skills: list(opts.skills),
         base: opts.base,
         timeout_seconds: opts.timeout ? Number(opts.timeout) : undefined,
-      });
+      }, { frontend: 'cli' });
     case 'exec':
       return execAgent({ repo: repoRoot, id });
     case 'status':

@@ -52,8 +52,9 @@ Zed debe ser el único sitio de trabajo: el hilo "zedpstack" es el orquestador. 
 ## Datos
 - `AgentSpec` (agent.json, escrito una vez con `wx`): id, binding, rol, descripción, cwd, repoRoot, isolation, worktree, timeoutMs, `origin {frontend, sessionId, pid}`, `expectedModel`.
 - `RunState` (run.json, solo el runner, tmp+rename): runnerPid, workerPid, startedAt, effectiveModel, outcome.
+- `LaunchMark` (launch.json, `{runnerPid}`, solo `spawnAgent`, una vez).
 - `StopMark` (stop.json, `wx`), `CleanupMark` (cleanup.json).
-- `AgentView` fusionado al leer: `{spec, run, stop, cleanup, status, modelCheck}`.
+- `AgentView` fusionado al leer: `{spec, run, launch, stop, cleanup, status, error, finishedAt, modelCheck}` (`modelCheck` llega en el corte 5).
 - `HubSession`: id, cwd, runtime, engine, primed, turn, cards, opciones y comandos del hijo.
 
 ## Opciones de configuración (ACP v1)
@@ -92,7 +93,7 @@ Una ruta relativa dentro de un archivo descargable del registro de Cursor no ide
 ## Estado de implementación
 
 - [x] Corte 1: `/claude` + desplegables + conversación en streaming vía engine hijo ACP (`rpc.mjs`, `engine.mjs`, `hub.mjs`, `options.mjs`, agente falso, pruebas).
-- [ ] Corte 2: almacén dividido y `origin`.
+- [x] Corte 2: almacén dividido y `origin` (`store.mjs` con un escritor por archivo, `deriveStatus`, adaptador v1, `origin` por frontend; pruebas de carrera stop/runner en proceso y entre procesos).
 - [ ] Corte 3: MCP, skill en primer prompt, tarjetas por almacén.
 - [ ] Corte 4: cancelación y supervisión.
 - [ ] Corte 5: verificación de modelo.

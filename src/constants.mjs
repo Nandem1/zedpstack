@@ -1,5 +1,4 @@
 export const MANIFEST_SCHEMA_VERSION = 1;
-export const AGENT_RECORD_VERSION = 1;
 export const ZEDPSTACK_VERSION = '0.6.0';
 export const RUNS_DIR = '.zedpstack/runs';
 export const AGENTS_DIR = '.zedpstack/agents';

@@ -6,14 +6,20 @@ Cada agente escribe en `<repo>/.zedpstack/agents/<id>/`:
 
 | Archivo | Contenido |
 |---------|-----------|
-| `agent.json` | estado (`starting`, `running`, `completed`, `failed`, `stopped`), runtime, modelo, PIDs, worktree, cambios |
+| `agent.json` | AgentSpec versión 2, creado una vez; binding de runtime y modelo, origen, worktree y configuración |
+| `launch.json` | PID del runner (`runnerPid`), escrito al lanzar el agente |
+| `run.json` | RunState del runner; PIDs, `effectiveModel` y `outcome` con resultado, error, cambios y fecha de término |
+| `stop.json` | solicitud de parada (`requestedAt`, `by`) |
+| `cleanup.json` | limpieza del worktree (`removedAt`, `branchDeleted`) |
 | `progress.log` | líneas legibles (`Claude how explorer — running (haiku)`, `> Inspecting src/…`) |
 | `events.jsonl` | eventos de máquina |
 | `prompt.md` / `task.md` | prompt completo enviado al worker / tarea original del orquestador |
 | `stdout.log`, `stderr.log`, `result.json` | salida cruda e informe final |
 | `runner.log` | errores del proceso runner |
 
-`progress.log` recibe dos tipos de línea por agente: `> …` para herramientas (lecturas, búsquedas, comandos) y `· …` para la narración del modelo (la primera frase de cada mensaje de Claude, cada pensamiento de Cursor y cada bloque `codex` de Codex). Además, el modelo que reporta el CLI (`init` en Claude y Cursor, la cabecera `model:` en Codex) se guarda como `effectiveModel` en `agent.json`.
+El estado (`starting`, `running`, `completed`, `failed`, `stopped`) se deriva al leer estos archivos. `stop.json` tiene prioridad sobre el resultado de `run.json`. Ver [D-09 de la arquitectura](ARCHITECTURE.md#d-09-almacén-de-agentes-un-escritor-por-archivo-estado-derivado).
+
+`progress.log` recibe dos tipos de línea por agente: `> …` para herramientas (lecturas, búsquedas, comandos) y `· …` para la narración del modelo (la primera frase de cada mensaje de Claude, cada pensamiento de Cursor y cada bloque `codex` de Codex). Además, el modelo que reporta el CLI (`init` en Claude y Cursor, la cabecera `model:` en Codex) se guarda como `effectiveModel` en `run.json`.
 
 La lista (`src/agents/board.mjs`) toma la última de esas líneas por agente. Se ve en tres sitios: al principio de cada resultado MCP, en las notificaciones de progreso de `wait_agent` y en `dispatch top`.
 

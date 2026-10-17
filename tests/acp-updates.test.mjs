@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { AGENT_RECORD_VERSION } from '../src/constants.mjs';
-import { writeAgent } from '../src/agents/store.mjs';
+import { createSpec, writeRun } from '../src/agents/store.mjs';
 import {
   THROTTLE_MS,
   STREAM_TOOL_KIND,
@@ -17,23 +16,24 @@ function contentText(update) {
 
 function seedCompletedAgent(repo, id = 'test-worker-abc') {
   const now = new Date().toISOString();
-  writeAgent(repo, {
-    version: AGENT_RECORD_VERSION,
+  createSpec(repo, {
     id,
+    binding: { runtime: 'cursor', model: 'haiku', permissionProfile: 'read-only' },
     description: 'probe',
     role: 'how explorer',
     slot: 0,
-    runtime: 'cursor',
-    model: 'haiku',
     repoRoot: repo,
     cwd: repo,
     isolation: 'none',
-    status: 'completed',
+    worktree: null,
     createdAt: now,
-    updatedAt: now,
-    finishedAt: now,
+  });
+  writeRun(repo, id, {
     runnerPid: null,
     workerPid: null,
+    startedAt: now,
+    effectiveModel: null,
+    outcome: { ok: true, exitCode: 0, timedOut: false, error: null, changes: null, changeError: null, finishedAt: now },
   });
   return id;
 }
