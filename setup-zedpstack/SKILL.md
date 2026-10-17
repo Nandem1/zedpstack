@@ -38,11 +38,13 @@ Alinea **zedpstack** con la hoja de modelos de **pstack** (`setup-pstack`): mism
    - `reflect tooling`, `reflect judgment`, `reflect divergent`, `reflect synthesizer`
    - `default effort: session` o `low|medium|high|xhigh|max`
 
-4. **Sincronizar a dispatch**:
+4. **Sincronizar a dispatch** (la hoja debe existir; si no, `setup init` primero):
 
    ```bash
    node ~/Projects/zedpstack/scripts/dispatch.mjs setup apply
    ```
+
+   La salida incluye `overflowWarnings` y `droppedLines` si la hoja tiene filas pstack no mapeadas o modelos de más en un panel.
 
 5. **Verificar**:
 

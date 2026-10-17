@@ -6,10 +6,13 @@ Cada run escribe `.zedpstack/runs/<runId>/events.jsonl` (append-only).
 
 Tipos habituales:
 
-- `run.started` / `run.completed` / `run.failed`
-- `step.started` / `step.completed` / `step.failed`
-- `worker.spawned` / `worker.finished` / `worker.timeout`
+- `run.started` / `run.completed` / `run.failed` / `run.cancelled`
+- `run.awaiting_judgment` — workers listos; falta `dispatch judgment`
+- `step.started` / `step.completed` / `step.validated`
+- `worker.spawned` / `worker.completed` / `worker.failed` / `worker.timeout`
 - `worker.output` / `worker.stderr` (stream; por defecto **no** se guardan en disco)
+
+Un fallo de validación de worker emite `run.failed` (no hay `step.failed` separado hoy).
 
 ## Flags CLI
 
@@ -29,7 +32,11 @@ node ~/Projects/zedpstack/scripts/dispatch.mjs watch \
   --from-start
 ```
 
-Formatea líneas legibles (paso, worker, runtime/modelo, preview de output). Ctrl+C para salir.
+Formatea líneas legibles (paso, worker, runtime/modelo, preview acotado de output/stderr).
+Con `--from-start` (recomendado) reproduce el historial y sigue el archivo.
+
+`watch` sale solo al ver `run.completed`, `run.failed` o `run.cancelled` en el stream
+(o con Ctrl+C si el run sigue activo, p. ej. en `awaiting_judgment`).
 
 ## Logs por worker
 
@@ -37,6 +44,6 @@ Siempre en disco:
 
 - `workers/<stepId>/stdout.log` — stream crudo del CLI
 - `workers/<stepId>/stderr.log`
-- `workers/<stepId>/result.json` — texto validado para el siguiente paso
+- `workers/<stepId>/result.json` — payload crudo del runtime (la validación del paso decide si el resultado es aceptado)
 
 Codex además: `codex-last-message.txt`.

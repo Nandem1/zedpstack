@@ -31,6 +31,12 @@ export const SHEET_TO_ZEDPSTACK_ROLES = {
   'interrogate lead': ['interrogate-lead'],
 };
 
+/** One model on these rows applies to every mapped zed role (not a positional panel). */
+const SHARED_SHEET_ROLES = new Set(['reflect judgment, divergent, synthesizer']);
+
+/** List length sets subagent count; extra entries must not overwrite the last slot. */
+const PANEL_SHEET_ROLES = new Set(['architect runners', 'interrogate reviewers']);
+
 /**
  * @param {string} slugWithOptionalEffort e.g. "haiku @high" or "gpt-6.1-sol"
  */
@@ -110,9 +116,38 @@ export function inferRuntimeForModel(model) {
   return 'claude';
 }
 
+function bindingForModel(raw, globalEffort) {
+  const { model, effort } = parseModelValue(raw);
+  if (!model || model === 'inherit-parent' || model === 'auto') {
+    return null;
+  }
+  const binding = {
+    runtime: inferRuntimeForModel(model),
+    model,
+    permissionProfile: 'read-only',
+  };
+  const eff = effort ?? globalEffort;
+  if (eff) binding.effort = eff;
+  return binding;
+}
+
+/**
+ * Human-readable warnings for panel overflow (extra models with no slot).
+ * @param {{ sheetRole: string, model: string, index: number }[]} overflows
+ */
+export function sheetBindingOverflowWarnings(overflows) {
+  return overflows.map(
+    (entry) =>
+      `Sheet row "${entry.sheetRole}" has more models than slots; ignored "${entry.model}" at position ${entry.index + 1}.`,
+  );
+}
+
 /**
  * Build zedpstack config role entries from a parsed sheet.
- * @returns {Record<string, { runtime: string, model: string, permissionProfile: string, effort?: string }>}
+ * @returns {{
+ *   bindings: Record<string, { runtime: string, model: string, permissionProfile: string, effort?: string }>,
+ *   overflows: { sheetRole: string, model: string, index: number }[],
+ * }}
  */
 export function bindingsFromSheet(parsed, { defaultEffort = 'session' } = {}) {
   const globalEffort =
@@ -123,29 +158,43 @@ export function bindingsFromSheet(parsed, { defaultEffort = 'session' } = {}) {
         : null;
 
   const out = {};
+  const overflows = [];
 
   for (const [sheetRole, values] of Object.entries(parsed.roles)) {
     const zedRoles = SHEET_TO_ZEDPSTACK_ROLES[sheetRole];
     if (!zedRoles?.length) continue;
 
-    values.forEach((raw, index) => {
-      const { model, effort } = parseModelValue(raw);
-      if (!model || model === 'inherit-parent' || model === 'auto') {
+    const usable = values
+      .map((raw) => ({ raw, binding: bindingForModel(raw, globalEffort) }))
+      .filter((entry) => entry.binding);
+
+    if (SHARED_SHEET_ROLES.has(sheetRole) && usable.length === 1) {
+      const binding = usable[0].binding;
+      for (const targetRole of zedRoles) {
+        out[targetRole] = binding;
+      }
+      continue;
+    }
+
+    const panel = PANEL_SHEET_ROLES.has(sheetRole);
+
+    usable.forEach(({ raw, binding }, index) => {
+      if (panel && index >= zedRoles.length) {
+        overflows.push({
+          sheetRole,
+          model: parseModelValue(raw).model,
+          index,
+        });
         return;
       }
-      const targetRole = zedRoles[index] ?? zedRoles[zedRoles.length - 1];
-      const binding = {
-        runtime: inferRuntimeForModel(model),
-        model,
-        permissionProfile: 'read-only',
-      };
-      const eff = effort ?? globalEffort;
-      if (eff) binding.effort = eff;
+      const targetRole = panel
+        ? zedRoles[index]
+        : (zedRoles[index] ?? zedRoles[zedRoles.length - 1]);
       out[targetRole] = binding;
     });
   }
 
-  return out;
+  return { bindings: out, overflows };
 }
 
 export function defaultSheetTemplate() {

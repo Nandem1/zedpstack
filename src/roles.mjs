@@ -37,3 +37,12 @@ export function validationProfileForRole(role) {
   }
   return role;
 }
+
+/** Interrogate/reflect digest reviewers (relaxed length, optional repo reads). */
+export function isDigestReviewerRole(role) {
+  if (!role || typeof role !== 'string') return false;
+  if (role === 'interrogate-reviewer' || role === 'reflect-reviewer') return true;
+  return (
+    role.startsWith('interrogate-reviewer-') || role.startsWith('reflect-reviewer-')
+  );
+}

@@ -6,6 +6,7 @@ import {
   bindingsFromSheet,
   defaultSheetTemplate,
   parseModelSheet,
+  sheetBindingOverflowWarnings,
 } from './modelSheet.mjs';
 import { zedpstackRoot } from './paths.mjs';
 
@@ -32,10 +33,20 @@ export function readModelSheet(filePath) {
 /**
  * Merge sheet bindings into zedpstack.config.json (preserves timeouts / unknown roles).
  */
-export function applyModelSheetToConfig({ sheetPath, configPath } = {}) {
-  const sheet = readModelSheet(sheetPath ?? process.env.ZEDPSTACK_MODEL_SHEET ?? defaultModelSheetPath());
+export function applyModelSheetToConfig({
+  sheetPath,
+  configPath,
+  allowMissingSheet = false,
+} = {}) {
+  const resolvedPath = sheetPath ?? process.env.ZEDPSTACK_MODEL_SHEET ?? defaultModelSheetPath();
+  const sheet = readModelSheet(resolvedPath);
+  if (!sheet.exists && !allowMissingSheet) {
+    throw new Error(
+      `Model sheet not found at ${sheet.path}. Run "dispatch setup init" or pass --file.`,
+    );
+  }
   const parsed = parseModelSheet(sheet.text);
-  const bindings = bindingsFromSheet(parsed);
+  const { bindings, overflows } = bindingsFromSheet(parsed);
 
   const cfgFile =
     configPath ??
@@ -56,11 +67,16 @@ export function applyModelSheetToConfig({ sheetPath, configPath } = {}) {
 
   return {
     sheetPath: sheet.path,
-    sheetCreated: !sheet.exists,
+    sheetExists: sheet.exists,
     configPath: cfgFile,
     rolesUpdated: Object.keys(bindings),
+    overflows,
+    overflowWarnings: overflows.length
+      ? sheetBindingOverflowWarnings(overflows)
+      : [],
     defaultEffort: parsed.defaultEffort,
     sessionHook: parsed.sessionHook,
+    droppedLines: parsed.droppedLines,
   };
 }
 

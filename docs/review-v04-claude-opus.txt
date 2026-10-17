@@ -1,0 +1,34 @@
+I have enough to assess all five focus areas. A few confirmations on the subtle ones:
+
+- **Reviewer validation relaxations are keyed to the wrong role ids.** `src/validation.mjs:19,105-106,138` gate the relaxations (min length 12, single-line allowed, skip read-signal) on `role === 'interrogate-reviewer' | 'reflect-reviewer'`, but the actual step roles are `interrogate-reviewer-a/b/c` and `reflect-reviewer-judgment/tooling/divergent` (`playbooks/interrogate-review/playbook.json:9,17,25`, `playbooks/reflect-session/playbook.json:10,18,26`). `src/run.mjs:272` passes `stepDef.role` verbatim, so the relaxations are dead for every real reviewer.
+- **Effort is dead end-to-end.** `bindingsFromSheet` writes `effort` (`src/modelSheet.mjs:143`) but `resolveRoleBinding` returns only runtime/model/permissionProfile (`src/config.mjs:61-65`) and neither `buildClaudeArgv` nor `buildCodexArgv` emit a reasoning flag (`src/permissions.mjs:44-83`).
+- **Sequential, not fan-out.** `src/run.mjs:394-421` is a `for…of` loop; independent steps (reviewers a/b/c, runners a/b) run serially.
+- **Codex passes the full prompt as argv** (`src/runtimes/codex.mjs:42`, emitted in `worker.spawned.argv` at :51-60), while Claude uses stdin (`src/runtimes/claude.mjs:57`).
+
+---
+
+## Verdict
+**GO-with-fixes** — architecture is sound and the read-only boundary holds, but a validation-role mismatch and the sequential-vs-fanout gap should land before a production `/zedpstack`.
+
+## Strengths
+- **Real read-only boundary, enforced before spawn.** `assertPermissionProfile` hard-rejects anything but `read-only` (`src/permissions.mjs:6-14`), Claude is constrained via `--tools Read,Grep,Glob --permission-mode dontAsk` with a pre-flight `--tools` capability probe (`src/permissions.mjs:28-65`), Codex uses the OS sandbox `codex exec -s read-only` plus stderr mutation heuristics as defense-in-depth (`src/shellSignals.mjs:51-106`), and env is allow-listed per runtime (`src/permissions.mjs:85-103`).
+- **Faithful pstack-sheet alignment with graceful fallback.** `setup apply` parses the same `setup-pstack` row labels, infers runtime from slug, and *merges* into config preserving timeouts/unknown roles (`src/modelSheet.mjs:9-32`, `src/setupConfig.mjs:49-55`); missing sheet falls back to a template rather than erroring (`src/setupConfig.mjs:20-30`).
+- **Deterministic resume + observable streaming.** Step-identity hashing revalidates artifacts on every pass so resume can't bypass a stale step (`src/run.mjs:162-208,392-394`), and the append-only `events.jsonl` with opt-in `--tee-events` / `--persist-stream-events` keeps hot-path logs out of disk by default (`src/events/sink.mjs:31-38`).
+
+## Issues
+| Severity | Area | Finding | Suggestion |
+|----------|------|---------|------------|
+| High | Playbooks / validation | Reviewer relaxations (min-len 12, single-line OK, skip read-signal) check base alias names never used as step roles; real `interrogate-reviewer-*` / `reflect-reviewer-*` roles are held to full explorer rules (readSuccess≥1, 32-char, multiline) — risks false failures on terse reviewer output (`src/validation.mjs:19,105-106,138`). | Normalize role to its alias base before validation (reuse `ROLE_BINDING_ALIASES`) or match on a prefix/profile, not the exact bare string. |
+| Medium | Gaps vs pstack | Independent steps run sequentially; pstack fans out reviewers/runners in parallel. 3 reviewers + lead run one-at-a-time (`src/run.mjs:394-421`). | Group steps with no shared `inputFrom` into a `Promise.all` wave; manifest already tracks per-step state. |
+| Medium | Correctness / security | Codex receives the entire rendered prompt (incl. `--context-file` diff) as an argv element and records it in `worker.spawned.argv`; large diffs risk `E2BIG`, and the prompt is visible via `ps` / persisted in `events.jsonl` (`src/runtimes/codex.mjs:42,51-60`). Claude avoids this via stdin. | Pass the prompt to Codex via stdin/file and redact/omit the prompt arg from the emitted `argv`. |
+| Medium | Correctness | `dispatch watch` with `follow` (default) only resolves on SIGINT; for an already-finished run (default, no `--from-start`) it tails from EOF and hangs forever showing nothing — no `run.completed` auto-exit (`src/watchRun.mjs:48,74-95`). | Stop the interval when a `run.completed/failed/cancelled` event is seen; if not found and not following, print last-state and return. |
+| Low | Setup / sheet parse | When a sheet row lists more models than mapped zed roles (e.g. 3 values for `architect runners` → 2 roles), the extra value silently overwrites the last role (`src/modelSheet.mjs:136`). | Push overflow values into `droppedLines` or warn in the `setup apply` result. |
+| Low | Streaming / docs | `worker.output` previews are documented for `watch` (`docs/STREAMING.md:32`) but stream events aren't persisted by default (`src/events/sink.mjs:31-34`), so `--from-start` shows no output unless `--persist-stream-events` was set at run time. | Note the dependency in `STREAMING.md`, or have `watch` say "stream not persisted". |
+| Low | Correctness | Codex explorer read-signals are derived from stderr regex (`succeeded in \d+ms:`); a Codex CLI format change yields `readSuccess=0` and fails explorer validation on otherwise-valid runs (`src/shellSignals.mjs:9-18,109-120` → `src/validation.mjs:140-147`). | Treat absence of read-signals as a warning for Codex explorers, or key off exit status + non-empty output. |
+
+## Missing for production `/zedpstack` + `/setup-zedpstack`
+- **Fix the reviewer validation role matching and wire `effort` through** (`resolveRoleBinding` → runtime argv, e.g. Codex `-c model_reasoning_effort`), or explicitly drop `effort` from the sheet/SKILL so config doesn't carry dead contract.
+- **Parallel fan-out for independent steps** to match "pstack completo" latency; sequential 3×-reviewer runs are the main parity/perf gap.
+- **Harden `watch`/Codex-argv ergonomics**: auto-exit watch on terminal run state and move Codex prompts off argv (stdin/file) to avoid `E2BIG` and prompt leakage in `events.jsonl`/`ps`.
+
+No files modified.

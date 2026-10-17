@@ -7,3 +7,5 @@ docs/audit-*.err
 docs/session-*.log
 .audit-last-run.log
 *.log
+docs/review-v04-codex-sol.err
+docs/review-v04-codex-sol.stdout

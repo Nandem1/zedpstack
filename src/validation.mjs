@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { isDigestReviewerRole } from './roles.mjs';
 import { synthesizerShellPolicyViolation } from './shellSignals.mjs';
 
 const BLOCKED_PHRASES = [
@@ -16,7 +17,7 @@ const BLOCKED_PHRASES = [
 ];
 
 function minTextLength(role) {
-  if (role === 'interrogate-reviewer' || role === 'reflect-reviewer') {
+  if (isDigestReviewerRole(role)) {
     return 12;
   }
   return 32;
@@ -102,8 +103,7 @@ export function validateWorkerResult({
   if (result.ok !== true) {
     errors.push('result.ok is not true');
   }
-  const allowSingleLine =
-    role === 'interrogate-reviewer' || role === 'reflect-reviewer';
+  const allowSingleLine = isDigestReviewerRole(role);
   if (
     textIsString &&
     outputContract === 'markdown-report' &&
@@ -131,11 +131,15 @@ export function validateWorkerResult({
     }
   }
 
-  if (result.signals?.readDenied > 0 && (result.signals?.readSuccess ?? 0) === 0) {
+  if (
+    !isDigestReviewerRole(role) &&
+    result.signals?.readDenied > 0 &&
+    (result.signals?.readSuccess ?? 0) === 0
+  ) {
     errors.push('read tools denied without successful read');
   }
 
-  const skipReadSignal = role === 'interrogate-reviewer' || role === 'reflect-reviewer';
+  const skipReadSignal = isDigestReviewerRole(role);
 
   if (profile === 'explorer' && textIsString) {
     const reads = result.signals?.readSuccess ?? 0;

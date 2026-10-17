@@ -2,20 +2,45 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runDir } from './paths.mjs';
 
+/** Run-level events that end `watch` when `follow` is true. */
+export const TERMINAL_RUN_EVENTS = new Set([
+  'run.completed',
+  'run.failed',
+  'run.cancelled',
+]);
+
 const HUMAN_TYPES = new Set([
   'run.started',
   'run.completed',
   'run.failed',
+  'run.cancelled',
+  'run.awaiting_judgment',
   'step.started',
   'step.completed',
   'step.failed',
+  'step.validated',
   'worker.spawned',
-  'worker.finished',
+  'worker.completed',
+  'worker.failed',
   'worker.timeout',
-  'judgment.awaiting',
+  'worker.output',
+  'worker.stderr',
 ]);
 
-function formatEvent(event) {
+export function shouldDisplayEvent(type) {
+  return Boolean(type && HUMAN_TYPES.has(type));
+}
+
+export function isTerminalRunEvent(type) {
+  return TERMINAL_RUN_EVENTS.has(type);
+}
+
+function previewChunk(chunk, maxLen = 120) {
+  const preview = chunk.replace(/\s+/g, ' ').slice(0, maxLen);
+  return `${preview}${chunk.length > maxLen ? '…' : ''}`;
+}
+
+export function formatEvent(event) {
   const { ts, type, stepId, workerId, runtime, model, status, errors, chunk } = event;
   const head = `[${ts}] ${type}`;
   const parts = [head];
@@ -24,11 +49,27 @@ function formatEvent(event) {
   if (runtime) parts.push(`${runtime}/${model ?? '?'}`);
   if (status) parts.push(`status=${status}`);
   if (errors?.length) parts.push(`errors=${errors.join('; ')}`);
-  if (type === 'worker.output' && chunk) {
-    const preview = chunk.replace(/\s+/g, ' ').slice(0, 120);
-    parts.push(`| ${preview}${chunk.length > 120 ? '…' : ''}`);
+  if ((type === 'worker.output' || type === 'worker.stderr') && chunk) {
+    parts.push(`| ${previewChunk(chunk)}`);
   }
   return parts.join(' ');
+}
+
+function readGrowth(eventsPath, offset, buf) {
+  let nextOffset = offset;
+  let buffer = buf;
+  let st = fs.statSync(eventsPath);
+  while (st.size > nextOffset) {
+    const fd = fs.openSync(eventsPath, 'r');
+    const len = st.size - nextOffset;
+    const chunk = Buffer.alloc(len);
+    const bytesRead = fs.readSync(fd, chunk, 0, len, nextOffset);
+    fs.closeSync(fd);
+    nextOffset += bytesRead;
+    buffer += chunk.subarray(0, bytesRead).toString('utf8');
+    st = fs.statSync(eventsPath);
+  }
+  return { offset: nextOffset, buf: buffer };
 }
 
 /**
@@ -39,6 +80,8 @@ export async function watchRun({
   runId,
   fromStart = false,
   follow = true,
+  pollMs = 500,
+  writeLine = (line) => process.stderr.write(`${line}\n`),
 }) {
   const eventsPath = path.join(runDir(repoRoot, runId), 'events.jsonl');
   if (!fs.existsSync(eventsPath)) {
@@ -47,6 +90,7 @@ export async function watchRun({
 
   let offset = fromStart ? 0 : fs.statSync(eventsPath).size;
   let buf = '';
+  let sawTerminal = false;
 
   const drain = () => {
     const lines = buf.split('\n');
@@ -59,38 +103,51 @@ export async function watchRun({
       } catch {
         continue;
       }
-      if (HUMAN_TYPES.has(event.type) || event.type?.startsWith('worker.')) {
-        process.stderr.write(`${formatEvent(event)}\n`);
+      if (shouldDisplayEvent(event.type)) {
+        writeLine(formatEvent(event));
+      }
+      if (isTerminalRunEvent(event.type)) {
+        sawTerminal = true;
       }
     }
   };
 
-  if (fromStart) {
-    buf = fs.readFileSync(eventsPath, 'utf8');
+  const pull = () => {
+    const grown = readGrowth(eventsPath, offset, buf);
+    offset = grown.offset;
+    buf = grown.buf;
     drain();
-    offset = fs.statSync(eventsPath).size;
+    return sawTerminal;
+  };
+
+  if (fromStart) {
+    pull();
   }
 
   if (!follow) return;
 
+  if (sawTerminal) return;
+
   return new Promise((resolve) => {
+    let interval;
+    const stop = () => {
+      if (interval) clearInterval(interval);
+      resolve();
+    };
+
     const tick = () => {
-      const st = fs.statSync(eventsPath);
-      if (st.size > offset) {
-        const fd = fs.openSync(eventsPath, 'r');
-        const len = st.size - offset;
-        const chunk = Buffer.alloc(len);
-        fs.readSync(fd, chunk, 0, len, offset);
-        fs.closeSync(fd);
-        offset = st.size;
-        buf += chunk.toString('utf8');
-        drain();
+      try {
+        if (pull()) stop();
+      } catch {
+        stop();
       }
     };
-    const interval = setInterval(tick, 500);
+
+    interval = setInterval(tick, pollMs);
+    tick();
+
     process.on('SIGINT', () => {
-      clearInterval(interval);
-      resolve();
+      stop();
     });
   });
 }

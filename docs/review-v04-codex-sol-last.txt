@@ -1,0 +1,33 @@
+## Verdict
+
+NO-GO
+
+## Strengths
+
+- `EventSink` correctly separates lifecycle persistence, live tee output, and optional stream persistence. [sink.mjs:7-37](/Users/nndsk/Projects/zedpstack/src/events/sink.mjs:7)
+- Workers use argument arrays without a shell. Codex explicitly receives the read-only sandbox flag. [permissions.mjs:44-82](/Users/nndsk/Projects/zedpstack/src/permissions.mjs:44)
+- Panel roles and synthesis inputs are explicit, allowing separate model assignments and inspectable aggregation. [reflect-session/playbook.json:6-33](/Users/nndsk/Projects/zedpstack/playbooks/reflect-session/playbook.json:6)
+
+Reviewed v0.4.0 at `e596487`. All 28 non-writing tests passed; additional defects were reproduced in memory. No files were modified. Live model workflows and tests that write files were not run.
+
+## Issues
+
+| Severity | Area | Finding | Suggestion |
+|---|---|---|---|
+| P1 | Sheet compatibility | Canonical `reflect judgment, divergent, synthesizer: opus` configures only judgment. The positional mapper never broadcasts the scalar to the other roles. [modelSheet.mjs:127-145](/Users/nndsk/Projects/zedpstack/src/modelSheet.mjs:127) | Distinguish shared-role assignments from panel lists and populate every shared role. |
+| P1 | Setup synchronization | `inherit-parent` and `auto` generate no binding. Apply merges existing bindings, so switching to inheritance or deleting a row silently retains the old model. [modelSheet.mjs:131-135](/Users/nndsk/Projects/zedpstack/src/modelSheet.mjs:131), [setupConfig.mjs:45-49](/Users/nndsk/Projects/zedpstack/src/setupConfig.mjs:45) | Reconcile generated overrides, including removals. Define inheritance explicitly or reject unsupported inheritance before writing. |
+| P1 | Config aliases | New panel/lens aliases require multiple hops, but resolution follows one. Existing v0.3.1 configs consequently fail to resolve architect, interrogate, and reflect roles. Timeout inheritance also stops early. [config.mjs:32-74](/Users/nndsk/Projects/zedpstack/src/config.mjs:32) | Traverse aliases consistently or flatten them to supported fallback bindings. |
+| P1 | Reviewer validation | Exceptions recognize only unsuffixed reviewer names. New reflect lenses reject valid digest-only analysis because they require repository reads. Upstream's `no findings` response fails length/multiline checks; Codex independently requires 32 characters. [validation.mjs:99-143](/Users/nndsk/Projects/zedpstack/src/validation.mjs:99), [codex.mjs:114-116](/Users/nndsk/Projects/zedpstack/src/runtimes/codex.mjs:114) | Apply reviewer contracts to all concrete roles and accept explicit no-findings outcomes in both validation layers. |
+| P2 | Setup discovery/errors | Discovery ignores native Codex/Claude pstack sheets. An explicitly missing sheet silently supplies template defaults and reports `sheetCreated: true` without creating it. [setupConfig.mjs:12-63](/Users/nndsk/Projects/zedpstack/src/setupConfig.mjs:12) | Discover native runtime paths and environment overrides. Make `apply` reject missing input; reserve creation for `init`. |
+| P2 | Panel cardinality | Importing `architect runners: opus, fable, sonnet` produces A=opus, B=sonnet. The middle model disappears because only two targets exist. [modelSheet.mjs:131-144](/Users/nndsk/Projects/zedpstack/src/modelSheet.mjs:131), [architect-sketch/playbook.json:13-34](/Users/nndsk/Projects/zedpstack/playbooks/architect-sketch/playbook.json:13) | Generate participants from list cardinality or reject unsupported counts explicitly. |
+| P2 | Watch tail | `--from-start` loses appends between its replay read and subsequent stat. Independent UTF-8 decoding corrupts characters split between polls. Truncation below the offset is ignored. All reproduced in memory. [watchRun.mjs:68-87](/Users/nndsk/Projects/zedpstack/src/watchRun.mjs:68) | Advance by bytes consumed, preserve decoder state, and handle truncation. |
+| P2 | Event contract/docs | Watch expects `judgment.awaiting`, while dispatch emits `run.awaiting_judgment`, hiding the action-required state. It also omits stderr content. Documentation names nonexistent `worker.finished` events and describes raw results as validated. [watchRun.mjs:5-30](/Users/nndsk/Projects/zedpstack/src/watchRun.mjs:5), [run.mjs:423-428](/Users/nndsk/Projects/zedpstack/src/run.mjs:423), [STREAMING.md:7-40](/Users/nndsk/Projects/zedpstack/docs/STREAMING.md:7) | Align event names, render bounded stderr previews, and distinguish raw results from accepted results. |
+| P2, conditional | Read-only enforcement | Claude restricts built-in tools but inherits HOME and host configuration without isolating MCP or hooks. Read-only behavior is therefore configuration-dependent. No exploit was demonstrated. [permissions.mjs:44-102](/Users/nndsk/Projects/zedpstack/src/permissions.mjs:44) | Control inherited settings, hooks, and MCP configuration; verify the effective tool set. |
+| P2 | Execution evidence | Failed `cat` commands count as successful reads because exit status is ignored. Compound commands, `find -delete`, and mutating `gh api` requests can be classified as read-only. These are audit weaknesses, not demonstrated sandbox bypasses. [shellSignals.mjs:51-119](/Users/nndsk/Projects/zedpstack/src/shellSignals.mjs:51) | Derive evidence from completed command results; keep command-name heuristics diagnostic. |
+| P2 | Effort | Setup saves `effort`, but binding resolution discards it entirely. Neither runtime applies it; the documentation understates this as incomplete level support. [config.mjs:61-65](/Users/nndsk/Projects/zedpstack/src/config.mjs:61), [setup skill:53-55](/Users/nndsk/Projects/zedpstack/setup-zedpstack/SKILL.md:53) | Implement verified runtime mappings or report effort as unsupported during setup and dispatch. |
+
+## Missing for production `/zedpstack` + `/setup-zedpstack`
+
+- Acceptance coverage for canonical sheets, inheritance resets, config migration, valid reviewer responses, and concurrent watch appends.
+- Configurable panel fan-out. Dispatch currently awaits every step sequentially. [run.mjs:394-417](/Users/nndsk/Projects/zedpstack/src/run.mjs:394)
+- For “pstack completo,” write workflows, babysit, shipping, swarm, and arena remain outside the five documented read-only adapters. Adding them requires separately agreed scope. [PSTACK_ADAPTERS.md:3-13](/Users/nndsk/Projects/zedpstack/docs/PSTACK_ADAPTERS.md:3)

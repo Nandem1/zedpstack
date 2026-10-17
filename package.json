@@ -4,7 +4,7 @@
     "type": "git",
     "url": "https://github.com/Nandem1/zedpstack.git"
   },
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Portable multi-runtime orchestration over pstack playbooks (Zed, Cursor, CLI)",
   "type": "module",
   "license": "MIT",

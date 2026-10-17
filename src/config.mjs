@@ -51,25 +51,47 @@ const ROLE_BINDING_ALIASES = {
   'architect-runner-b': 'architect-runner',
 };
 
+export function resolveRoleBindingKey(roles, role) {
+  const seen = new Set();
+  let current = role;
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    if (roles[current]) {
+      return current;
+    }
+    current = ROLE_BINDING_ALIASES[current];
+  }
+  return null;
+}
+
 export function resolveRoleBinding(config, role) {
   const roles = config.data.roles ?? {};
-  const lookup = roles[role] ? role : ROLE_BINDING_ALIASES[role];
-  const binding = lookup ? roles[lookup] : undefined;
+  const key = resolveRoleBindingKey(roles, role);
+  const binding = key ? roles[key] : undefined;
   if (!binding?.runtime || !binding?.model || !binding?.permissionProfile) {
     throw new Error(`Missing RoleBinding for role "${role}" in config`);
   }
-  return {
+  const out = {
     runtime: binding.runtime,
     model: binding.model,
     permissionProfile: binding.permissionProfile,
   };
+  if (binding.effort) {
+    out.effort = binding.effort;
+  }
+  return out;
 }
 
 export function resolveTimeout(config, role) {
-  const key =
-    typeof config.data.timeouts?.[role] === 'number'
-      ? role
-      : (ROLE_BINDING_ALIASES[role] ?? role);
-  const t = config.data.timeouts?.[key];
-  return typeof t === 'number' ? t : 600_000;
+  const timeouts = config.data.timeouts ?? {};
+  const seen = new Set();
+  let current = role;
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    if (typeof timeouts[current] === 'number') {
+      return timeouts[current];
+    }
+    current = ROLE_BINDING_ALIASES[current];
+  }
+  return 600_000;
 }
