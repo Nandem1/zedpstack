@@ -11,6 +11,7 @@ import { orchestratorModelSheetPath } from './setupConfig.mjs';
 import { readProbeCache } from './setupWizard.mjs';
 import { describeWorkerModels, loadWorkerModels } from './workerModels.mjs';
 import { inspectEngines } from './acp/diagnostics.mjs';
+import { checkWorkerClis } from './cliCompat.mjs';
 
 function probeRuntimes() {
   const out = {};
@@ -66,6 +67,9 @@ export function buildDoctorReport({ home = os.homedir() } = {}) {
     }
   }
 
+  const cliCompat = checkWorkerClis({ roles: models.roles, runtimes, probeCache: probes });
+  problems.push(...cliCompat.problems);
+
   const orchestratorEditGuard = orchestratorEditGuardReport(home);
 
   const hosts = planInstall({ home }).map(({ host, actions }) => ({
@@ -84,6 +88,7 @@ export function buildDoctorReport({ home = os.homedir() } = {}) {
     orchestratorHost: detectOrchestratorHost(),
     pstack: pstack ? { root: pstack.root, version: pstack.version } : null,
     runtimes,
+    cliCompat: cliCompat.checks,
     acp,
     workerSheet,
     hostSheet: { path: hostSheet, exists: fs.existsSync(hostSheet), note: 'read by the orchestrator host only; never used to spawn workers' },
@@ -99,6 +104,14 @@ export function formatDoctorReport(r) {
   lines.push('Worker CLIs:');
   for (const [runtime, { bin, version }] of Object.entries(r.runtimes)) {
     lines.push(`  ${runtime.padEnd(7)} ${bin.padEnd(7)} ${version ?? 'missing'}`);
+    for (const row of r.cliCompat ?? []) {
+      if (row.runtime !== runtime || row.state === 'ok') continue;
+      if (row.state === 'below') {
+        lines.push(`          below minimum: ${row.model} needs ${row.minimum} (${row.roles.join(', ')})`);
+      } else if (row.state === 'unreadable') {
+        lines.push(`          version unreadable: ${row.model} needs ${row.minimum}`);
+      }
+    }
   }
   lines.push('', 'ACP engines (local check, no network):');
   for (const [runtime, engine] of Object.entries(r.acp)) {

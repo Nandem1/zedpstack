@@ -6,7 +6,8 @@ const path = require('node:path');
 
 const [runtime, ...args] = process.argv.slice(2);
 if (args.includes('--version') || args.includes('-v')) {
-  console.log(`9.9.9 (fake ${runtime})`);
+  const ver = process.env.FAKE_VERSION ?? '9.9.9';
+  console.log(`${ver} (fake ${runtime})`);
   process.exit(0);
 }
 if (runtime === 'cursor' && args.includes('--list-models')) {

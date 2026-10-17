@@ -8,6 +8,7 @@
  *   mismatch    the CLI ran something other than the expected model
  */
 
+import { cliVersionOf } from './cliCompat.mjs';
 import { CLAUDE_ALIASES, splitRuntimePrefix } from './modelRouting.mjs';
 
 const ALIASES = new Set([...CLAUDE_ALIASES, 'default', 'auto', 'inherit-parent']);
@@ -98,6 +99,7 @@ export function cliRejection({ runtime, model, cliVersion, text }) {
   const tooOld = /(requires?|needs?|upgrade|update)[^.]{0,80}\b(claude code|cli)\b|\b(claude code|cli)\b[^.]{0,80}(or later|or newer|newer version)/i;
   if (!tooOld.test(flat)) return null;
   const needed = /(\d+\.\d+\.\d+)/.exec(flat)?.[1];
-  const installed = String(cliVersion ?? 'unknown version').split(/\s/)[0];
+  const parsed = cliVersionOf(cliVersion);
+  const installed = parsed ?? String(cliVersion ?? 'unknown version').split(/\s/)[0];
   return `${runtime} CLI ${installed} cannot run ${model}${needed ? `: the API requires ${needed} or later` : ''}. Update the ${runtime} CLI and retry. API said: ${flat.slice(0, 200)}`;
 }

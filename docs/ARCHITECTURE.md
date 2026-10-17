@@ -34,7 +34,7 @@ Las versiones 0.1–0.5 iban en la dirección contraria: playbooks fijos (`how-i
 | Permisos | `src/permissions.mjs` | argv por runtime y por perfil (`read-only`, `workspace-write`) |
 | Modelos | `src/workerModels.mjs`, `src/modelRouting.mjs` | rol de la hoja → slot → slug → runtime |
 | Instalación | `src/install.mjs` | registra el MCP y los skills en cada host |
-| Diagnóstico | `src/setupReport.mjs` | `dispatch doctor` |
+| Diagnóstico | `src/setupReport.mjs`, `src/cliCompat.mjs` | `dispatch doctor` |
 
 ## Decisiones
 
@@ -119,7 +119,7 @@ Un dictamen nunca se atribuye en silencio a un modelo que el usuario no pidió. 
 
 `model_check` se añade a `agent_status`, `agent_result`, `wait_agent`, `list_agents` y las filas del tablero; los campos existentes no cambian. Un `mismatch` no hace fallar al worker: queda `completed`, pero `agent_result` añade `warnings` y antepone esa línea a `text`, así que la tarjeta ACP también empieza por el aviso. El título de la tarjeta se actualiza al terminar con la etiqueta del modelo.
 
-Cuando la API rechaza un modelo porque el CLI es antiguo («requires Claude Code 2.1.280 or later»), el error del worker nombra la versión instalada, por ejemplo `claude CLI 2.1.195 cannot run claude-opus-5-5: the API requires 2.1.280 or later`. El repo no registra versiones mínimas de los CLI, así que `doctor` no compara versiones.
+Cuando la API rechaza un modelo porque el CLI es antiguo («requires Claude Code 2.1.280 or later»), el error del worker nombra la versión instalada, por ejemplo `claude CLI 2.1.195 cannot run claude-opus-5-5: the API requires 2.1.280 or later`. `src/cliCompat.mjs` registra la versión mínima de cada CLI worker por modelo concreto, con su evidencia (hoy `claude-opus-5-5` exige Claude Code 2.1.280), y `dispatch doctor` la compara con la versión instalada en `cliCompat` y `problems`.
 
 `setup_plan` añade `pin` (el id concreto sondeado) a cada alias que corre y una línea en `recommendations` que propone fijarlo. `setup_write` acepta ids concretos y, si se escribe un alias, lo escribe tal cual y añade a `warnings` el modelo que corre hoy.
 
