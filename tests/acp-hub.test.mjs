@@ -7,12 +7,14 @@ import { PassThrough } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { createHub } from '../src/acp/hub.mjs';
 import { startEngine } from '../src/acp/engine.mjs';
-import { mergeCommands, ZP_RUNTIME_ID } from '../src/acp/options.mjs';
+import { ZP_RUNTIME_ID } from '../src/acp/options.mjs';
 import { createPeer } from '../src/acp/rpc.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const FAKE_AGENT = path.join(ROOT, 'tests', 'fixtures', 'bin', 'fake-acp-agent.cjs');
+const HUB_COMMAND_NAMES = ['claude', 'codex', 'cursor', 'board', 'spawn'];
+const CHILD_COMMAND_NAMES = ['help', 'compact'];
 
 function engineEnv(extra = {}) {
   const cmd = JSON.stringify([process.execPath, FAKE_AGENT]);
@@ -44,6 +46,10 @@ function connectHub(t, env) {
   const clientRequests = [];
   const engines = [];
 
+  zedSim.onNotification((method, params) => {
+    if (method === 'session/update') updates.push(params);
+  });
+
   zedSim.onRequest(async (method, params) => {
     clientRequests.push({ method, params });
     if (method === 'session/request_permission') {
@@ -65,7 +71,6 @@ function connectHub(t, env) {
     zed: {
       request: (method, params) => hubWire.request(method, params),
       notify: (params) => {
-        updates.push(params);
         hubWire.notify('session/update', params);
       },
     },
@@ -123,15 +128,69 @@ describe('acp hub', () => {
     assert.ok(ids.includes('model'));
   });
 
-  it('commands announced after session/new response', async () => {
-    const before = ctx.updates.length;
-    const res = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
-    await new Promise((r) => setImmediate(r));
-    const cmds = ctx.updates
-      .slice(before)
-      .find((u) => u.update?.sessionUpdate === 'available_commands_update');
-    assert.ok(cmds);
-    assert.deepEqual(cmds.update.availableCommands, mergeCommands([]));
+  for (const timing of ['session/new', 'prompt']) {
+    it(`merged commands survive child updates on ${timing}, runtime switch, and restart`, async () => {
+      env.FAKE_ACP_COMMANDS_TIMING = timing;
+      const commandUpdates = () => ctx.updates.filter(
+        (u) => u.update?.sessionUpdate === 'available_commands_update',
+      );
+      const lastCommands = () => commandUpdates().at(-1)?.update.availableCommands.map((c) => c.name);
+      const { sessionId } = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
+      assert.deepEqual(commandUpdates(), [], 'commands must follow the session/new response');
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(lastCommands(), [
+        ...HUB_COMMAND_NAMES,
+        ...(timing === 'session/new' ? CHILD_COMMAND_NAMES : []),
+      ]);
+      await ctx.rpc('session/prompt', {
+        sessionId,
+        prompt: [{ type: 'text', text: 'hello' }],
+      });
+      assert.deepEqual(lastCommands(), [...HUB_COMMAND_NAMES, ...CHILD_COMMAND_NAMES]);
+
+      for (const childName of ['review', 'restart']) {
+        env.FAKE_ACP_COMMANDS = JSON.stringify([{ name: childName, description: childName }]);
+        const before = commandUpdates().length;
+        await ctx.rpc('session/prompt', {
+          sessionId,
+          prompt: [{ type: 'text', text: '/codex' }],
+        });
+        assert.ok(commandUpdates().length > before, 'replacement engine reannounces commands');
+        assert.deepEqual(lastCommands(), [
+          ...HUB_COMMAND_NAMES,
+          ...(timing === 'session/new' ? [childName] : []),
+        ]);
+        await ctx.rpc('session/prompt', {
+          sessionId,
+          prompt: [{ type: 'text', text: 'hello after switch' }],
+        });
+        assert.deepEqual(lastCommands(), [...HUB_COMMAND_NAMES, childName]);
+      }
+      for (const update of commandUpdates()) {
+        assert.equal(update.sessionId, sessionId);
+        assert.deepEqual(
+          update.update.availableCommands.slice(0, HUB_COMMAND_NAMES.length).map((c) => c.name),
+          HUB_COMMAND_NAMES,
+        );
+      }
+    });
+  }
+
+  it('child commands received while applying saved prefs wait for session/new response', async () => {
+    env.FAKE_ACP_COMMANDS_TIMING = 'prompt';
+    fs.writeFileSync(path.join(env.ZEDPSTACK_HOME, 'acp-prefs.json'), JSON.stringify({
+      lastRuntime: 'claude',
+      perRuntime: { claude: { model: 'beta' } },
+    }));
+    const { sessionId } = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
+    assert.ok(!ctx.updates.some((u) => u.update?.sessionUpdate === 'available_commands_update'));
+    await new Promise((resolve) => setImmediate(resolve));
+    const commands = ctx.updates.filter((u) => u.update?.sessionUpdate === 'available_commands_update');
+    assert.equal(commands.length, 1);
+    assert.equal(commands[0].sessionId, sessionId);
+    assert.deepEqual(commands[0].update.availableCommands.map((c) => c.name), [
+      ...HUB_COMMAND_NAMES, ...CHILD_COMMAND_NAMES,
+    ]);
   });
 
   it('/claude switch emits config_option_update', async () => {

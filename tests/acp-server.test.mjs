@@ -1,12 +1,12 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
-import { mergeCommands } from '../src/acp/options.mjs';
-import { createSessionStore, handleAcpRequest } from '../src/acp/server.mjs';
+import { closeAgent } from '../src/agents/lifecycle.mjs';
+import { isProcessAlive, readAgent } from '../src/agents/store.mjs';
+import { createSessionStore, handleAcpNotification, handleAcpRequest, runSpawnTurn } from '../src/acp/server.mjs';
 import { THROTTLE_MS } from '../src/acp/updates.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
@@ -72,6 +72,39 @@ describe('handleAcpRequest usage', () => {
   });
 });
 
+describe('ACP spawn cancellation', () => {
+  it('stops workers registered after cancellation and tolerates close failures', async (t) => {
+    const sb = makeSandbox();
+    const sessions = createSessionStore();
+    const sessionId = sessions.create(sb.repo);
+    const controller = new AbortController();
+    const turn = { agentIds: ['missing-agent'], controller };
+    sessions.setActiveTurn(sessionId, turn);
+    t.after(async () => {
+      await Promise.all(turn.agentIds.map((id) => closeAgent({ repo: sb.repo, id }).catch(() => {})));
+    });
+
+    await handleAcpNotification({ method: 'session/cancel', params: { sessionId } }, { sessions });
+    const { agentIds } = await runSpawnTurn({
+      sessions,
+      sessionId,
+      repo: sb.repo,
+      command: { count: 2, role: 'how explorer', prompt: 'FAKE_SLEEP' },
+      notify: () => {},
+      signal: controller.signal,
+      streamMode: 'content',
+    });
+
+    assert.equal(agentIds.length, 2);
+    for (const id of agentIds) {
+      const agent = readAgent(sb.repo, id);
+      assert.equal(agent.status, 'stopped', `${id} stopped before the turn settles`);
+      assert.equal(isProcessAlive(agent.runnerPid), false, `${id} runner exited`);
+      assert.equal(isProcessAlive(agent.workerPid), false, `${id} worker exited`);
+    }
+  });
+});
+
 describe('ACP server', () => {
   let sb;
   let server;
@@ -117,7 +150,10 @@ describe('ACP server', () => {
         m.params?.update?.sessionUpdate === 'available_commands_update',
     );
     assert.ok(noteLine > responseLine, 'available_commands_update after session/new response');
-    assert.deepEqual(allParsed[noteLine].params.update.availableCommands, mergeCommands([]));
+    assert.deepEqual(
+      allParsed[noteLine].params.update.availableCommands.map((c) => c.name),
+      ['claude', 'codex', 'cursor', 'board', 'spawn', 'help', 'compact'],
+    );
     const promptIdx = server.stdoutLines.length;
     await server.rpc('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'hello' }] });
     const cmdsBeforePrompt = server.stdoutLines
@@ -215,19 +251,28 @@ describe('ACP server', () => {
   it('session/cancel stops a sleeping worker', async () => {
     const session = await server.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
     const sessionId = session.result.sessionId;
+    const callsBefore = sb.cliCalls().length;
     const promptPromise = server.rpc('session/prompt', {
       sessionId,
-      prompt: [{ type: 'text', text: '/spawn how explorer :: FAKE_SLEEP' }],
+      prompt: [{ type: 'text', text: '/spawn x3 how explorer :: FAKE_SLEEP' }],
     });
-    await new Promise((r) => setTimeout(r, 800));
+    let calls = [];
+    for (let i = 0; i < 500; i += 1) {
+      calls = updatesForSession(server.updates, sessionId).filter((u) => u.sessionUpdate === 'tool_call');
+      if (calls.length === 3 && sb.cliCalls().length >= callsBefore + 3) break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    assert.equal(calls.length, 3, 'all workers announced before cancellation');
+    assert.equal(sb.cliCalls().length, callsBefore + 3, 'all sleeping workers started');
+    server.notify('session/cancel', { sessionId });
     server.notify('session/cancel', { sessionId });
     const res = await promptPromise;
     assert.equal(res.result.stopReason, 'cancelled');
-    const listed = fs.readdirSync(path.join(sb.repo, '.zedpstack', 'agents'));
-    const stopped = listed.some((id) => {
-      const j = JSON.parse(fs.readFileSync(path.join(sb.repo, '.zedpstack', 'agents', id, 'agent.json'), 'utf8'));
-      return j.status === 'stopped';
-    });
-    assert.ok(stopped, 'at least one agent stopped');
+    for (const call of calls) {
+      const agent = readAgent(sb.repo, call.toolCallId.slice(3));
+      assert.equal(agent.status, 'stopped', `${agent.id} stopped before cancelled response`);
+      assert.equal(isProcessAlive(agent.runnerPid), false, `${agent.id} runner exited`);
+      assert.equal(isProcessAlive(agent.workerPid), false, `${agent.id} worker exited`);
+    }
   });
 });

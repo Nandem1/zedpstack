@@ -14,7 +14,7 @@ import {
   savePrefs,
   ZP_RUNTIME_ID,
 } from './options.mjs';
-import { createSessionStore, runSpawnTurn } from './server.mjs';
+import { cancelSpawnTurn, createSessionStore, runSpawnTurn } from './server.mjs';
 import { acpStreamMode } from './updates.mjs';
 
 function agentMessageChunk(text) {
@@ -52,6 +52,17 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
     return mergeOptions(zp, session.childConfigOptions ?? []);
   }
 
+  function announceCommands(session) {
+    if (!session.commandsAnnounced) return;
+    notifyZed({
+      sessionId: session.sessionId,
+      update: {
+        sessionUpdate: 'available_commands_update',
+        availableCommands: mergeCommands(session.childCommands),
+      },
+    });
+  }
+
   async function applySavedPrefsToChild(session) {
     if (!session.engine?.peer || session.engine.dead) return;
     const prefs = loadPrefs(env);
@@ -81,6 +92,7 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
   async function startSessionEngine(session, runtime) {
     session.runtime = runtime;
     await stopEngine(session);
+    session.childCommands = [];
     try {
       const engine = await spawnEngine({
         runtime,
@@ -91,6 +103,7 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
       });
       session.engine = engine;
       session.childConfigOptions = engine.newSessionResult.configOptions ?? [];
+      session.childCommands = engine.initialCommands ?? [];
       wireEnginePeer(session);
       await applySavedPrefsToChild(session);
       session.engineError = null;
@@ -99,6 +112,7 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
       session.childConfigOptions = [];
       session.engineError = e.message ?? String(e);
     }
+    announceCommands(session);
   }
 
   function wireEnginePeer(session) {
@@ -109,7 +123,14 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
       if (method !== 'session/update') return;
       const update = params.update ?? params;
       let outUpdate = update;
-      if (update.sessionUpdate === 'config_option_update') {
+      if (update.sessionUpdate === 'available_commands_update') {
+        session.childCommands = update.availableCommands ?? [];
+        if (!session.commandsAnnounced) return;
+        outUpdate = {
+          ...update,
+          availableCommands: mergeCommands(session.childCommands),
+        };
+      } else if (update.sessionUpdate === 'config_option_update') {
         const zp = runtimeOption(session.runtime);
         zp.currentValue = session.runtime;
         outUpdate = {
@@ -191,6 +212,7 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
         childConfigOptions: [],
         engineError: null,
         childCommands: [],
+        commandsAnnounced: false,
       };
       engines.set(sessionId, session);
 
@@ -208,14 +230,8 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
 
       const result = { sessionId, configOptions };
       setImmediate(() => {
-        const cmds = mergeCommands(session.childCommands);
-        notifyZed({
-          sessionId,
-          update: {
-            sessionUpdate: 'available_commands_update',
-            availableCommands: cmds,
-          },
-        });
+        session.commandsAnnounced = true;
+        announceCommands(session);
       });
       return result;
     },
@@ -342,10 +358,7 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
     const storeEntry = sessions.get(msg.params?.sessionId);
     const turn = storeEntry?.activeTurn;
     if (turn?.controller) {
-      turn.controller.abort();
-      const ids = turn.agentIds ?? [];
-      const { closeAgent } = await import('../agents/lifecycle.mjs');
-      await Promise.all(ids.map((id) => closeAgent({ repo: session.repo, id }).catch(() => {})));
+      await cancelSpawnTurn({ repo: session.repo, turn });
       return;
     }
     if (session?.engine?.peer && !session.engine.dead) {

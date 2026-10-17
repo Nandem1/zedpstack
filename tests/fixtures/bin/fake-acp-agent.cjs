@@ -8,10 +8,30 @@ let sleepPromptId = null;
 let sleepResolve = null;
 let nextClientReqId = 1000;
 
-const write = (obj) => process.stdout.write(`${JSON.stringify(obj)}\n`);
+const write = (...messages) => process.stdout.write(messages.map((obj) => `${JSON.stringify(obj)}\n`).join(''));
 const err = (code, message) => ({ code, message });
 
 const pendingClient = new Map();
+const availableCommands = process.env.FAKE_ACP_COMMANDS
+  ? JSON.parse(process.env.FAKE_ACP_COMMANDS)
+  : [
+      { name: 'help', description: 'Child help' },
+      { name: 'compact', description: 'Compact conversation' },
+    ];
+
+function commandNotification() {
+  return {
+    jsonrpc: '2.0',
+    method: 'session/update',
+    params: {
+      sessionId,
+      update: {
+        sessionUpdate: 'available_commands_update',
+        availableCommands,
+      },
+    },
+  };
+}
 
 function configOptions() {
   return [
@@ -104,18 +124,20 @@ async function handleRequest(msg) {
         },
       });
       break;
-    case 'session/new':
+    case 'session/new': {
       sessionId = `child-${Date.now()}`;
-      write({
+      const response = {
         jsonrpc: '2.0',
         id,
         result: { sessionId, configOptions: configOptions() },
-      });
+      };
+      if (process.env.FAKE_ACP_COMMANDS_TIMING === 'prompt') write(response);
+      else write(response, commandNotification());
       break;
+    }
     case 'session/set_config_option':
       if (params.configId === 'model') modelValue = params.value;
-      write({ jsonrpc: '2.0', id, result: { configOptions: configOptions() } });
-      write({
+      write(commandNotification(), { jsonrpc: '2.0', id, result: { configOptions: configOptions() } }, {
         jsonrpc: '2.0',
         method: 'session/update',
         params: {
@@ -125,6 +147,7 @@ async function handleRequest(msg) {
       });
       break;
     case 'session/prompt': {
+      if (process.env.FAKE_ACP_COMMANDS_TIMING === 'prompt') write(commandNotification());
       const text = promptText(params.prompt);
       if (text.includes('SLEEP')) {
         sleepPromptId = id;

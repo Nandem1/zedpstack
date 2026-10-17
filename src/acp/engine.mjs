@@ -180,6 +180,13 @@ export async function startEngine({
     output: child.stdin,
     label: `engine:${rt}`,
   });
+  let initialCommands = [];
+  peer.onNotification((method, params) => {
+    const update = params.update ?? params;
+    if (method === 'session/update' && update.sessionUpdate === 'available_commands_update') {
+      initialCommands = update.availableCommands ?? [];
+    }
+  });
 
   const onDead = () => {
     if (dead) return;
@@ -249,6 +256,9 @@ export async function startEngine({
       pid: child.pid,
       initializeResult,
       newSessionResult,
+      get initialCommands() {
+        return initialCommands;
+      },
       kill,
       get dead() {
         return dead;

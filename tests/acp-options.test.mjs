@@ -33,6 +33,20 @@ describe('acp options', () => {
     assert.ok(cmds.some((c) => c.name === 'spawn'));
   });
 
+  it('mergeCommands keeps hub commands first and authoritative, with unique names', () => {
+    const hubCommands = mergeCommands([]);
+    const help = { name: 'help', description: 'Child help', input: { hint: 'topic' } };
+    const compact = { name: 'compact', description: 'Compact conversation' };
+    const merged = mergeCommands([
+      help,
+      ...hubCommands.map((c) => ({ name: c.name, description: 'Child override' })),
+      { name: 'help', description: 'Duplicate help' },
+      compact,
+    ]);
+    assert.deepEqual(merged, [...hubCommands, help, compact]);
+    assert.deepEqual(merged.map((c) => c.name), ['claude', 'codex', 'cursor', 'board', 'spawn', 'help', 'compact']);
+  });
+
   it('loadPrefs and savePrefs use ZEDPSTACK_HOME', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-acp-prefs-'));
     const env = { ZEDPSTACK_HOME: home };

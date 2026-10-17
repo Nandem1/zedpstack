@@ -49,9 +49,12 @@ const HUB_COMMANDS = [
 ];
 
 export function mergeCommands(childCommands = []) {
-  const childNames = new Set((childCommands ?? []).map((c) => c.name));
-  const hubOnly = HUB_COMMANDS.filter((c) => !childNames.has(c.name));
-  return [...hubOnly, ...(childCommands ?? [])];
+  const seen = new Set();
+  return [...HUB_COMMANDS, ...(childCommands ?? [])].filter((command) => {
+    if (seen.has(command.name)) return false;
+    seen.add(command.name);
+    return true;
+  });
 }
 
 export function zedpstackHome(env = process.env) {

@@ -43,43 +43,57 @@ export function createSessionStore() {
   };
 }
 
+export async function cancelSpawnTurn({ repo, turn }) {
+  const closePromises = turn.closePromises ??= new Map();
+  turn.controller.abort();
+  await Promise.all(turn.agentIds.map((id) => {
+    if (!closePromises.has(id)) {
+      closePromises.set(id, closeAgent({ repo, id }).catch(() => {}));
+    }
+    return closePromises.get(id);
+  }));
+}
+
 export async function runSpawnTurn({ sessions, sessionId, repo, command, notify, signal, streamMode }) {
   const workers = [];
-  for (let i = 0; i < command.count; i += 1) {
-    const spawned = spawnAgent({
-      repo,
-      role: command.role,
-      prompt: command.prompt,
-      readonly: true,
-      description: command.count > 1 ? `${command.role} #${i + 1}` : command.role,
-    });
-    workers.push(spawned);
-  }
-
-  const agentIds = workers.map((w) => w.agent_id);
   const turn = sessions.get(sessionId)?.activeTurn;
-  if (turn) turn.agentIds = agentIds;
+  try {
+    for (let i = 0; i < command.count; i += 1) {
+      const spawned = spawnAgent({
+        repo,
+        role: command.role,
+        prompt: command.prompt,
+        readonly: true,
+        description: command.count > 1 ? `${command.role} #${i + 1}` : command.role,
+      });
+      workers.push(spawned);
+      if (turn) turn.agentIds.push(spawned.agent_id);
+    }
 
-  const sinks = workers.map((w) =>
-    createWorkerUpdateSink({
-      notify,
-      sessionId,
-      repo,
-      agentId: w.agent_id,
-      title: workerTitle(w),
-      streamMode,
-    }),
-  );
-  for (const s of sinks) s.emitStart();
+    const agentIds = workers.map((w) => w.agent_id);
+    const sinks = workers.map((w) =>
+      createWorkerUpdateSink({
+        notify,
+        sessionId,
+        repo,
+        agentId: w.agent_id,
+        title: workerTitle(w),
+        streamMode,
+      }),
+    );
+    for (const s of sinks) s.emitStart();
 
-  await Promise.all(
-    workers.map((w, i) =>
-      followAgent(repo, w.agent_id, (ev) => sinks[i].onFollowEvent(ev), { signal, intervalMs: 100 }),
-    ),
-  );
+    await Promise.all(
+      workers.map((w, i) =>
+        followAgent(repo, w.agent_id, (ev) => sinks[i].onFollowEvent(ev), { signal, intervalMs: 100 }),
+      ),
+    );
 
-  const outcomes = await Promise.all(sinks.map((s) => s.finish()));
-  return { agentIds, outcomes };
+    const outcomes = await Promise.all(sinks.map((s) => s.finish()));
+    return { agentIds, outcomes };
+  } finally {
+    if (signal?.aborted && turn) await cancelSpawnTurn({ repo, turn });
+  }
 }
 
 export async function handleAcpRequest(msg, ctx) {
@@ -158,9 +172,7 @@ export async function handleAcpNotification(msg, ctx) {
   if (msg.method !== 'session/cancel') return;
   const session = ctx.sessions.get(msg.params?.sessionId);
   if (!session?.activeTurn) return;
-  session.activeTurn.controller?.abort();
-  const ids = session.activeTurn.agentIds ?? [];
-  await Promise.all(ids.map((id) => closeAgent({ repo: session.repo, id }).catch(() => {})));
+  await cancelSpawnTurn({ repo: session.repo, turn: session.activeTurn });
 }
 
 export function startAcpServer({ input = process.stdin, output = process.stdout, env = process.env, sessions = createSessionStore() } = {}) {
