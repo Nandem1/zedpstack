@@ -34,6 +34,7 @@ const BOOLEAN_FLAGS = new Set([
   'dry-run',
   'strict',
   'human',
+  'json',
   'detach',
   'once',
   'persist-stream-events',
@@ -169,7 +170,7 @@ const USAGE = `zedpstack — pstack subagents on any host (Claude Code, Codex, C
 Orchestrator plumbing:
   mcp                         start the MCP server (stdio)
   install [--host h,..] [--apply]   register MCP + skill (hosts: ${HOSTS.join(', ')})
-  doctor [--human]            check CLIs, pstack, worker sheet, host registration
+  doctor [--human|--json]     check CLIs, ACP engines, pstack, worker sheet, host registration
   session end|allow-edits|block-edits   orchestrator edit-guard session marker
   models                      worker sheet: role -> runtime/model
   skill [name] [--file f]     read a pstack skill file

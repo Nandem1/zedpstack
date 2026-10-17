@@ -10,6 +10,7 @@ import { resolvePstackInstall } from './pstack.mjs';
 import { orchestratorModelSheetPath } from './setupConfig.mjs';
 import { readProbeCache } from './setupWizard.mjs';
 import { describeWorkerModels, loadWorkerModels } from './workerModels.mjs';
+import { inspectEngines } from './acp/diagnostics.mjs';
 
 function probeRuntimes() {
   const out = {};
@@ -74,11 +75,16 @@ export function buildDoctorReport({ home = os.homedir() } = {}) {
   }));
 
   const hostSheet = orchestratorModelSheetPath();
+  const acp = inspectEngines();
+  for (const [runtime, engine] of Object.entries(acp)) {
+    if (!engine.available) problems.push(`ACP ${runtime}: no instalado (${engine.status}). ${engine.authPolicy.hint}`);
+  }
   return {
     version: ZEDPSTACK_VERSION,
     orchestratorHost: detectOrchestratorHost(),
     pstack: pstack ? { root: pstack.root, version: pstack.version } : null,
     runtimes,
+    acp,
     workerSheet,
     hostSheet: { path: hostSheet, exists: fs.existsSync(hostSheet), note: 'read by the orchestrator host only; never used to spawn workers' },
     hosts,
@@ -93,6 +99,14 @@ export function formatDoctorReport(r) {
   lines.push('Worker CLIs:');
   for (const [runtime, { bin, version }] of Object.entries(r.runtimes)) {
     lines.push(`  ${runtime.padEnd(7)} ${bin.padEnd(7)} ${version ?? 'missing'}`);
+  }
+  lines.push('', 'ACP engines (local check, no network):');
+  for (const [runtime, engine] of Object.entries(r.acp)) {
+    lines.push(
+      `  ${runtime}: ${engine.available ? 'installed' : 'MISSING (no instalado)'} [${engine.source}] ${engine.command.map((arg) => JSON.stringify(arg)).join(' ')}`,
+      `    version: ${engine.version ?? engine.cache?.version ?? 'unknown'}; executable: ${engine.executable ?? 'missing'}; npx cache: ${engine.npxPackage ? engine.cache?.path ?? 'missing' : 'n/a'}`,
+      `    auth: ${engine.authPolicy.methods.map((method) => `${method.id} (${method.credentials})`).join(' -> ')}; ${engine.authPolicy.hint}`,
+    );
   }
   lines.push('', `Worker sheet: ${r.workerSheet.sheetPath} (${r.workerSheet.sheetExists ? 'found' : 'missing'})`);
   for (const [label, { source, slots }] of Object.entries(r.workerSheet.roles)) {
