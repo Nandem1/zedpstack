@@ -1,0 +1,40 @@
+## Recomendación principal
+
+**Un único milestone, “v0.5, uso diario read-only confiable desde Cursor”.** Dedicaría las 2–4 semanas a cerrar el recorrido `/setup-zedpstack` → `/zedpstack` → progreso visible → resultado → judgment, con los cinco playbooks existentes.
+
+El operador gana investigaciones y revisiones repetibles sin tener que reparar configuración o completar comandos manualmente. Experience First determina ese alcance; Prove It Works exige demostrarlo en MH-Next.
+
+Discrepo con un **NO-GO por faltar paralelismo**. Un flujo secuencial puede justificar uso diario. Frente al pragmatismo GO-with-fixes atribuido a Claude, bloquearía esa declaración mientras setup pueda ejecutar silenciosamente otro modelo. La herencia actualmente no genera reemplazo y el [merge conserva bindings anteriores](/Users/nndsk/Projects/zedpstack/src/setupConfig.mjs:60).
+
+## Top 5 backlog
+
+1. **Reconcile de `inherit-parent`, `auto` y borrados.** Prioridad máxima porque cambiar la hoja debe eliminar overrides obsoletos y producir una configuración efectiva verificable.
+2. **Codex por stdin.** Elimina el riesgo de `E2BIG` en contextos grandes, ya que hoy [el prompt completo viaja en argv](/Users/nndsk/Projects/zedpstack/src/runtimes/codex.mjs:35).
+3. **Effort efectivo en CLI.** Aplicar los valores soportados y rechazar explícitamente los demás hace que setup represente lo que realmente ejecuta.
+4. **Fan-out acotado para los paneles actuales.** Reduce espera entre reviewers independientes, después de resolver configuración, transporte y actualización del estado compartido.
+5. **Un primer `bug-fix` de escritura acotado.** Aporta ejecución sobre código con un defecto reproducible y un resultado verificable antes de abordar `feature` general.
+
+Los tres primeros pertenecen al milestone; los dos últimos quedan después de su aceptación.
+
+## Evitar ahora
+
+- **Arena/swarm y más catálogo.** Amplían coordinación y coste antes de demostrar utilidad diaria del recorrido existente.
+- **Write playbooks dentro de v0.5.** Añaden aislamiento, permisos y validación de cambios, y desbordan este objetivo.
+- **Un scheduler genérico.** Cuando llegue fan-out, empezaría con concurrencia limitada y un único responsable del manifest; hoy [cada paso actualiza el manifest completo](/Users/nndsk/Projects/zedpstack/src/run.mjs:281), por lo que agregar `Promise.all` puede perder actualizaciones.
+- **Una UI nueva.** Primero comprobaría la experiencia desde Cursor, incluida la transición a judgment y la salida de `watch`.
+
+## Checklist uso diario
+
+Son **umbrales propuestos**, todavía no comprobados en MH-Next.
+
+- [ ] `/setup-zedpstack` supera cambios A→B→herencia, `auto`, borrado y reaplicación; cero modelos antiguos retenidos silenciosamente y effort aplicado o rechazado antes del spawn.
+- [ ] Diez ejecuciones reales desde Cursor durante cinco días, dos por playbook y cubriendo ambos runtimes; diez cierres hasta judgment y al menos ocho resultados útiles según el operador.
+- [ ] Un contexto de 256 KiB llega íntegro a ambos adaptadores, sin `E2BIG`; ningún resultado vacío o inválido termina como completado.
+- [ ] Cada ejecución muestra paso, runtime y modelo; los eventos recibidos aparecen en ≤2 segundos y distingue claramente `awaiting_judgment` del cierre final.
+- [ ] Cancelación, timeout y resume superan un caso cada uno; cero workers vivos diez segundos después de detenerlos, reutilización correcta de pasos válidos y cero modificaciones en archivos fuente.
+
+## Si solo una semana
+
+**Reconcile de configuración + stdin de Codex + dos recorridos completos en MH-Next**, uno por runtime, desde los comandos de Cursor hasta judgment con streaming visible. Para effort aún no soportado, error explícito.
+
+Eso justificaría un piloto controlado. La declaración de uso diario esperaría al checklist.

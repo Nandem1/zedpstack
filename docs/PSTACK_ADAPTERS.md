@@ -10,6 +10,6 @@
 
 No adaptados (siguen en pstack nativo / futuro): swarm, arena fan-out paralelo, feature, bug-fix (escritura), babysit, shipping.
 
-Paralelismo pstack se modela como **pasos secuenciales** con roles distintos por panel (`interrogate-reviewer-a/b/c`, `architect-runner-a/b`, reflect por lente). Configúralos con `/setup-zedpstack` → `dispatch setup apply`.
+Pasos sin dependencias mutuas (p. ej. `review-a/b/c`) se ejecutan en **ola paralela** (`step.wave.started`). Roles por panel: `interrogate-reviewer-a/b/c`, `architect-runner-a/b`, reflect por lente. Config: `/setup-zedpstack` → `dispatch setup apply` (reconcile de roles managed).
 
 Observabilidad: `--tee-events`, `dispatch watch`, [STREAMING.md](./STREAMING.md).

@@ -20,6 +20,7 @@ import {
   updateManifestStep,
   writeManifestAtomic,
 } from './manifest.mjs';
+import { withManifestLock } from './manifestLock.mjs';
 import {
   attachPstackUpstreamMeta,
   loadPlaybook,
@@ -112,11 +113,48 @@ function preparePromptText({ stepDef, playbook, runRoot, repoRoot, goal, context
   });
 }
 
-function manifestWasCancelled(runRoot) {
-  if (!fs.existsSync(path.join(runRoot, 'manifest.json'))) {
-    return false;
+async function updateManifestLocked(runId, runRoot, updater) {
+  return withManifestLock(runId, () => {
+    const current = readManifest(runRoot);
+    const next = updater(current);
+    writeManifestAtomic(runRoot, next);
+    return next;
+  });
+}
+
+/** Pasos pending cuyos inputFrom están todos completed (orden del playbook). */
+export function computeReadyStepIds(manifest, playbookDef) {
+  const completedIds = new Set(
+    manifest.steps
+      .filter((s) => s.status === 'completed')
+      .map((s) => s.stepId),
+  );
+  const ready = [];
+  for (const stepDef of playbookDef.steps) {
+    const rec = manifest.steps.find((s) => s.stepId === stepDef.id);
+    if (!rec || rec.status !== 'pending') continue;
+    const deps = stepDef.inputFrom ?? [];
+    if (deps.every((id) => completedIds.has(id))) {
+      ready.push(stepDef.id);
+    }
   }
-  return readManifest(runRoot).status === 'cancelled';
+  return ready;
+}
+
+function resetFailedStepsToPending(manifest, playbookDef) {
+  let next = manifest;
+  let changed = false;
+  for (const step of playbookDef.steps) {
+    const rec = next.steps.find((s) => s.stepId === step.id);
+    if (rec?.status === 'failed') {
+      next = updateManifestStep(next, step.id, { status: 'pending' });
+      if (next.status !== 'running') {
+        next = { ...next, status: 'running' };
+      }
+      changed = true;
+    }
+  }
+  return { manifest: next, changed };
 }
 
 function loadRunContext(runRoot) {
@@ -128,7 +166,6 @@ function loadRunContext(runRoot) {
 }
 
 async function executeStep({
-  manifest,
   playbook,
   playbookDef,
   config,
@@ -140,8 +177,9 @@ async function executeStep({
   runId,
 }) {
   const context = loadRunContext(runRoot);
-  if (manifestWasCancelled(runRoot)) {
-    return readManifest(runRoot);
+  let manifest = await withManifestLock(runId, () => readManifest(runRoot));
+  if (manifest.status === 'cancelled') {
+    return manifest;
   }
 
   const stepRecord = manifest.steps.find((s) => s.stepId === stepId);
@@ -187,12 +225,12 @@ async function executeStep({
 
   if (reuse.reuse) {
     eventSink.emit('step.completed', { runId, stepId, resumed: true, reuse: true });
-    const updated = updateManifestStep(manifest, stepId, {
-      stepIdentityHash,
-      lastErrors: null,
-    });
-    writeManifestAtomic(runRoot, updated);
-    return updated;
+    return updateManifestLocked(runId, runRoot, (current) =>
+      updateManifestStep(current, stepId, {
+        stepIdentityHash,
+        lastErrors: null,
+      }),
+    );
   }
 
   if (
@@ -200,11 +238,12 @@ async function executeStep({
     reuse.reason === 'result_missing' ||
     reuse.reason === 'identity_mismatch'
   ) {
-    manifest = updateManifestStep(manifest, stepId, {
-      status: 'pending',
-      validResult: false,
-    });
-    writeManifestAtomic(runRoot, manifest);
+    manifest = await updateManifestLocked(runId, runRoot, (current) =>
+      updateManifestStep(current, stepId, {
+        status: 'pending',
+        validResult: false,
+      }),
+    );
   }
 
   eventSink.emit('step.started', { runId, stepId, stepIdentityHash });
@@ -226,24 +265,27 @@ async function executeStep({
     stepIdentityHash,
   };
 
-  let manifestPatched = updateManifestStep(manifest, stepId, {
-    status: 'running',
-    stepIdentityHash,
-    attempts: [...stepRecord.attempts, attempt],
+  await updateManifestLocked(runId, runRoot, (current) => {
+    const rec = current.steps.find((s) => s.stepId === stepId);
+    return updateManifestStep(current, stepId, {
+      status: 'running',
+      stepIdentityHash,
+      attempts: [...rec.attempts, attempt],
+    });
   });
-  writeManifestAtomic(runRoot, manifestPatched);
 
   const patchAttemptPid = (pid) => {
-    const stepNow = manifestPatched.steps.find((s) => s.stepId === stepId);
-    const attemptsWithPid = [...stepNow.attempts];
-    const lastIdx = attemptsWithPid.length - 1;
-    if (lastIdx >= 0) {
-      attemptsWithPid[lastIdx] = { ...attemptsWithPid[lastIdx], pid };
-    }
-    manifestPatched = updateManifestStep(manifestPatched, stepId, {
-      attempts: attemptsWithPid,
+    void updateManifestLocked(runId, runRoot, (current) => {
+      const stepNow = current.steps.find((s) => s.stepId === stepId);
+      const attemptsWithPid = [...stepNow.attempts];
+      const lastIdx = attemptsWithPid.length - 1;
+      if (lastIdx >= 0) {
+        attemptsWithPid[lastIdx] = { ...attemptsWithPid[lastIdx], pid };
+      }
+      return updateManifestStep(current, stepId, {
+        attempts: attemptsWithPid,
+      });
     });
-    writeManifestAtomic(runRoot, manifestPatched);
   };
 
   const outcome = await runWorkerForBinding({
@@ -259,8 +301,9 @@ async function executeStep({
     onWorkerSpawned: ({ pid }) => patchAttemptPid(pid),
   });
 
-  if (manifestWasCancelled(runRoot)) {
-    return readManifest(runRoot);
+  manifest = await withManifestLock(runId, () => readManifest(runRoot));
+  if (manifest.status === 'cancelled') {
+    return manifest;
   }
 
   const validation = validateWorkerResult({
@@ -278,37 +321,38 @@ async function executeStep({
   attempt.validation = validation;
   attempt.cliVersion = outcome.cliVersion;
 
-  const stepWithFinishedAttempt = manifestPatched.steps.find((s) => s.stepId === stepId);
-  const attempts = [...stepWithFinishedAttempt.attempts];
-  attempts[attempts.length - 1] = {
-    ...attempts[attempts.length - 1],
-    ...attempt,
-  };
+  return updateManifestLocked(runId, runRoot, (current) => {
+    const stepWithFinishedAttempt = current.steps.find((s) => s.stepId === stepId);
+    const attempts = [...stepWithFinishedAttempt.attempts];
+    attempts[attempts.length - 1] = {
+      ...attempts[attempts.length - 1],
+      ...attempt,
+    };
 
-  if (validation.valid) {
-    eventSink.emit('step.validated', { runId, stepId, workerId, stages: validation.stages });
-    manifestPatched = updateManifestStep(manifestPatched, stepId, {
-      status: 'completed',
-      stepIdentityHash,
-      validResult: true,
-      resultRef: path.relative(repoRoot, outcome.resultPath),
-      attempts,
-      lastErrors: null,
-    });
-    eventSink.emit('step.completed', { runId, stepId, workerId });
-  } else {
-    manifestPatched = updateManifestStep(manifestPatched, stepId, {
+    if (validation.valid) {
+      eventSink.emit('step.validated', { runId, stepId, workerId, stages: validation.stages });
+      const next = updateManifestStep(current, stepId, {
+        status: 'completed',
+        stepIdentityHash,
+        validResult: true,
+        resultRef: path.relative(repoRoot, outcome.resultPath),
+        attempts,
+        lastErrors: null,
+      });
+      eventSink.emit('step.completed', { runId, stepId, workerId });
+      return next;
+    }
+
+    eventSink.emit('run.failed', { runId, stepId, errors: validation.errors });
+    const failed = updateManifestStep(current, stepId, {
       status: 'failed',
       validResult: false,
       lastErrors: validation.errors,
       attempts,
     });
-    eventSink.emit('run.failed', { runId, stepId, errors: validation.errors });
-    manifestPatched.status = 'failed';
-  }
-
-  writeManifestAtomic(runRoot, manifestPatched);
-  return manifestPatched;
+    failed.status = 'failed';
+    return failed;
+  });
 }
 
 function writeJudgmentInstructionsIfNeeded(runRoot, playbook, playbookDef, manifest, runId) {
@@ -389,32 +433,41 @@ export async function runPlaybook({
     eventSink.emit('run.started', { runId, playbook: playbookId, goal });
   }
 
-  // Siempre pasar por executeStep: revalida identidad, artefactos y resultado
-  // (evita el bypass de allStepsDone en resume).
-  for (const step of playbookDef.steps) {
-    manifest = readManifest(runRoot);
+  while (true) {
+    manifest = await withManifestLock(runId, () => readManifest(runRoot));
     if (manifest.status === 'failed' || manifest.status === 'cancelled') {
       break;
     }
-    const rec = manifest.steps.find((s) => s.stepId === step.id);
-    if (rec.status === 'failed') {
-      manifest = updateManifestStep(manifest, step.id, { status: 'pending' });
-      manifest.status = 'running';
-      writeManifestAtomic(runRoot, manifest);
+
+    const { manifest: afterReset, changed } = resetFailedStepsToPending(manifest, playbookDef);
+    if (changed) {
+      manifest = await updateManifestLocked(runId, runRoot, () => afterReset);
     }
 
-    manifest = await executeStep({
-      manifest,
-      playbook,
-      playbookDef,
-      config,
-      runRoot,
-      repoRoot: path.resolve(repoRoot),
-      goal: manifest.goal ?? goal,
-      stepId: step.id,
-      eventSink,
-      runId,
-    });
+    const readyIds = computeReadyStepIds(manifest, playbookDef);
+    if (readyIds.length === 0) {
+      break;
+    }
+
+    eventSink.emit('step.wave.started', { runId, stepIds: readyIds });
+
+    await Promise.all(
+      readyIds.map((stepId) =>
+        executeStep({
+          playbook,
+          playbookDef,
+          config,
+          runRoot,
+          repoRoot: path.resolve(repoRoot),
+          goal: manifest.goal ?? goal,
+          stepId,
+          eventSink,
+          runId,
+        }),
+      ),
+    );
+
+    manifest = await withManifestLock(runId, () => readManifest(runRoot));
     if (manifest.status === 'failed') {
       return { runId, runRoot, manifest, eventSink };
     }

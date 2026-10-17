@@ -1,0 +1,3725 @@
+Reading additional input from stdin...
+OpenAI Codex v0.163.0
+--------
+workdir: /Users/nndsk/Projects/zedpstack
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 01a147fa-857b-7072-b9b2-db04da77fa62
+--------
+user
+# Discusión: siguiente paso zedpstack (post v0.4.1)
+
+Contexto:
+- v0.4.1 shipped: setup-zedpstack, watch, 5 playbooks read-only, validación reviewers, aliases transitivos.
+- Objetivo usuario: **pstack usable** vía `/zedpstack` + `/setup-zedpstack` en Cursor; streaming visible.
+- Backlog conocido: fan-out paralelo, Codex stdin/E2BIG, effort en CLI, inherit-parent reconcile, write playbooks (feature/bug-fix), arena/swarm.
+
+Pregunta para **debate** (no code review línea a línea):
+
+1. ¿Cuál es el **único siguiente milestone** (2–4 semanas de trabajo part-time) que maximiza valor para el operador?
+2. Ordena top 5 ítems del backlog con **una frase de por qué** cada uno.
+3. ¿Qué NO hacer todavía y por qué?
+4. Criterio de “listo para uso diario” en MH-Next: checklist 5 bullets medible.
+
+Responde en español. Sé explícito si discrepas con el otro revisor (asume que Codex prioriza rigor/NO-GO y Claude prioriza pragmatismo GO-with-fixes).
+
+Formato:
+## Recomendación principal
+## Top 5 backlog
+## Evitar ahora
+## Checklist uso diario
+## Si solo una semana
+
+No modificar archivos.
+hook: SessionStart
+hook: SessionStart
+hook: SessionStart Completed
+hook: SessionStart Completed
+hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+codex
+Voy a revisar el estado y la documentación de v0.4.1 para fundamentar la recomendación. Usaré `pstack:poteto-mode` para el debate de prioridades y `pstack:unslop` para la redacción, sin modificar archivos.
+hook: PreToolUse
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc "pwd && rg --files -g 'AGENTS.md' -g 'README*' -g '*ROADMAP*' -g '*CHANGELOG*' -g '*SPEC*' -g 'package.json' -g 'Cargo.toml' -g 'pyproject.toml' -g '*.md' | head -100" in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+/Users/nndsk/Projects/zedpstack
+SKILL.md
+package.json
+README.md
+docs/AUDIT_REQUEST_1_2.md
+docs/PSTACK_ADAPTER.md
+docs/AUDIT_REQUEST_1_2_CLOSE.md
+docs/STREAMING.md
+docs/AUDIT_REQUEST.md
+docs/PSTACK_ADAPTERS.md
+docs/AUDIT_REQUEST_1_1B.md
+docs/SESSION1_1_EVIDENCE.md
+docs/DISCUSSION_NEXT_STEP.md
+docs/SESSION1_EVIDENCE.md
+docs/AUDIT_REQUEST_1_1.md
+docs/SESSION1_1B_EVIDENCE.md
+docs/SESSION1_2_EVIDENCE.md
+docs/UPSTREAM.md
+docs/AUDIT_REQUEST_PSTACK_ADAPTER.md
+docs/REVIEW_REQUEST_v0.4.md
+playbooks/architecture-review/prompts/judgment.md
+playbooks/architecture-review/prompts/synthesize.md
+playbooks/architecture-review/prompts/explorer.md
+playbooks/reflect-session/prompts/judgment.md
+playbooks/how-investigation/prompts/judgment.md
+playbooks/why-rationale/prompts/judgment.md
+playbooks/interrogate-review/prompts/judgment.md
+playbooks/architect-sketch/prompts/judgment.md
+setup-zedpstack/SKILL.md
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc 'cat /Users/nndsk/.codex/plugins/cache/pstack-claude/pstack/0.9.67/skills/poteto-mode/SKILL.md' in /Users/nndsk/Projects/zedpstack
+exec
+/bin/zsh -lc 'cat /Users/nndsk/.codex/plugins/cache/pstack-claude/pstack/0.9.67/skills/unslop/SKILL.md' in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+---
+name: unslop
+description: Cut AI tells from any writing. Must always apply.
+---
+
+# Unslop
+
+Edit text to remove AI patterns.
+
+## Process
+
+1. Scan for the patterns below.
+2. Rewrite. Preserve meaning, match intended tone.
+
+## Patterns to detect and fix
+
+Rule numbers are stable ids that other skills cite. A removed rule leaves a gap.
+
+### Content
+
+3. **Superficial -ing phrases.** "highlighting...", "ensuring...", "reflecting...", "showcasing...", "fostering...". Delete or expand with real sources.
+5. **Vague attributions.** "Experts believe", "Industry reports suggest", "Some critics argue". Name the source or delete.
+
+### Language
+
+7. **AI vocabulary.** Additionally, crucial, delve, enduring, enhance, fostering, garner, interplay, intricate, landscape (abstract), pivotal, showcase, tapestry (abstract), testament, underscore, vibrant. Replace with plain words.
+8. **Fancy ways to say "is".** "serves as", "stands as", "boasts", "features". Just say "is" or "has".
+9. **"Not just X, but Y."** State the point directly instead.
+10. **Rule of three.** Forcing ideas into groups of three. Use the natural number.
+11. **Synonym cycling.** Protagonist, main character, central figure, hero all in one paragraph. Pick one, repeat it.
+12. **False ranges.** "from X to Y" where X and Y aren't on a meaningful scale. List topics directly.
+
+### Style
+
+13. **Em dash overuse.** Avoid em dashes entirely. Use periods or commas only (no parentheses, no en dashes, no hyphen-as-dash substitutes). If a thought needs separation, end the sentence or use a comma.
+14. **Colon overuse.** Colons are fine before a list or example. Not as mid-sentence connectors. "If you're coming from traditional automation: instead of registering event handlers, you describe conditions" adds nothing with the colon. Rewrite to let the point stand on its own without comparison framing. "Describing when the scheduler should fire works best as plain English." Same meaning, no crutch punctuation.
+15. **Boldface overuse.** Don't bold every proper noun or acronym.
+16. **Inline-header lists.** The tell is a bold label and colon that restates the line: "**Performance:** Performance improved...". Convert those to prose. A bold lead-in that ends in a period, names the item, and is followed by genuinely new detail ("**Schema in TypeScript.** Tables live in one file.") is fine, not a tell.
+17. **Title case headings.** Use sentence case.
+18. **Decorative emojis.** Remove from headings and bullets.
+19. **Curly quotes.** Replace with straight quotes.
+
+### Communication artifacts
+
+20. **Chatbot phrases.** "I hope this helps!", "Let me know if...", "Of course!", "Certainly!", "Found the smoking gun!" Remove.
+22. **Sycophantic tone.** "Great question! You're absolutely right!" Respond directly.
+
+### Filler
+
+23. **Filler phrases.** "In order to" becomes "To". "Due to the fact that" becomes "Because". "It is important to note that" gets deleted.
+24. **Excessive hedging.** "could potentially possibly be argued that it might" becomes "may".
+25. **Generic conclusions.** "The future looks bright." State specific plans or facts.
+
+### Jargon
+
+26. **Abstract metaphor nouns.** Substrate, wedge, vector, locus, vantage, nexus, primitive (as noun), harness (as metaphor), surface (as in "API surface"), bedrock, scaffolding (as metaphor), modality, paradigm, gold-plating, ratchet (as metaphor), evacuate (for moving code), endgame, north star, flywheel. These read as technical but usually have a plainer concrete word. "Substrate" becomes "base". "Wedge in" becomes "add". "Vector" becomes "way" or "method". "Gold-plating" becomes "more than the job needs". "Ratchet" becomes the mechanism's real name or "a limit that only tightens". "Evacuate" becomes "move out". "Endgame" becomes "the last phase". Pick the concrete word.
+
+### Plain speech
+
+27. **Say what it does, not how it feels.** "the database stays close at hand", "SQL you can read", "types that follow your schema" name a feeling. The fix names the mechanism or a number: "`.toSQL()` returns the exact string sent to the database", "a column rename fails the build". Ask what the sentence tells the reader to do or know, then write that. If you can't restate it as a concrete instruction, fact, or number, cut it. One more check: if the sentence could appear unchanged in another project's docs, it says nothing about this one. Cut it.
+28. **Shorten or split dense sentences.** If the reader has to backtrack to parse a sentence, break it in two or drop clauses. One idea per sentence.
+29. **Active voice.** Prefer it. Catch "is/are/was/were + past participle" and name the actor: "queries are validated" becomes "the compiler validates queries", "the file is parsed by the loader" becomes "the loader parses the file". Passive is fine only when the actor is unknown or genuinely doesn't matter.
+30. **Cut adverbs, or use a stronger verb.** "runs quickly" becomes "is fast" or the number. "significantly improves" becomes the measured delta. An adverb propping up a weak verb means the verb is wrong.
+31. **Prefer the plain word.** "utilize" becomes "use", "leverage" becomes "use", "facilitate" becomes "help", "numerous" becomes "many", "in the event that" becomes "if". The fancier synonym is rarely clearer.
+32. **Mannered prose.** Metaphor or flourish where a literal phrase exists: aphorisms ("wire it or delete it"), rhetorical fragments for effect, personified code ("the plan holds it"), figurative verbs ("rides along", "stands on"), stock framing phrases. "A dial worth turning" becomes "a parameter worth varying". Say what you mean. Rule 26 covers the metaphor nouns.
+33. **Over-compression.** Dropped articles, verbless fragments, symbol-speak, and abbreviations that make the reader decode instead of read. "Parser rejects bad date → exit 2, no write" becomes "The parser rejects a bad date, exits with code 2, and writes nothing." Write whole sentences with their articles and verbs, and spell out arrows and abbreviations.
+
+ succeeded in 0ms:
+---
+name: poteto-mode
+description: poteto's agent style for concise, detailed responses, deliberate subagents, unslopped prose, simple code, and verified work. Use for poteto, /poteto-mode, or requests to work in this style.
+---
+
+# Poteto mode
+
+## Platform Adaptation
+
+These skills use Claude Code tool names (the `Skill` tool, the `Agent` tool, `AskUserQuestion`) and the Claude model names the `Agent` tool accepts, as each Models section lists them. On Claude Code they work as written. On Codex, read [`references/codex-tools.md`](references/codex-tools.md) for the Codex equivalent of a Claude tool, model, or skill named by these workflows. On Pi, read [`references/pi-tools.md`](references/pi-tools.md) instead. Other runtimes can discover the same Agent Skills tree, but they must use their own tool, model, and configuration equivalents. Neither mapping is a cross-runtime map.
+
+Use the session's task-tracking tools for the todolist. On Claude Code these are `TaskCreate` and `TaskUpdate`, or `TodoWrite` when configured. Availability depends on the model; `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` enables them through the environment or a project's `.claude/settings.local.json` `env` block. See the [task-tool documentation](https://code.claude.com/docs/en/tools-reference#task-tool-availability). If no task-tracking tool is available, keep an uncommitted `todo.md` Markdown checklist in the work dir, next to the decision trail, with the playbook steps verbatim and each `skip: <reason>` line.
+
+## Non-negotiables
+
+The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.
+
+Remaining triggers:
+
+- Nontrivial change, architecture decision, or "are we sure?" → the **how** skill.
+- About to `AskUserQuestion` on a "which approach", "how should I", or "what should this do" fork → classify it before you ask. If the answer is a fact you could observe by running something (behavior, timing, layout, output, perf, even whether an eval separates), it is not the human's to answer. Sketch it via the Prototype playbook (`playbooks/prototype.md`) and let the result decide. If the task is a read-only Investigation whose deliverable is a cited answer, stay in it and answer from the evidence rather than building a sketch. Reserve the question for a genuine product or preference call no experiment can settle. Under a full-autonomy grant, decide a call that the grant covers, act on it, and report it, with no reply word and no offer. Under the grant, apply a default for a call that only the operator can make. Report the default with a full explanation, and say in plain words what the operator could tell you to do instead. The operator answers in their own words. Never give a shorthand token to type back. Gates that the operator named and the Always-pause list in Autonomy still need the operator.
+- Any code → name the data shape first, and choose its organizing structure per **principle-model-the-domain**.
+- Code crossing a function boundary → the **architect** skill, parallel design exploration before implementing.
+- Parallel fan-out → the **swarm** skill for coverage matrices, races, gauntlets, and exploration partitions. Use **arena** for design or code bakeoffs with base selection and grafting.
+- Contested design → the **interrogate** skill (multi-model adversarial) before shipping.
+- Nontrivial multi-step → write the throughput checkpoint (Feature step 3).
+- Any prose surface → the **unslop** skill. Your reply is a prose surface. Write it per **Writing the reply**. Agent-facing prose also follows the **plugin-dev:skill-development** skill (Claude Code's authoring guidance for SKILL.md files).
+- Docs, RFCs, readmes, PR descriptions, commit messages → the **technical-writing** skill (`/technical-writing`) for structure and sentence discipline, on top of **unslop**.
+- Before commit → the **deslop** skill (`/deslop`).
+- Before review → the **no-comments** skill (`/no-comments`).
+- Running a benchmark, measuring perf yourself, or reporting a speedup or regression you measured → the **benchmark-checklist** skill before you report or act on the number.
+- Shipping UI / IDE / CLI → the driver skill. `run` ships with Claude Code and the model can invoke it for CLIs, TUIs, servers, and browser or Electron apps. The bundled `verify` runs only when the user types `/verify`, so for UIs use the project `verify` skill at `.claude/skills/verify/` (generate it with `/create-verification-skill`) and fall back to `run` when the repo has none. For bug fixes, reproduce first on the same surface yourself. Hand to the user only under the narrow Bug fix step 1 exception.
+- Any PR-status request → the **Babysit** playbook (`playbooks/babysit.md`), not the bundled **babysit** skill, whose description matches the same words. That includes "babysit this", "get it green", "address the review-bot comments", and the commonest phrasing, "check on PR X" / "anything outstanding on X". Never triggered by merely opening a PR. Declare its mode before polling. The playbook's step 1 owns the request-to-mode mapping. Reaching for `drive` inside a phase agent stops that agent finishing its turn.
+- Asked to land or ship a green stack → the **Shipping** playbook (`playbooks/shipping.md`). Green is not safe. Nothing gets armed before an independent per-PR verdict, and only the contiguous verified run from the root lands.
+- An automated PR-review bot or the agentic security review commented → skeptical posture. They catch real bugs and also file non-issues and nitpicks, so assess each on its merits and dismiss noise with a concrete reason instead of churning code. Triage fix / dismiss / ask per `references/bugbot-triage.md`.
+- Deploying to a managed platform (Railway, Fly, Vercel, Heroku, and the like) → load that platform's skill, project-local or installed, before running its CLI, the same way Shipping step 1 resolves the forge before the first PR operation.
+- A defect found mid-task → severity decides its artifact, not where it turned up. A correctness or data gap gets a tracked issue even when it surfaces while writing a closure doc; a cosmetic margin can stay in the doc.
+- Broken skill mid-task → fix it in its own PR. Don't block. Don't silently work around it.
+- Long, autonomous, or multi-phase work, or any task the user steps away from to review later ("going to bed", "trust it when i'm back", "/loop until X") → a decision trail via the **show-me-your-work** skill. Commit it when stakes need an auditable record. Keep it local otherwise.
+
+## Principles
+
+Read the leaf skill in full for any principle you apply. Each entry names when it applies.
+
+**Core**
+
+- **Laziness Protocol** (**principle-laziness-protocol**). Refactoring, sizing a diff, or tempted to add abstractions, layers, or signal threading. Bias to deletion and the smallest change that solves the problem.
+- **Foundational Thinking** (**principle-foundational-thinking**). Before writing logic: core types and data structures, scaffold-vs-feature sequencing, what concurrent actors share.
+- **Redesign from First Principles** (**principle-redesign-from-first-principles**). Integrating a new requirement into an existing design. Redesign as if it had been foundational from day one.
+- **Attack the Premise** (**principle-attack-the-premise**). Repeated fixes share an assumption and fail. State that assumption and choose an observation that can challenge it before another fix depends on it. Count work per actor when the hypothesis concerns uneven assignment.
+- **Subtract Before You Add** (**principle-subtract-before-you-add**). Sequencing an addition, refactor, or rewrite. Remove dead weight first, then build on the simpler base.
+- **Minimize Reader Load** (**principle-minimize-reader-load**). Reviewing or shaping code that's hard to trace. Count layers and hidden state, collapse one-caller wrappers, shrink mutable scope.
+- **Outcome-Oriented Execution** (**principle-outcome-oriented-execution**). Planned rewrites and migrations with explicit phase boundaries. Converge on the target architecture, don't preserve throwaway compatibility states.
+- **Experience First** (**principle-experience-first**). Product, UX, or feature-scope tradeoffs. Choose user delight over implementation convenience.
+- **Exhaust the Design Space** (**principle-exhaust-the-design-space**). A novel interaction or architectural decision with no precedent. Build 2-3 competing prototypes and compare before committing.
+- **Build the Lever** (**principle-build-the-lever**). Any non-trivial work. Build the tool that does or proves it (codemod, script, generator), not by hand. The tool is the artifact a reviewer reruns.
+
+**Architecture**
+
+- **Model the Domain** (**principle-model-the-domain**). Writing stateful logic, or code that branches a lot or repeats a shape assumption across files. Encode the domain in a structure (state machine, typed model, table or registry, reducer, boundary, the right collection) instead of scattered conditionals.
+- **Boundary Discipline** (**principle-boundary-discipline**). Wiring validation, error handling, or framework adapters. Guards at system boundaries, trust internal types, keep business logic pure.
+- **Type System Discipline** (**principle-type-system-discipline**). Designing types or a signature in any typed language. Make illegal states unrepresentable, brand primitives, parse external data at boundaries.
+- **Make Operations Idempotent** (**principle-make-operations-idempotent**). Designing commands, lifecycle steps, or loops that run amid crashes and retries. Converge to the same end state.
+- **Migrate Callers Then Delete Legacy APIs** (**principle-migrate-callers-then-delete-legacy-apis**). Introducing a new internal API while old callers exist. Migrate and delete in one wave.
+- **Separate Before Serializing Shared State** (**principle-separate-before-serializing-shared-state**). Concurrent actors might write the same file, branch, key, or object. Eliminate the sharing first.
+
+**Verification**
+
+- **Prove It Works** (**principle-prove-it-works**). After a task, before declaring done. Verify against the real artifact, not a proxy or "it compiles".
+- **Fix Root Causes** (**principle-fix-root-causes**). Debugging. Trace each symptom to its root cause, reproduce first, ask why until you reach it.
+- **Sequence Work into Verifiable Units** (**principle-sequence-verifiable-units**). Multi-step work (sweeps, migrations, runs of similar edits) and how you stack commits and PRs. Break work into small units that each end in a check, verify each before the next, and order delivery so the sequence proves itself.
+- **Test Behavior, Not Implementation** (**principle-test-behavior-not-implementation**). Writing, changing, or keeping a test. Identify a relevant defect and check that the complete test arrangement detects it. Assert the required result or effect, including absence and fixed values when the contract requires them.
+- **Explain the Number** (**principle-explain-the-number**). Before you trust, report, or act on a number you measured (a speedup, a regression, a throughput, a latency, or an eval result). Find what limits it, and rule out that it measured something other than the work you think.
+
+**Delegation**
+
+- **Guard the Context Window** (**principle-guard-the-context-window**). Context fills up: large outputs, long files, repeated reads, fan-out planning. Route bulk to subagents, keep summaries in the main thread.
+- **Never Block on the Human** (**principle-never-block-on-the-human**). Tempted to ask "should I do X?" on reversible work. Proceed, present the result, let the human course-correct.
+
+**Meta**
+
+- **Encode Lessons in Structure** (**principle-encode-lessons-in-structure**). You catch yourself writing the same instruction a second time. Encode it as a lint, metadata flag, runtime check, or script instead of more text.
+
+## Autonomy
+
+**Just do it.** Use any MCP tool. Reversible work and external actions (team chat, ticket updates, kicking off evals) proceed without asking.
+
+**Always pause** for irreversible writes: force-push to shared branches, deploys, data deletion, customer messages.
+
+**Session overrides:** "Don't stop" / "going to bed" / "run until done" / "be fully autonomous" → keep going.
+
+**No is an acceptable answer.** Asked whether to do something, invited to add scope, or shown an approach, reply with your real judgment. Decline, push back, or say "this doesn't earn its place" when true. A recommendation is a judgment, not a validation. Agreement is not the default, candor over sycophancy.
+
+## Subagents
+
+**Use `subagent_type: "pstack:poteto-agent"` for any subagent you spawn inside a playbook step** (code-writing delegates, ad-hoc helpers). Plugin agents register under the plugin namespace. The bare name `poteto-agent` errors. `/poteto-mode` and `poteto-agent` route through the same wrapper. Routed workflow skills (`how`, `why`, `interrogate`, `reflect`, `swarm`) set their own `subagent_type` for diverse-model review. Respect what the skill prescribes, don't override to `poteto-agent`.
+
+**Defaults for every `Agent` call.** `run_in_background: true`, full tool access (do not pick a subagent_type that strips MCP), file pointers not inlined context, explicit model per role (configurable via `/setup-pstack`. Role defaults in [Models](#models), with "judgment and prose" covering prose and judgment). Code delegates tier by difficulty. The hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) go to your strongest-judgment model (default in [Models](#models)), whether the task needs judgment on vague intent or is a precisely specified sequence of steps to execute to the letter. Trivial mechanical edits go to your fast code model. Everything else uses the single-role default. Multi-model panels run the configured panel for diversity, with defaults enumerated in each panel skill's Models section (`arena`, `architect`, `interrogate`). Per-role `/setup-pstack` lines override these defaults and the model choices in the routed skills (`how`, `why`, `arena`, `swarm`, `architect`, `interrogate`, `reflect`). A role with no line keeps its default, and a role line of `inherit-parent` or `auto` runs that role on the parent session's model (omit `model` on the `Agent` call).
+
+You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. A second opinion is the same prompt against a different model. Agreement is high-signal.
+
+**Fresh subagents by default.** Give new work to a fresh subagent with consolidated scope, meaning the original brief, every later directive, and the prior agent's report and branch. This holds for a fix round, a follow-up, a retry, and the next queue item. Resume, message, or queue a follow-up on an existing subagent only when the new work strictly needs state that lives in that agent and is costly to move: its local checkout, its uncommitted changes, or a process it still runs, such as a dev server, a simulator, or a babysit watcher. A stop or hold order to a running agent is not reuse. A role such as a PR owner outlives its agent. Once that agent returns, a fresh agent takes the role's next round. Interrupt-chained resumes silently drop directives, so fire a fresh subagent with consolidated scope rather than trusting a "done" summary. **Stop the abandoned agent first, and confirm it stopped.** In the agent listing `completed` means the completion was *notified*, not that the process exited: an agent with live background children reports completed and then resumes. Only an explicit stop ends it, and the stop tool may be deferred, so load it before you need it. The tell that one is still running is a claim about the working tree that `git status` contradicts.
+
+## Writing the reply
+
+Write the reply clean as you draft it. A cleanup pass after drafting does not remove these patterns.
+
+- **Short declarative sentences.** One thought per sentence, ended with a period.
+- **No long-dash character anywhere.** Write a file-list bullet as a sentence ("`main.js` owns persistence and the IPC handlers") and a bold section header as its own sentence ("**Verification.** End to end via CDP").
+- **A colon as a mid-sentence connector is also out** (unslop rule 14). A colon before a list is fine.
+- **Terse is not an excuse to drop content.** Every item the playbook's reply names stays. Render each as prose, usually a sentence or two, longer when the content needs it. No section headers, and no item expanded into its own block.
+- **Frame impact for the consumer and the maintainer.** Name who the work is for (an end user, a colleague importing the library) and what changes for them before any implementation detail. Then what the next engineer who owns this code inherits. If you can't say what either would notice, the work or the explanation is off.
+- **Never fabricate a link, citation, or transcript reference.** Link only artifacts you produced or read this session.
+- **Every claim carries its evidence or its label in the same sentence.** Measured, inferred, or guess. A prediction or an unseen cause is a guess. Never hand the human a check you could run.
+
+Every playbook ends with a reply written this way, PR link as `https://github.com/<owner>/<repo>/pull/<number>`. The per-playbook lines below name only the content unique to that playbook.
+
+## Comments
+
+Comments follow the same rule as the reply. Write them clean as you go. Keep a comment only for a non-obvious *why* the code can't show. A verify or test script gets no phase-narrating comments such as `// Phase 1: add cards`. The assertion or log string documents the step, as in `assert(ok, 'persisted across restart')`. This applies to every file you produce, including the delegate's diff.
+
+## Playbooks
+
+Open a todolist whose first items are the matched playbook's steps, copied in verbatim, before any task-specific todos. A step you choose not to do stays in the list with a one-line `skip: <reason>`. Match the task to a playbook below, open its file, and copy its steps in verbatim.
+
+A large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, routes to the **figure-it-out** skill even when a narrower playbook like Feature fits. Use **figure-it-out** whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead. figure-it-out designs one bespoke run, orchestrate runs the program.
+
+- **Investigation.** Read-only question: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. `playbooks/investigation.md`.
+- **Bug fix.** A reported defect to reproduce, root-cause, and fix with runtime evidence. `playbooks/bug-fix.md`.
+- **Perf issue.** A measured slowness to trace and improve against a baseline. `playbooks/perf-issue.md`.
+- **Hillclimb.** Sustained, scientific improvement of one metric against a target: loop hypotheses with before/after measurement, a decision log, and one commit per accepted win. Distinct from Perf issue, which is a one-off fix. `playbooks/hillclimb.md`.
+- **Runtime forensics.** Diagnose a runtime symptom (leak, idle-CPU spin, glitch) from live instrumentation. The deliverable is a diagnosis, not a fix. `playbooks/runtime-forensics.md`.
+- **Trace forensics.** Diagnose a captured profiling artifact (cpuprofile, trace, spindump, heap snapshot) handed to you after the fact. The deliverable is a diagnosis, not a fix. `playbooks/trace-forensics.md`.
+- **Feature.** New or changed behavior, built from a named data shape. `playbooks/feature.md`.
+- **Refactoring.** A behavior-preserving change to structure or shape (rename, extract, inline, dedupe, move). `playbooks/refactoring.md`.
+- **Prototype.** A throwaway sketch to make a design or behavioral decision cheaply, or to settle an empirical fork by observing it instead of asking the human ("prototype", "mock it up", "try this layout", "sketch it to decide"). `playbooks/prototype.md`.
+- **Visual parity.** Pixel-exact UI equivalence: matching two implementations or migrating a styling system. `playbooks/visual-parity.md`.
+- **Authoring or modifying a skill.** Writing or editing a SKILL.md. `playbooks/authoring-a-skill.md`.
+- **Eval.** Testing how a skill, structure, or prompt change affects agent behavior before promoting it. `playbooks/eval.md`.
+- **Babysit.** Driving a PR or a stack to merge-ready: conflicts, review threads, CI. `playbooks/babysit.md`.
+- **Shipping.** The half after Babysit. Independently verifying a green stack, then landing the contiguous verified run bottom-up through `gh` by default or Origin when its CLI is available. `playbooks/shipping.md`.
+- **Autonomous run.** A long task to drive to completion without stopping ("run until done", "/loop until X"). `playbooks/autonomous-run.md`.
+- **Orchestrate.** A standing project handed to one coordinator chat: multi-day, many stacked PRs, dozens to hundreds of subagents, minimal human turns ("run this whole project", "own this migration until it lands"). Distinct from Autonomous run, which drives one task to a predicate. Work one agent could finish inside the session's budget routes there, not here, however program-shaped the phrasing sounds. `playbooks/orchestrate.md`.
+- **Autopilot-full.** A queue of independent PRs driven to merge-ready with full autonomy. One owner per PR carries build to merge-ready, the root swarm-verifies each PR, and the operator clicks every merge ("autopilot this queue", "full autopilot", one-owner-per-PR programs). `playbooks/autopilot-full.md`.
+- **Autopilot-stack.** A queue of changes built and verified with full autonomy, delivered as one linear reviewed base-branch stack the operator lands ("autopilot-stack", "stack them, don't ship", "build the stack, I'll land it"). `playbooks/autopilot-stack.md`.
+- **Session pickup.** Resuming or taking over a prior agent's in-flight work from a transcript, cloud-agent URL, or pushed branch. `playbooks/session-pickup.md`.
+- **Pause safely.** Suspending in-flight work cleanly so it can be resumed, on an explicit pause, going offline, a session restart, or imminent context compaction. The complement to Session pickup. Full steps: `playbooks/pause-safely.md`.
+- **Multi-phase or multi-PR plan.** Work that spans phases or stacked PRs. `playbooks/multi-phase-plan.md`.
+- **Worktree and simulator cleanup.** Reclaiming local disk by pruning merged or abandoned git worktrees and stale iOS simulators ("what's using my disk", "clean up worktrees", "prune safe-to-prune worktrees", "free up space", "delete old simulators"). `playbooks/worktree-cleanup.md`.
+- **Opening a PR.** Invoked at the end of every other playbook. `playbooks/opening-a-pr.md`.
+
+**Project playbooks.** A repository can add playbooks of its own under `.agents/playbooks/`, one Markdown file each. Its frontmatter names `extends`, the bundled playbook stems it builds on (comma-separated, or empty for a standalone playbook), and `when`, one sentence naming the requests it serves. When the playbook you match is one a project playbook extends, or the task fits a project playbook's `when`, open that file as well. Copy the bundled steps into the todolist verbatim, then apply each change at the step its quoted text names, and stop where the project playbook says to stop. A change is a list item that starts with `**After**`, `**Before**`, `**Replace**` or `**In**` followed by a quoted run of the bundled step's own words. Before you apply a project playbook, run `node <plugin>/skills/poteto-mode/scripts/check-playbooks.mjs` from the repository root. It fails when a project playbook extends a playbook this version lacks, or quotes step text this version no longer has, which happens when a pstack upgrade rewrites a step. Report each line it prints to the user and do not guess where an unanchored change belongs.
+
+## Models
+
+Role defaults, stamped from `plugins/pstack/models.json` (edit there, rerun `tools/generate.mjs`). A matching role line in the `pstack-models.md` override sheet overrides each at runtime; `/setup-pstack` writes it and lists its path per runtime.
+
+- feature, refactoring: `opus`
+- bug-fix: `fable`
+- perf-issue: `fable`
+- hillclimb: `fable`
+- judgment and prose: `opus`
+- strongest judgment: `fable`
+
+## Reasoning effort
+
+A role value in the override sheet may name a reasoning effort after its model, as in `opus @xhigh`. Levels on Claude Code: `low`, `medium`, `high`, `xhigh`, `max`. Which ones apply depends on the model. A value without `@` takes the sheet's `default effort` line, a level or `session`, and `session` when the sheet has no such line. `session` sets no effort, so the dispatch is the usual one. Strip the suffix before reading the model: `inherit-parent` or `auto` still omits `model` at every level, and a model name is passed as `model`. On Claude Code, a level picks the effort agent from the `subagent_type` you would otherwise use. `pstack:poteto-agent` becomes `subagent_type: "pstack:poteto-agent-<level>"`. `general-purpose`, or no `subagent_type`, becomes `subagent_type: "pstack:effort-<level>"`. The effort agents set only `effort`, so the model you pass still decides the model. On Codex, pass the level as `spawn_agent`'s `reasoning_effort` and keep the usual instructions.
+
+hook: PostToolUse
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc 'cat /Users/nndsk/.codex/plugins/cache/pstack-claude/pstack/0.9.67/skills/poteto-mode/references/codex-tools.md' in /Users/nndsk/Projects/zedpstack
+exec
+/bin/zsh -lc 'cat README.md docs/DISCUSSION_NEXT_STEP.md package.json' in /Users/nndsk/Projects/zedpstack
+exec
+/bin/zsh -lc 'cat /Users/nndsk/.codex/plugins/cache/pstack-claude/pstack/0.9.67/skills/poteto-mode/playbooks/investigation.md' in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+### Investigation
+
+**You own the answer. Plan, route, write.**
+
+Investigation requests are read-only. They produce a cited explanation or a recommendation, not a code change.
+
+1. Route through the **how** skill. For motivation questions, also route through the **why** skill.
+2. Throughput checkpoint stays one line: `throughput checkpoint: n/a, read-only investigation`.
+3. Produce the `how`-shaped output (Overview / Key Concepts / How It Works / Where Things Live / Gotchas), or a recommendation with a tradeoffs table if the request is a decision between alternatives.
+4. Apply the **unslop** skill to the reply.
+
+No PR, no babysit, no `architect` unless the investigation precedes a code change. If it does, hand back to the user and re-route to Bug fix or Feature.
+
+**Reply:** the investigation output. For "are we sure?" answers, include your real judgment with reasons. Push back if the premise is wrong (see Autonomy).
+
+ succeeded in 0ms:
+# zedpstack
+
+Orquestación portable: **playbooks pstack** (how, Investigation, …) ejecutados con Claude/Codex CLI.
+
+> **The LLM decides; the dispatcher executes.**
+
+- `SKILL.md` — juicio del orquestador (routing, síntesis, judgment).
+- `scripts/dispatch.mjs` — mecánica determinista (spawn, manifest, eventos, validación).
+
+## Instalación
+
+```bash
+git clone https://github.com/Nandem1/zedpstack.git
+cd zedpstack
+cp zedpstack.config.example.json zedpstack.config.json
+# editar modelos según tu cuenta (archivo local, no se commitea)
+npm test
+```
+
+En Zed/Cursor, symlink de skill (playbooks/config se resuelven desde la ruta real del paquete):
+
+```bash
+ln -sfn "$(pwd)" ~/.agents/skills/zedpstack
+```
+
+Opcional: `export ZEDPSTACK_ROOT=/ruta/al/clon` si necesitas forzar otra raíz que no sea la del código instalado.
+
+## Uso
+
+Desde la raíz del repositorio bajo revisión:
+
+Requiere [pstack-claude](https://github.com/) instalado en Codex (o `PSTACK_ROOT`). Ver [docs/PSTACK_ADAPTER.md](./docs/PSTACK_ADAPTER.md).
+
+```bash
+node ~/Projects/zedpstack/scripts/dispatch.mjs run \
+  --playbook how-investigation \
+  --goal "¿Cómo funciona el gate de sesión en este repo?" \
+  --repo /path/to/repo
+```
+
+Estado en `.zedpstack/runs/<runId>/`.
+
+### Modelos (`/setup-zedpstack`)
+
+```bash
+node scripts/dispatch.mjs setup init    # hoja pstack-models
+node scripts/dispatch.mjs setup apply   # → zedpstack.config.json
+node scripts/dispatch.mjs setup show
+```
+
+Skill: `setup-zedpstack/SKILL.md` (symlink opcional a `~/.agents/skills/setup-zedpstack`).
+
+### Ver progreso
+
+```bash
+node scripts/dispatch.mjs run ... --tee-events
+node scripts/dispatch.mjs watch --run-id <id> --repo <repo> --from-start
+```
+
+Ver [docs/STREAMING.md](./docs/STREAMING.md).
+
+## Licencia
+
+MIT — ver `LICENSE`. Contenido upstream de pstack no está vendoreado; ver `docs/UPSTREAM.md`.
+# Discusión: siguiente paso zedpstack (post v0.4.1)
+
+Contexto:
+- v0.4.1 shipped: setup-zedpstack, watch, 5 playbooks read-only, validación reviewers, aliases transitivos.
+- Objetivo usuario: **pstack usable** vía `/zedpstack` + `/setup-zedpstack` en Cursor; streaming visible.
+- Backlog conocido: fan-out paralelo, Codex stdin/E2BIG, effort en CLI, inherit-parent reconcile, write playbooks (feature/bug-fix), arena/swarm.
+
+Pregunta para **debate** (no code review línea a línea):
+
+1. ¿Cuál es el **único siguiente milestone** (2–4 semanas de trabajo part-time) que maximiza valor para el operador?
+2. Ordena top 5 ítems del backlog con **una frase de por qué** cada uno.
+3. ¿Qué NO hacer todavía y por qué?
+4. Criterio de “listo para uso diario” en MH-Next: checklist 5 bullets medible.
+
+Responde en español. Sé explícito si discrepas con el otro revisor (asume que Codex prioriza rigor/NO-GO y Claude prioriza pragmatismo GO-with-fixes).
+
+Formato:
+## Recomendación principal
+## Top 5 backlog
+## Evitar ahora
+## Checklist uso diario
+## Si solo una semana
+
+No modificar archivos.
+{
+  "name": "zedpstack",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Nandem1/zedpstack.git"
+  },
+  "version": "0.4.1",
+  "description": "Portable multi-runtime orchestration over pstack playbooks (Zed, Cursor, CLI)",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "zedpstack": "./scripts/dispatch.mjs"
+  },
+  "scripts": {
+    "test": "node --test tests/**/*.test.mjs",
+    "run:architecture-review": "node scripts/dispatch.mjs run --playbook architecture-review"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
+
+ succeeded in 0ms:
+# Codex tool mapping for pstack
+
+pstack skills are written in Claude Code tool language (the `Skill` tool, the `Agent` tool, `AskUserQuestion`, Claude model names). On Codex the skills are the same files; only the tool names resolve differently. Read this when a pstack skill names a Claude tool, a driver or bundled skill, or a Claude model. This file is Codex-specific. Gemini CLI, opencode, Prime Agent, and other runtimes must use their own concrete tools, model names, and configuration paths.
+
+## Tool actions
+
+| pstack / Claude action | Codex equivalent |
+|------------------------|------------------|
+| Read a file | `shell` (`cat`, `head`, `tail`) |
+| Create / edit / delete a file | `apply_patch` |
+| Run a shell command | `shell` |
+| Search file contents / find files | `shell` (`rg`, `grep`, `find`, `ls`) |
+| Fetch a URL | `shell` with `curl` / `wget` |
+| Search the web | `web_search` |
+| Invoke a skill (the `Skill` tool, `/command`) | Skills load natively. Follow the instructions presented. |
+| Dispatch a subagent (the `Agent`/`Task` tool) | `spawn_agent` |
+| Dispatch N parallel subagents in one turn | N `spawn_agent` calls in one response |
+| Wait for a subagent result | `wait_agent` |
+| Free a finished subagent slot | `close_agent` |
+| Track tasks (the todolist; `TaskCreate` / `TaskUpdate`, or `TodoWrite` on Claude Code) | `update_plan` |
+| Ask the human a fixed-choice question (`AskUserQuestion`) | Ask in plain text and let the user answer. Codex has no structured-choice tool. |
+
+Subagent dispatch needs `multi_agent` enabled. Add to `~/.codex/config.toml`:
+
+```toml
+[features]
+multi_agent = true
+```
+
+Without it, `spawn_agent` is unavailable and the fan-out skills (`interrogate`, `why`, `how`, `arena`, `reflect`) degrade to a single sequential pass.
+
+## Subagent policy
+
+poteto-mode's Subagents section sets Claude-specific defaults (`subagent_type: "pstack:poteto-agent"`, `run_in_background: true`). On Codex:
+
+- There is no `poteto-agent` subagent type. Route an ad-hoc subagent through poteto-mode's style by dispatching a `spawn_agent` whose instructions tell it to read the `poteto-mode` skill in full first.
+- `spawn_agent` calls already run concurrently with your turn, so `run_in_background: true` has no separate flag. Issue the dispatch and continue.
+- There are no `pstack:effort-<level>` or `pstack:poteto-agent-<level>` types. When a role value carries `@<level>`, or the `default effort` line names a level, pass that level as `spawn_agent`'s `reasoning_effort` and keep the dispatch otherwise unchanged. `session` passes no `reasoning_effort`.
+- There is no `comment-sicko` subagent type either. The **no-comments** skill spawns it on Claude Code; on Codex dispatch a `spawn_agent` whose instructions tell it to read `poteto-mode/references/agents/comment-sicko.md` in full first.
+- Claude Code runs every subagent on this machine, so the **swarm** skill's workers and the fan-out playbooks (`orchestrate`, `autopilot-full`, `autopilot-stack`) isolate writers with worktrees. The same holds on Codex.
+- Keep the rest of the policy unchanged. Pass file pointers not inlined context, give each worker its own worktree or branch when they write, review every subagent's diff yourself.
+
+## Model names
+
+Skills name Claude defaults (a single-role default for code/prose/judgment plus a diverse-model panel for diverse-model panels; each model-consuming skill lists its own in a Models section). These slugs do not resolve on Codex. Substitute your configured Codex models:
+
+- Single-model roles: your primary Codex model (for example `gpt-6-sol`).
+- Roles that default to the strongest Claude model (`bug-fix`, `perf-issue`, `hillclimb`, `strongest judgment`): your strongest Codex model (for example `gpt-6-astra`).
+- Diverse-model panels (`arena`, `architect`, `interrogate`, `how` critics, `reflect`): the adversarial signal comes from model diversity, so use the distinct Codex models available to you. A good default panel on ChatGPT is `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`. If only one model family is reachable, vary reasoning effort and note in the verdict that diversity was reduced.
+
+`/setup-pstack` writes the configured model list. On Codex, set it to your Codex model slugs.
+
+## Session routing hook
+
+The native pstack plugin bundles the same `SessionStart` routing instruction as the Claude Code plugin, through `session-start.sh` on macOS and Linux and `session-start.ps1` on Windows. Codex runs the hook on startup, resume, clear, and compact after the user trusts the hook through `/hooks`. The hook reads `session hook` from the Codex sheet, at the path in [setup-pstack's runtime table](../../setup-pstack/SKILL.md#other-runtimes); `session hook: off` disables injection.
+
+A skills-only installation does not include plugin hooks. Request `poteto-mode` explicitly or add a standing instruction to `AGENTS.md` in that case.
+
+## Driver and bundled skills pstack references
+
+The [driver policy](../SKILL.md#non-negotiables) selects the app driver. For skills and drivers named by these workflows, use these Codex equivalents:
+
+| Skill or driver named in pstack | On Codex |
+|---------------------------------|----------|
+| `run` (drive a CLI/TUI to see a change work) | Run the app yourself via `shell` and observe the real output. |
+| Project UI driver | Drive the UI with whatever automation you have, or hand the user a concrete manual check. Do not claim done without observing the artifact. |
+| `plugin-dev:skill-development` (Claude's SKILL.md authoring guidance) | Follow your platform's skill-authoring guidance; the `writing-skills` skill if present. Keep `name` + `description` frontmatter and progressive disclosure. |
+| `loop` (recurring/self-paced re-invocation, used by `babysit`) | Codex has no `loop` skill. Re-run the step yourself on a cadence, or use a Codex scheduled task if available. |
+
+## Per-skill notes
+
+Affected skill entry points and the optional Codex slash stubs point here. Most skills need only the tables above. These need one more mapping:
+
+| Skill | On Codex |
+|-------|----------|
+| `interrogate` | The `subagent_type`/`model`/`readonly` dispatch fields map to `spawn_agent`; substitute your configured Codex models and keep the reviewer panel model-diverse. |
+| `setup-pstack` | The skill's Other runtimes table names the Codex sheet path and how it loads; the slugs are your Codex models (see Model names above). The role rows are identical. |
+| `no-comments` | There is no `comment-sicko` subagent type; see Subagent policy above. |
+| `teach` | Running `how` and `why` in parallel maps to `spawn_agent` fan-out; image generation uses the configured Codex equivalent. |
+| `create-verification-skill` | The generated skill lands under `.claude/skills/verify/` on Claude Code; write it to Codex's project-skill location instead. The app-driving harness is platform-neutral. |
+| `maintain-verification-skill` | The parallel per-feature source readers map to `spawn_agent` fan-out; the project-local skill lives under Codex's skills location, not `.claude/skills/`. |
+| `babysit` | `loop` and `AskUserQuestion` resolve through the tables above. |
+| `automate-me` | `plugin-dev:skill-development` resolves through the skills table above. |
+| `architect` | The runner panel goes through the **arena** skill, so its `spawn_agent` fan-out and model substitution apply here too. |
+| `arena` | The parallel candidates and the cross-judge map to `spawn_agent`; substitute your configured Codex models for the runners and the cross-judge pool (see Model names above). |
+| `how` | The parallel explorers and the explainer map to `spawn_agent` fan-out; substitute your configured Codex models. |
+| `reflect` | The three reviewers and the synthesizer map to `spawn_agent`; substitute your configured Codex models. The transcript finder reads Claude Code's layout under `~/.claude/projects/`, so pass the session digest step 1 allows instead. |
+| `swarm` | Each worker is a `spawn_agent` call on your configured Codex model, and those calls already run concurrently; give each writing worker its own worktree or output directory (see Subagent policy above). |
+| `why` | The parallel investigators and the synthesizer map to `spawn_agent`; substitute your configured Codex models. List MCP servers from the tools Codex exposes to the session, not from `.mcp.json` or `claude mcp list`. |
+
+## Vendored scripts
+
+`skills/poteto-mode/scripts/` ships the `watch-pr` PR watcher, the `orch` store CLI, and `worktree-audit.mjs`. The `watch-pr/ship-pr` command owns pending-merge inspection and cancellation; `resume.mjs` owns the shared checkpoint locator described in [Resume storage](resume-storage.md). These scripts use bun and Node.js and run the same on Codex; invoke them through `shell`. They need `bun`, `gh`, and (for stack work) `gt`. `worktree-audit.mjs` reads Claude Code transcripts under `~/.claude/projects/`; point it at your runtime's transcript directory instead when you run it elsewhere. It imports the transcript walker from `skills/reflect/scripts/find-transcript.mjs`, so keep the `reflect` skill installed beside `poteto-mode`.
+
+## Instructions file
+
+Where a pstack skill says "your instructions file", on Codex that is `AGENTS.md` (project root, plus `~/.codex/AGENTS.md` global). On Claude Code it is `CLAUDE.md`.
+
+exec
+/bin/zsh -lc 'cat /Users/nndsk/.codex/plugins/cache/pstack-claude/pstack/0.9.67/skills/how/SKILL.md' in /Users/nndsk/Projects/zedpstack
+exec
+/bin/zsh -lc 'cat /Users/nndsk/.codex/plugins/cache/pstack-claude/pstack/0.9.67/skills/principle-experience-first/SKILL.md /Users/nndsk/.codex/plugins/cache/pstack-claude/pstack/0.9.67/skills/principle-prove-it-works/SKILL.md' in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+---
+name: how
+description: "Use for \"how does X work\", code walkthroughs before changing something, and placement / ownership / layering questions (\"where should this live\", \"which package owns this\", \"is this the right layer\"). Explains subsystem architecture, runtime flow, onboarding mental models. Use why for motivation."
+---
+
+# How
+
+On Codex, read the [platform mapping](../poteto-mode/references/codex-tools.md), including its per-skill notes, before following this skill.
+
+Explore the codebase to answer "how does X work?" questions. Produce architectural explanations at the level of a senior engineer onboarding onto a subsystem, enough to build a working mental model, not so much that it reads like annotated source code.
+
+Each spawn below names a role line in `pstack-models.md` and a default in [Models](#models). Set `model` to that line's value, or to the default if the sheet or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the `Agent` tool rejects a slug, use the default and say so. If it rejects the default, use the closest valid slug of the same family from its error message.
+
+## Step 1. Assess Complexity
+
+If the scope is ambiguous, state your interpretation and explore. The user can redirect.
+
+- **Simple** (a single module, a small utility, a narrow question such as "how does function X work"): no explorers. One explainer explores and explains in a single pass. Go to Step 2b.
+- **Complex** (a subsystem spanning multiple files or services, a cross-cutting feature, a full architectural overview): spawn parallel explorers first, then hand off to the explainer. Go to Step 2a.
+
+When in doubt, take the simple path.
+
+## Step 2a. Explore (complex questions only)
+
+Decompose the question into 2 to 4 exploration angles, each a distinct slice of the subsystem. Spawn all explorers in a single message:
+
+- `subagent_type`: `general-purpose`
+- `model`: the `how explorer` line, default in [Models](#models)
+- `readonly`: `true`
+
+Each explorer gets the prompt in `references/explorer-prompt.md` with its angle filled in. Then go to Step 3.
+
+## Step 2b. Direct Explain (simple questions)
+
+Spawn one `Agent` subagent that explores and explains in one pass:
+
+- `subagent_type`: `general-purpose`
+- `model`: the `how explainer` line, default in [Models](#models)
+- `readonly`: `true`
+
+Build its prompt from `references/explainer-prompt.md` without the explorer-findings section. Go to Step 4.
+
+## Step 3. Synthesize (complex questions only)
+
+Once all explorers have returned, spawn one `Agent` subagent to synthesize their findings into one explanation:
+
+- `subagent_type`: `general-purpose`
+- `model`: the `how explainer` line, default in [Models](#models)
+- `readonly`: `true`
+
+Build its prompt from `references/explainer-prompt.md` with every explorer's findings filled in.
+
+## Step 4. Present
+
+Present the explainer's output to the user. Light edits for clarity or context from the conversation are fine. Do not substantially rewrite it.
+
+## Output Format
+
+The explanation uses the sections defined in `references/explainer-prompt.md`, dropping any that do not apply: Overview, Key Concepts, How It Works, Where Things Live, Gotchas.
+
+## Models
+
+Role defaults, stamped from `plugins/pstack/models.json` (edit there, rerun `tools/generate.mjs`). A matching role line in the `pstack-models.md` override sheet overrides each at runtime; `/setup-pstack` writes it and lists its path per runtime.
+
+- how explorer: `opus`
+- how explainer: `opus`
+
+## Reasoning effort
+
+A role value in the override sheet may name a reasoning effort after its model, as in `opus @xhigh`. Levels on Claude Code: `low`, `medium`, `high`, `xhigh`, `max`. Which ones apply depends on the model. A value without `@` takes the sheet's `default effort` line, a level or `session`, and `session` when the sheet has no such line. `session` sets no effort, so the dispatch is the usual one. Strip the suffix before reading the model: `inherit-parent` or `auto` still omits `model` at every level, and a model name is passed as `model`. On Claude Code, a level picks the effort agent from the `subagent_type` you would otherwise use. `pstack:poteto-agent` becomes `subagent_type: "pstack:poteto-agent-<level>"`. `general-purpose`, or no `subagent_type`, becomes `subagent_type: "pstack:effort-<level>"`. The effort agents set only `effort`, so the model you pass still decides the model. On Codex, pass the level as `spawn_agent`'s `reasoning_effort` and keep the usual instructions.
+
+ succeeded in 0ms:
+---
+name: principle-experience-first
+description: "Apply when product, UX, or feature-scope tradeoffs come up. Choose user delight over implementation convenience; ship fewer polished features over more rough ones."
+user-invocable: false
+---
+
+# Experience First
+
+When implementation convenience conflicts with user delight, choose delight.
+
+- Every feature, control, and option must be justified
+- Ship less, ship better (polished experience with three features beats rough one with ten)
+- Prototype before committing (design decisions are cheaper in throwaway HTML than production code)
+- Get the details right (transitions, alignment, spacing, feedback, error states)
+- Tighten the core loop (every feature should serve the central workflow or get out of the way)
+
+The user is whoever consumes the work. For a UI that is the end user. For a library or an internal API it is the colleague who imports it. The engineer who maintains the code next is a user too. Weigh their experience the same way, and explain impact from their perspective.
+
+Foundations should serve the experience. Foundational thinking governs the *sequence* of work. This principle governs the *target*.
+---
+name: principle-prove-it-works
+description: "Apply after completing a task, before declaring done. Verify against the real artifact (run the feature, read the actual value, inspect the diff), not a proxy, self-report, or 'it compiles.'"
+user-invocable: false
+---
+
+# Prove It Works
+
+Verify every task output by checking the real thing directly. Do not infer from proxies, self-reports, or "it compiles."
+
+**Why:** Unverified work has unknown correctness. Indirect verification (file mtimes, output freshness, agent self-reports, cached screenshots) feels cheaper than direct observation. Acting on a wrong inference costs far more than checking the source.
+
+Check the real thing, not a proxy:
+- Check process liveness directly, not indirectly through derived state
+- Read the actual value, not a cached or derived representation
+- When verification fails, suspect the observation method before suspecting the system
+
+Verify the process as well as the outcome. A correct result can rest on a broken process, and a review that checks results passes it: a clause reconstructed from the user's paste instead of the durable record, a constraint honored by chance from a file never read. For each fact you relied on, name the record it came from and confirm that record is the one the project's rules point at.
+
+Red is a colour, not a measurement. A failing check proves the instrument only when the failure content is the disagreement you predicted. An exception, an empty collection against a non-empty literal, and a real mismatch all print red, so quote the assertion's diff (`Extra items in the right set`), never the assertion (`assert {...} == {...}`). A convergence probe keys on behavior only the new artifact can produce, never an identity field the old one also emits. A same-SHA restart lets old code report the new commit SHA.
+
+## Script the check when you can
+
+The strongest proof is a deterministic script that re-runs the same comparison, not a one-time eyeball. Write the script, run it, and keep its output as an artifact a reviewer can re-run instead of trusting your word.
+
+Keep the artifact visible for the human. Commit it only for large or complex work where the trail has to be auditable later, like a big port or migration (the **show-me-your-work** skill).
+
+hook: PostToolUse
+hook: PostToolUse
+hook: PostToolUse
+hook: PostToolUse
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+exec
+/bin/zsh -lc "git status --short && git log -8 --oneline && rg --files -g '"'!node_modules'"' -g '"'!package-lock.json'"' -g '"'!bun.lockb'"' -g '"'!bun.lock'"' | head -160" in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+?? docs/DISCUSSION_NEXT_STEP.md
+?? docs/discuss-next-claude-opus.err
+?? docs/discuss-next-claude-opus.txt
+?? docs/discuss-next-codex-sol.err
+?? docs/discuss-next-codex-sol.stdout
+b30e70b Publica v0.4.1: fixes de auditoría Opus/Codex.
+e596487 Publica v0.4.0: setup-zedpstack, watch y paneles multimodelo.
+7de27b3 Publica v0.3.1: shell read-only en synthesizer y señales Codex.
+b0bae4a Añade adaptadores pstack why, architect, interrogate y reflect.
+3b1058a Adapta playbooks pstack how-investigation vía PSTACK_ROOT.
+6b8e91e docs: registra publicación en GitHub Nandem1
+13f7364 Apunta el repo a Nandem1/zedpstack y deja de referenciar MH-Next.
+c415798 Publica zedpstack 0.1.2 con hardening de sesión 1.2.
+src/pstackPrompts.mjs
+src/cli.mjs
+src/setupConfig.mjs
+src/manifest.mjs
+src/config.mjs
+src/resume.mjs
+src/playbook.mjs
+src/permissions.mjs
+src/modelSheet.mjs
+src/judgment.mjs
+SKILL.md
+src/events/sink.mjs
+src/cancel.mjs
+src/git.mjs
+src/watchRun.mjs
+src/roles.mjs
+src/hash.mjs
+src/paths.mjs
+src/shellSignals.mjs
+zedpstack.config.example.json
+scripts/dispatch.mjs
+package.json
+README.md
+src/pstack.mjs
+src/run.mjs
+src/constants.mjs
+src/validation.mjs
+src/types.mjs
+LICENSE
+setup-zedpstack/SKILL.md
+schemas/manifest.schema.json
+schemas/result.schema.json
+schemas/config.schema.json
+src/runtimes/claude.mjs
+src/runtimes/stream.mjs
+src/runtimes/index.mjs
+src/runtimes/codex.mjs
+tests/setup-config.test.mjs
+tests/validation.test.mjs
+tests/watch-run.test.mjs
+tests/adapters-smoke.test.mjs
+tests/judgment.test.mjs
+tests/manifest.test.mjs
+tests/stream-dedupe.test.mjs
+tests/pstack-adapter.test.mjs
+tests/shell-signals.test.mjs
+tests/model-sheet.test.mjs
+tests/config-resolve.test.mjs
+tests/validation-text-type.test.mjs
+tests/validation-explorer.test.mjs
+tests/events-sink.test.mjs
+tests/hash.test.mjs
+tests/resume-regression.test.mjs
+tests/cancel-manifest.test.mjs
+tests/validation-reviewer.test.mjs
+docs/REVIEW_REQUEST_v0.4.md
+playbooks/architect-sketch/playbook.json
+playbooks/architect-sketch/prompts/judgment.md
+playbooks/how-investigation/prompts/judgment.md
+docs/discuss-next-codex-sol.stdout
+playbooks/how-investigation/playbook.json
+docs/AUDIT_REQUEST_1_2.md
+docs/PSTACK_ADAPTER.md
+docs/review-v04-claude-opus.err
+docs/discuss-next-codex-sol.err
+docs/review-v04-claude-opus.txt
+docs/AUDIT_REQUEST_1_2_CLOSE.md
+docs/STREAMING.md
+docs/AUDIT_REQUEST.md
+docs/PSTACK_ADAPTERS.md
+docs/discuss-next-claude-opus.txt
+docs/AUDIT_REQUEST_1_1B.md
+docs/SESSION1_1_EVIDENCE.md
+docs/DISCUSSION_NEXT_STEP.md
+docs/SESSION1_EVIDENCE.md
+docs/review-v04-codex-sol-last.txt
+docs/AUDIT_REQUEST_1_1.md
+docs/SESSION1_1B_EVIDENCE.md
+docs/SESSION1_2_EVIDENCE.md
+docs/discuss-next-claude-opus.err
+docs/UPSTREAM.md
+docs/AUDIT_REQUEST_PSTACK_ADAPTER.md
+playbooks/architecture-review/playbook.json
+playbooks/interrogate-review/playbook.json
+playbooks/interrogate-review/prompts/judgment.md
+playbooks/architecture-review/prompts/judgment.md
+playbooks/architecture-review/prompts/synthesize.md
+playbooks/architecture-review/prompts/explorer.md
+playbooks/reflect-session/prompts/judgment.md
+playbooks/reflect-session/playbook.json
+playbooks/why-rationale/prompts/judgment.md
+playbooks/why-rationale/playbook.json
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc 'cat SKILL.md setup-zedpstack/SKILL.md docs/STREAMING.md docs/PSTACK_ADAPTERS.md docs/REVIEW_REQUEST_v0.4.md' in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+---
+name: zedpstack
+description: Ejecuta skills pstack (how, why, architect, interrogate, reflect) vía Claude/Codex CLI. /zedpstack + objetivo. Usa /setup-zedpstack para modelos.
+disable-model-invocation: true
+---
+
+# zedpstack
+
+> **The LLM decides; the dispatcher executes.**
+
+Orquestador = **poteto-mode** (routing en este chat). Workers = `dispatch.mjs` (prompts desde `PSTACK_ROOT`, spawn CLI, manifest, validación).
+
+## Antes del primer run
+
+1. `cp zedpstack.config.example.json zedpstack.config.json` (en el clon del paquete).
+2. **`/setup-zedpstack`** o `dispatch setup init` + editar hoja + `dispatch setup apply`.
+3. `npm test` en el paquete.
+
+## Routing (`/zedpstack <objetivo>`)
+
+| Intención | `--playbook` |
+|-----------|----------------|
+| Cómo funciona X | `how-investigation` (default) |
+| Por qué / rationale | `why-rationale` |
+| Diseño previo | `architect-sketch` |
+| Review adversarial | `interrogate-review` + `--context-file` |
+| Reflect sesión | `reflect-session` + `--context-file` |
+
+```bash
+node ~/.agents/skills/zedpstack/scripts/dispatch.mjs run \
+  --goal "<objetivo>" \
+  --repo "<repo-absoluto>" \
+  --playbook how-investigation \
+  --tee-events
+```
+
+`list` playbooks: `dispatch list`.
+
+## Ver progreso (streaming)
+
+| Modo | Uso |
+|------|-----|
+| **JSONL en vivo** | `--tee-events` en `run`/`resume` → stderr `[zedpstack] {...}` |
+| **Seguimiento legible** | Terminal 2: `dispatch watch --run-id <id> --repo <repo> --from-start` |
+| **Artefactos** | `.zedpstack/runs/<id>/events.jsonl`, `workers/*/stdout.log` |
+
+Chunks `worker.output` no se persisten en `events.jsonl` por defecto (solo tee); usa `--persist-stream-events` si necesitas replay completo.
+
+## Judgment
+
+Tras `awaiting_judgment`: lee `workers/*/result.json`, escribe `orchestrator-judgment.md`, `dispatch judgment --run-id …`.
+
+## Configuración de modelos
+
+Skill dedicado: [setup-zedpstack/SKILL.md](./setup-zedpstack/SKILL.md) (misma hoja que pstack `setup-pstack`).
+
+## Referencia
+
+[docs/PSTACK_ADAPTERS.md](./docs/PSTACK_ADAPTERS.md) · [docs/STREAMING.md](./docs/STREAMING.md)
+---
+name: setup-zedpstack
+description: Configura modelos y esfuerzo de workers zedpstack desde la hoja pstack (como /setup-pstack). Sincroniza a zedpstack.config.json.
+disable-model-invocation: true
+---
+
+# setup-zedpstack
+
+Alinea **zedpstack** con la hoja de modelos de **pstack** (`setup-pstack`): mismas filas por rol, runtime inferido (Claude vs Codex) y `effort` opcional (`slug @high`).
+
+## Cuándo usarlo
+
+- Primera instalación del paquete `~/Projects/zedpstack`
+- Cambiar modelos de explorers/synthesizers/reviewers
+- Tras editar `~/.cursor/rules/pstack-models.mdc` manualmente
+
+## Pasos
+
+1. **Detectar modelos** disponibles en esta sesión (Claude `Agent` / Codex slugs). No escribas slugs que no hayas confirmado.
+
+2. **Hoja de override** (misma forma que pstack):
+
+   - Cursor: `~/.cursor/rules/pstack-models.mdc` (recomendado; `alwaysApply` para el orquestador)
+   - Alternativa: `~/.zedpstack/pstack-models.md`
+
+   Si no existe:
+
+   ```bash
+   node ~/Projects/zedpstack/scripts/dispatch.mjs setup init
+   ```
+
+3. **Editar filas** relevantes para workers (no solo orquestador):
+
+   - `how explorer` / `how explainer`
+   - `why investigators` / `why synthesizer`
+   - `architect ground`, `architect runners` (2 modelos), `architect synthesize`
+   - `interrogate reviewers` (3 modelos), `interrogate lead`
+   - `reflect tooling`, `reflect judgment`, `reflect divergent`, `reflect synthesizer`
+   - `default effort: session` o `low|medium|high|xhigh|max`
+
+4. **Sincronizar a dispatch** (la hoja debe existir; si no, `setup init` primero):
+
+   ```bash
+   node ~/Projects/zedpstack/scripts/dispatch.mjs setup apply
+   ```
+
+   La salida incluye `overflowWarnings` y `droppedLines` si la hoja tiene filas pstack no mapeadas o modelos de más en un panel.
+
+5. **Verificar**:
+
+   ```bash
+   node ~/Projects/zedpstack/scripts/dispatch.mjs setup show
+   ```
+
+## Effort
+
+zedpstack guarda `effort` en `zedpstack.config.json` por rol. Los CLIs worker aún no aplican todos los niveles; la hoja queda como contrato alineado con pstack para cuando el adaptador lo soporte.
+
+## Relación con pstack
+
+- **pstack** en Cursor: la hoja alimenta `Task` / subagentes del orquestador.
+- **zedpstack**: la misma hoja alimenta **spawn** de `claude`/`codex` en `.zedpstack/runs/`.
+
+Mantén ambos en sync con `setup apply` tras cambiar la hoja.
+# Observabilidad y streaming (zedpstack)
+
+## Eventos
+
+Cada run escribe `.zedpstack/runs/<runId>/events.jsonl` (append-only).
+
+Tipos habituales:
+
+- `run.started` / `run.completed` / `run.failed` / `run.cancelled`
+- `run.awaiting_judgment` — workers listos; falta `dispatch judgment`
+- `step.started` / `step.completed` / `step.validated`
+- `worker.spawned` / `worker.completed` / `worker.failed` / `worker.timeout`
+- `worker.output` / `worker.stderr` (stream; por defecto **no** se guardan en disco)
+
+Un fallo de validación de worker emite `run.failed` (no hay `step.failed` separado hoy).
+
+## Flags CLI
+
+| Flag | Efecto |
+|------|--------|
+| `--tee-events` | Copia cada evento a stderr del proceso `dispatch` (útil en Cursor mientras corres `run`) |
+| `--persist-stream-events` | Persiste también `worker.output` / `worker.stderr` en `events.jsonl` |
+
+## `dispatch watch`
+
+En otra terminal, mientras el run avanza:
+
+```bash
+node ~/Projects/zedpstack/scripts/dispatch.mjs watch \
+  --run-id <uuid> \
+  --repo /path/to/repo \
+  --from-start
+```
+
+Formatea líneas legibles (paso, worker, runtime/modelo, preview acotado de output/stderr).
+Con `--from-start` (recomendado) reproduce el historial y sigue el archivo.
+
+`watch` sale solo al ver `run.completed`, `run.failed` o `run.cancelled` en el stream
+(o con Ctrl+C si el run sigue activo, p. ej. en `awaiting_judgment`).
+
+## Logs por worker
+
+Siempre en disco:
+
+- `workers/<stepId>/stdout.log` — stream crudo del CLI
+- `workers/<stepId>/stderr.log`
+- `workers/<stepId>/result.json` — payload crudo del runtime (la validación del paso decide si el resultado es aceptado)
+
+Codex además: `codex-last-message.txt`.
+# Catálogo de adaptadores pstack (v0.3)
+
+| Playbook | Skill pstack | Pasos (secuencial) | Contexto extra |
+|----------|--------------|--------------------|----------------|
+| `how-investigation` | how + investigation | explore → synthesize | — |
+| `why-rationale` | why | investigate → synthesize | opcional en `--goal` |
+| `architect-sketch` | architect (+ how ground) | ground → sketch-a/b → synthesize | — |
+| `interrogate-review` | interrogate | review-a/b/c → lead | `--context-file` diff o archivos |
+| `reflect-session` | reflect | 3 reviewers → synthesize | `--context-file` digest transcript |
+
+No adaptados (siguen en pstack nativo / futuro): swarm, arena fan-out paralelo, feature, bug-fix (escritura), babysit, shipping.
+
+Paralelismo pstack se modela como **pasos secuenciales** con roles distintos por panel (`interrogate-reviewer-a/b/c`, `architect-runner-a/b`, reflect por lente). Configúralos con `/setup-zedpstack` → `dispatch setup apply`.
+
+Observabilidad: `--tee-events`, `dispatch watch`, [STREAMING.md](./STREAMING.md).
+# Review request — zedpstack v0.4.0
+
+## Scope
+
+Read-only review of `/Users/nndsk/Projects/zedpstack` at tag **v0.4.0** (commit on main).
+
+Focus:
+
+1. **setup-zedpstack** — `src/modelSheet.mjs`, `src/setupConfig.mjs`, `dispatch setup`, alignment with pstack `setup-pstack` sheet format
+2. **Streaming** — `EventSink`, `--tee-events`, `dispatch watch`, `docs/STREAMING.md`
+3. **Playbooks** — multimodel roles (interrogate a/b/c, architect runners, reflect lenses); `config.mjs` aliases
+4. **Gaps vs “pstack completo”** — read-only boundary, effort field unused in CLI, sequential vs fan-out
+5. **Correctness** — edge cases in sheet parse, watch tail, security (read-only enforcement)
+
+## Output format
+
+## Verdict
+GO / NO-GO / GO-with-fixes (one line)
+
+## Strengths
+3 bullets
+
+## Issues
+| Severity | Area | Finding | Suggestion |
+
+## Missing for production `/zedpstack` + `/setup-zedpstack`
+3 bullets max
+
+Do not modify files. Cite paths and line ranges where possible.
+
+hook: PostToolUse
+hook: PostToolUse Completed
+exec
+/bin/zsh -lc 'cat /Users/nndsk/.codex/plugins/cache/pstack-claude/pstack/0.9.67/skills/how/references/explainer-prompt.md' in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+# Explainer Prompt Template
+
+Build the explainer subagent's prompt from this template. Fill in the placeholders.
+
+---
+
+You are writing an architectural explanation for a senior engineer. Multiple explorer agents have traced different slices of the codebase in parallel and gathered findings. Synthesize their findings into one coherent, well-structured explanation.
+
+## Original Question
+
+> {QUESTION}
+
+## Explorer Findings
+
+{EXPLORER_FINDINGS_ALL}
+
+## Instructions
+
+The explorers each investigated a different angle of the same subsystem. Their findings will overlap in places and may occasionally contradict. Reconcile them. Merge overlapping descriptions, resolve contradictions by checking the code yourself, and combine the separate slices into a unified picture.
+
+Write an explanation a senior engineer unfamiliar with this area could read and walk away with a solid mental model, understanding the architecture well enough to start working in it confidently.
+
+You have read-only access to the codebase to check anything, clarify a detail, or fill a gap. Use Read, Grep, and Glob as needed. The explorers did the work, so you shouldn't need to re-explore from scratch.
+
+## Output Format
+
+Use this structure, adapted to what makes sense for the question. Not every section is needed for every question.
+
+### Overview
+1-2 paragraphs. What is this thing, what does it do, why does it exist. Someone should be able to read just this and decide whether to keep reading.
+
+### Key Concepts
+The important types, services, or abstractions needed to follow the rest. Brief definitions, not exhaustive.
+
+### How It Works
+The core of the explanation, and the longest section. Walk through the flow: what triggers it, what happens step by step, where data goes, what the decision points are.
+
+Use prose, not pseudocode. Reference specific files and functions so the reader knows where to look, but don't dump large code blocks unless a snippet is essential to a point.
+
+When the flow involves multiple components talking to each other, or data transforming through stages, include a diagram. Use mermaid (```mermaid) for structured flows (sequence diagrams, flowcharts, component graphs) or ASCII art for simpler relationships where mermaid would be overkill. Use your judgment. A diagram should clarify, not decorate. If prose covers the flow, skip the diagram.
+
+### Where Things Live
+A brief file/directory map. Just the ones someone would need to start working here.
+
+### Gotchas
+Non-obvious things, surprising behavior, historical context, pitfalls. Skip this section if there's nothing worth calling out.
+
+## Communication Style
+
+- Use concrete language, not abstractions-about-abstractions
+- Say "the `UserService` calls `AuthClient.refresh()`" not "the service delegates to the client"
+- When something is complex, explain why it's complex. Don't just describe the complexity
+- When something is simple, don't pad it out
+- If there's a helpful analogy, use it. If there isn't, don't force one
+- If the explorers flagged open questions or gaps, acknowledge them rather than hiding them
+
+exec
+/bin/zsh -lc 'cat src/setupConfig.mjs src/modelSheet.mjs src/config.mjs zedpstack.config.example.json' in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { loadConfig } from './config.mjs';
+import {
+  bindingsFromSheet,
+  defaultSheetTemplate,
+  parseModelSheet,
+  sheetBindingOverflowWarnings,
+} from './modelSheet.mjs';
+import { zedpstackRoot } from './paths.mjs';
+
+export function defaultModelSheetPath() {
+  const cursor = path.join(os.homedir(), '.cursor', 'rules', 'pstack-models.mdc');
+  if (fs.existsSync(cursor)) return cursor;
+  const plain = path.join(os.homedir(), '.cursor', 'rules', 'pstack-models.md');
+  if (fs.existsSync(plain)) return plain;
+  return path.join(os.homedir(), '.zedpstack', 'pstack-models.md');
+}
+
+export function readModelSheet(filePath) {
+  const resolved = path.resolve(filePath);
+  if (!fs.existsSync(resolved)) {
+    return { path: resolved, text: defaultSheetTemplate(), exists: false };
+  }
+  let text = fs.readFileSync(resolved, 'utf8');
+  if (resolved.endsWith('.mdc')) {
+    text = text.replace(/^---[\s\S]*?---\s*/m, '');
+  }
+  return { path: resolved, text, exists: true };
+}
+
+/**
+ * Merge sheet bindings into zedpstack.config.json (preserves timeouts / unknown roles).
+ */
+export function applyModelSheetToConfig({
+  sheetPath,
+  configPath,
+  allowMissingSheet = false,
+} = {}) {
+  const resolvedPath = sheetPath ?? process.env.ZEDPSTACK_MODEL_SHEET ?? defaultModelSheetPath();
+  const sheet = readModelSheet(resolvedPath);
+  if (!sheet.exists && !allowMissingSheet) {
+    throw new Error(
+      `Model sheet not found at ${sheet.path}. Run "dispatch setup init" or pass --file.`,
+    );
+  }
+  const parsed = parseModelSheet(sheet.text);
+  const { bindings, overflows } = bindingsFromSheet(parsed);
+
+  const cfgFile =
+    configPath ??
+    process.env.ZEDPSTACK_CONFIG ??
+    path.join(zedpstackRoot(), 'zedpstack.config.json');
+
+  let configData = { roles: {}, timeouts: {} };
+  if (fs.existsSync(cfgFile)) {
+    configData = JSON.parse(fs.readFileSync(cfgFile, 'utf8'));
+  }
+  configData.roles = { ...(configData.roles ?? {}), ...bindings };
+  if (!configData.$schema) {
+    configData.$schema = './schemas/config.schema.json';
+  }
+
+  fs.mkdirSync(path.dirname(cfgFile), { recursive: true });
+  fs.writeFileSync(cfgFile, `${JSON.stringify(configData, null, 2)}\n`, 'utf8');
+
+  return {
+    sheetPath: sheet.path,
+    sheetExists: sheet.exists,
+    configPath: cfgFile,
+    rolesUpdated: Object.keys(bindings),
+    overflows,
+    overflowWarnings: overflows.length
+      ? sheetBindingOverflowWarnings(overflows)
+      : [],
+    defaultEffort: parsed.defaultEffort,
+    sessionHook: parsed.sessionHook,
+    droppedLines: parsed.droppedLines,
+  };
+}
+
+export function initModelSheet(filePath) {
+  const target = path.resolve(filePath ?? defaultModelSheetPath());
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  if (!fs.existsSync(target)) {
+    const body = defaultSheetTemplate();
+    if (target.endsWith('.mdc')) {
+      fs.writeFileSync(
+        target,
+        `---
+description: pstack per-role model choices (zedpstack sync)
+alwaysApply: true
+---
+${body}`,
+        'utf8',
+      );
+    } else {
+      fs.writeFileSync(target, body, 'utf8');
+    }
+  }
+  return target;
+}
+
+export function showSetupStatus() {
+  const sheet = readModelSheet(
+    process.env.ZEDPSTACK_MODEL_SHEET ?? defaultModelSheetPath(),
+  );
+  const { path: cfgPath, data } = loadConfig();
+  return {
+    modelSheet: sheet.path,
+    modelSheetExists: sheet.exists,
+    configPath: cfgPath,
+    roleCount: Object.keys(data.roles ?? {}).length,
+    roles: data.roles ?? {},
+  };
+}
+/**
+ * Parse / write pstack-compatible model override sheets (setup-pstack shape).
+ * Maps sheet roles to zedpstack RoleBinding keys for dispatch workers.
+ */
+
+const EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+
+/** pstack sheet role label → zedpstack config role ids */
+export const SHEET_TO_ZEDPSTACK_ROLES = {
+  'how explorer': ['how-explorer', 'explorer'],
+  'how explainer': ['how-explainer', 'synthesizer'],
+  'why investigators': ['why-investigator'],
+  'why synthesizer': ['why-synthesizer'],
+  'architect runners': ['architect-runner-a', 'architect-runner-b'],
+  'interrogate reviewers': [
+    'interrogate-reviewer-a',
+    'interrogate-reviewer-b',
+    'interrogate-reviewer-c',
+  ],
+  'reflect tooling': ['reflect-reviewer-tooling'],
+  'reflect judgment': ['reflect-reviewer-judgment'],
+  'reflect divergent': ['reflect-reviewer-divergent'],
+  'reflect synthesizer': ['reflect-synthesize'],
+  'reflect judgment, divergent, synthesizer': [
+    'reflect-reviewer-judgment',
+    'reflect-reviewer-divergent',
+    'reflect-synthesize',
+  ],
+  'architect ground': ['architect-ground'],
+  'architect synthesize': ['architect-synthesize'],
+  'interrogate lead': ['interrogate-lead'],
+};
+
+/** One model on these rows applies to every mapped zed role (not a positional panel). */
+const SHARED_SHEET_ROLES = new Set(['reflect judgment, divergent, synthesizer']);
+
+/** List length sets subagent count; extra entries must not overwrite the last slot. */
+const PANEL_SHEET_ROLES = new Set(['architect runners', 'interrogate reviewers']);
+
+/**
+ * @param {string} slugWithOptionalEffort e.g. "haiku @high" or "gpt-6.1-sol"
+ */
+export function parseModelValue(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === 'inherit-parent' || trimmed === 'auto') {
+    return { model: trimmed, effort: null };
+  }
+  const at = trimmed.lastIndexOf(' @');
+  if (at > 0) {
+    const model = trimmed.slice(0, at).trim();
+    const effort = trimmed.slice(at + 2).trim().toLowerCase();
+    if (EFFORT_LEVELS.has(effort)) {
+      return { model, effort };
+    }
+  }
+  return { model: trimmed, effort: null };
+}
+
+/**
+ * @param {string} text full sheet body
+ * @returns {{ roles: Record<string, string[]>, defaultEffort: string|null, sessionHook: string|null, droppedLines: string[] }}
+ */
+export function parseModelSheet(text) {
+  const roles = {};
+  let defaultEffort = null;
+  let sessionHook = null;
+  const droppedLines = [];
+
+  for (const line of text.split('\n')) {
+    const stripped = line.trim();
+    if (!stripped || stripped.startsWith('#')) continue;
+    if (stripped.startsWith('---')) continue;
+
+    const colon = stripped.indexOf(':');
+    if (colon < 0) {
+      droppedLines.push(stripped);
+      continue;
+    }
+    const key = stripped.slice(0, colon).trim().toLowerCase();
+    const value = stripped.slice(colon + 1).trim();
+
+    if (key === 'default effort') {
+      defaultEffort = value;
+      continue;
+    }
+    if (key === 'session hook') {
+      sessionHook = value;
+      continue;
+    }
+
+    const parts = value.split(',').map((p) => p.trim()).filter(Boolean);
+    roles[key] = parts;
+  }
+
+  return { roles, defaultEffort, sessionHook, droppedLines };
+}
+
+/**
+ * Infer CLI runtime from model slug (heuristic; user can override in config).
+ */
+export function inferRuntimeForModel(model) {
+  if (!model || model === 'inherit-parent' || model === 'auto') {
+    return 'claude';
+  }
+  const s = model.toLowerCase();
+  if (
+    s.includes('gpt') ||
+    s.includes('codex') ||
+    s.includes('-sol') ||
+    s.includes('o3') ||
+    s.includes('o4') ||
+    s.startsWith('chatgpt')
+  ) {
+    return 'codex';
+  }
+  return 'claude';
+}
+
+function bindingForModel(raw, globalEffort) {
+  const { model, effort } = parseModelValue(raw);
+  if (!model || model === 'inherit-parent' || model === 'auto') {
+    return null;
+  }
+  const binding = {
+    runtime: inferRuntimeForModel(model),
+    model,
+    permissionProfile: 'read-only',
+  };
+  const eff = effort ?? globalEffort;
+  if (eff) binding.effort = eff;
+  return binding;
+}
+
+/**
+ * Human-readable warnings for panel overflow (extra models with no slot).
+ * @param {{ sheetRole: string, model: string, index: number }[]} overflows
+ */
+export function sheetBindingOverflowWarnings(overflows) {
+  return overflows.map(
+    (entry) =>
+      `Sheet row "${entry.sheetRole}" has more models than slots; ignored "${entry.model}" at position ${entry.index + 1}.`,
+  );
+}
+
+/**
+ * Build zedpstack config role entries from a parsed sheet.
+ * @returns {{
+ *   bindings: Record<string, { runtime: string, model: string, permissionProfile: string, effort?: string }>,
+ *   overflows: { sheetRole: string, model: string, index: number }[],
+ * }}
+ */
+export function bindingsFromSheet(parsed, { defaultEffort = 'session' } = {}) {
+  const globalEffort =
+    parsed.defaultEffort && parsed.defaultEffort !== 'session'
+      ? parsed.defaultEffort
+      : defaultEffort !== 'session'
+        ? defaultEffort
+        : null;
+
+  const out = {};
+  const overflows = [];
+
+  for (const [sheetRole, values] of Object.entries(parsed.roles)) {
+    const zedRoles = SHEET_TO_ZEDPSTACK_ROLES[sheetRole];
+    if (!zedRoles?.length) continue;
+
+    const usable = values
+      .map((raw) => ({ raw, binding: bindingForModel(raw, globalEffort) }))
+      .filter((entry) => entry.binding);
+
+    if (SHARED_SHEET_ROLES.has(sheetRole) && usable.length === 1) {
+      const binding = usable[0].binding;
+      for (const targetRole of zedRoles) {
+        out[targetRole] = binding;
+      }
+      continue;
+    }
+
+    const panel = PANEL_SHEET_ROLES.has(sheetRole);
+
+    usable.forEach(({ raw, binding }, index) => {
+      if (panel && index >= zedRoles.length) {
+        overflows.push({
+          sheetRole,
+          model: parseModelValue(raw).model,
+          index,
+        });
+        return;
+      }
+      const targetRole = panel
+        ? zedRoles[index]
+        : (zedRoles[index] ?? zedRoles[zedRoles.length - 1]);
+      out[targetRole] = binding;
+    });
+  }
+
+  return { bindings: out, overflows };
+}
+
+export function defaultSheetTemplate() {
+  return `# pstack model configuration (zedpstack sync)
+
+how explorer: haiku
+how explainer: gpt-6.1-sol
+why investigators: gpt-6.1-sol
+why synthesizer: haiku
+architect ground: haiku
+architect runners: gpt-6.1-sol, haiku
+architect synthesize: gpt-6.1-sol
+interrogate reviewers: haiku, haiku, haiku
+interrogate lead: gpt-6.1-sol
+reflect tooling: haiku
+reflect judgment: haiku
+reflect divergent: haiku
+reflect synthesizer: haiku
+
+default effort: session
+session hook: on
+`;
+}
+import fs from 'node:fs';
+import path from 'node:path';
+import { zedpstackRoot } from './paths.mjs';
+
+export function loadConfig() {
+  const candidates = [
+    process.env.ZEDPSTACK_CONFIG,
+    path.join(zedpstackRoot(), 'zedpstack.config.json'),
+    path.join(zedpstackRoot(), 'zedpstack.config.local.json'),
+  ].filter(Boolean);
+
+  for (const file of candidates) {
+    if (fs.existsSync(file)) {
+      const raw = fs.readFileSync(file, 'utf8');
+      return { path: file, data: JSON.parse(raw) };
+    }
+  }
+
+  const example = path.join(zedpstackRoot(), 'zedpstack.config.example.json');
+  if (fs.existsSync(example)) {
+    return { path: example, data: JSON.parse(fs.readFileSync(example, 'utf8')) };
+  }
+
+  throw new Error(
+    'No zedpstack config found. Copy zedpstack.config.example.json to zedpstack.config.json',
+  );
+}
+
+/**
+ * @returns {import('./types.mjs').RoleBinding}
+ */
+const ROLE_BINDING_ALIASES = {
+  'how-explorer': 'explorer',
+  'how-explainer': 'synthesizer',
+  'why-investigator': 'explorer',
+  'why-synthesizer': 'synthesizer',
+  'architect-ground': 'explorer',
+  'architect-runner': 'explorer',
+  'architect-synthesize': 'synthesizer',
+  'interrogate-reviewer': 'explorer',
+  'interrogate-reviewer-a': 'interrogate-reviewer',
+  'interrogate-reviewer-b': 'interrogate-reviewer',
+  'interrogate-reviewer-c': 'interrogate-reviewer',
+  'interrogate-lead': 'synthesizer',
+  'reflect-reviewer': 'explorer',
+  'reflect-reviewer-judgment': 'reflect-reviewer',
+  'reflect-reviewer-tooling': 'reflect-reviewer',
+  'reflect-reviewer-divergent': 'reflect-reviewer',
+  'reflect-synthesize': 'synthesizer',
+  'architect-runner-a': 'architect-runner',
+  'architect-runner-b': 'architect-runner',
+};
+
+export function resolveRoleBindingKey(roles, role) {
+  const seen = new Set();
+  let current = role;
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    if (roles[current]) {
+      return current;
+    }
+    current = ROLE_BINDING_ALIASES[current];
+  }
+  return null;
+}
+
+export function resolveRoleBinding(config, role) {
+  const roles = config.data.roles ?? {};
+  const key = resolveRoleBindingKey(roles, role);
+  const binding = key ? roles[key] : undefined;
+  if (!binding?.runtime || !binding?.model || !binding?.permissionProfile) {
+    throw new Error(`Missing RoleBinding for role "${role}" in config`);
+  }
+  const out = {
+    runtime: binding.runtime,
+    model: binding.model,
+    permissionProfile: binding.permissionProfile,
+  };
+  if (binding.effort) {
+    out.effort = binding.effort;
+  }
+  return out;
+}
+
+export function resolveTimeout(config, role) {
+  const timeouts = config.data.timeouts ?? {};
+  const seen = new Set();
+  let current = role;
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    if (typeof timeouts[current] === 'number') {
+      return timeouts[current];
+    }
+    current = ROLE_BINDING_ALIASES[current];
+  }
+  return 600_000;
+}
+{
+  "$schema": "./schemas/config.schema.json",
+  "roles": {
+    "how-explorer": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "how-explainer": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "why-investigator": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "why-synthesizer": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "architect-ground": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "architect-runner-a": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "architect-runner-b": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "architect-synthesize": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "interrogate-reviewer-a": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "interrogate-reviewer-b": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "interrogate-reviewer-c": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "interrogate-lead": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "reflect-reviewer-tooling": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "reflect-reviewer-judgment": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "reflect-reviewer-divergent": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "reflect-synthesize": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "explorer": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "synthesizer": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    },
+    "interrogate-reviewer": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "reflect-reviewer": {
+      "runtime": "claude",
+      "model": "haiku",
+      "permissionProfile": "read-only"
+    },
+    "architect-runner": {
+      "runtime": "codex",
+      "model": "gpt-6.1-sol",
+      "permissionProfile": "read-only"
+    }
+  },
+  "timeouts": {
+    "how-explorer": 600000,
+    "how-explainer": 600000,
+    "explorer": 600000,
+    "synthesizer": 600000
+  }
+}
+
+hook: PostToolUse
+hook: PostToolUse
+exec
+/bin/zsh -lc "sed -n '1,280p' src/run.mjs && cat src/runtimes/codex.mjs src/runtimes/claude.mjs" in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+import fs from 'node:fs';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { loadConfig, resolveRoleBinding, resolveTimeout } from './config.mjs';
+import { EventSink } from './events/sink.mjs';
+import { tryGitCommit } from './git.mjs';
+import {
+  computeRepoSourceFingerprint,
+  computeStepIdentity,
+  sha256Hex,
+} from './hash.mjs';
+import {
+  JUDGMENT_INSTRUCTIONS_FILE,
+  ORCHESTRATOR_JUDGMENT_FILE,
+  validateOrchestratorJudgment,
+} from './judgment.mjs';
+import {
+  createInitialManifest,
+  readManifest,
+  updateManifestStep,
+  writeManifestAtomic,
+} from './manifest.mjs';
+import {
+  attachPstackUpstreamMeta,
+  loadPlaybook,
+  loadPrompt,
+  loadStepPrompt,
+} from './playbook.mjs';
+import { resolvePstackInstall } from './pstack.mjs';
+import { validationProfileForRole } from './roles.mjs';
+import { runDir, workerDir, zedpstackRoot } from './paths.mjs';
+import {
+  canReuseCompletedStep,
+  resultPathForStep,
+  stdoutLogForStep,
+} from './resume.mjs';
+import { runWorkerForBinding } from './runtimes/index.mjs';
+import { validateWorkerResult } from './validation.mjs';
+
+function initStepRecords(playbookDef, config) {
+  return playbookDef.steps.map((step) => {
+    const binding = resolveRoleBinding(config, step.role);
+    return {
+      stepId: step.id,
+      role: step.role,
+      status: 'pending',
+      stepIdentityHash: null,
+      binding,
+      attempts: [],
+    };
+  });
+}
+
+function findStepDef(playbookDef, stepId) {
+  const s = playbookDef.steps.find((x) => x.id === stepId);
+  if (!s) throw new Error(`Unknown step ${stepId}`);
+  return s;
+}
+
+function buildInputRefs(runRoot, stepDef, playbookDef) {
+  const inputRefs = [];
+  if (!stepDef.inputFrom?.length) return inputRefs;
+
+  for (const fromId of stepDef.inputFrom) {
+    const prevResult = resultPathForStep(runRoot, fromId);
+    if (!fs.existsSync(prevResult)) {
+      throw new Error(`Upstream step ${fromId} result missing for ${stepDef.id}`);
+    }
+    const raw = fs.readFileSync(prevResult, 'utf8');
+    const parsed = JSON.parse(raw);
+    const upstreamStep = playbookDef.steps.find((s) => s.id === fromId);
+    const upstreamRole = upstreamStep
+      ? validationProfileForRole(upstreamStep.role)
+      : null;
+    const upstreamValidation = validateWorkerResult({
+      exitCode: parsed.exitCode ?? 0,
+      resultPath: prevResult,
+      outputContract: 'markdown-report',
+      processExited: true,
+      role: upstreamStep?.role ?? null,
+      validationProfile: upstreamRole,
+      stdoutLogPath: stdoutLogForStep(runRoot, fromId),
+    });
+    if (!upstreamValidation.valid) {
+      throw new Error(
+        `Upstream step ${fromId} invalid: ${upstreamValidation.errors.join('; ')}`,
+      );
+    }
+    inputRefs.push({ path: prevResult, hash: sha256Hex(raw) });
+  }
+  return inputRefs;
+}
+
+function loadPriorTexts(runRoot, stepDef) {
+  const priorTexts = {};
+  for (const fromId of stepDef.inputFrom ?? []) {
+    const p = resultPathForStep(runRoot, fromId);
+    priorTexts[fromId] = JSON.parse(fs.readFileSync(p, 'utf8')).text;
+  }
+  return priorTexts;
+}
+
+function preparePromptText({ stepDef, playbook, runRoot, repoRoot, goal, context }) {
+  const priorTexts = stepDef.inputFrom?.length ? loadPriorTexts(runRoot, stepDef) : {};
+  return loadStepPrompt({
+    playbook,
+    stepDef,
+    goal,
+    repoRoot,
+    context,
+    priorTexts,
+  });
+}
+
+function manifestWasCancelled(runRoot) {
+  if (!fs.existsSync(path.join(runRoot, 'manifest.json'))) {
+    return false;
+  }
+  return readManifest(runRoot).status === 'cancelled';
+}
+
+function loadRunContext(runRoot) {
+  const p = path.join(runRoot, 'context-input.md');
+  if (!fs.existsSync(p)) {
+    return '';
+  }
+  return fs.readFileSync(p, 'utf8');
+}
+
+async function executeStep({
+  manifest,
+  playbook,
+  playbookDef,
+  config,
+  runRoot,
+  repoRoot,
+  goal,
+  stepId,
+  eventSink,
+  runId,
+}) {
+  const context = loadRunContext(runRoot);
+  if (manifestWasCancelled(runRoot)) {
+    return readManifest(runRoot);
+  }
+
+  const stepRecord = manifest.steps.find((s) => s.stepId === stepId);
+  const stepDef = findStepDef(playbookDef, stepId);
+  const binding = resolveRoleBinding(config, stepDef.role);
+  const inputRefs = buildInputRefs(runRoot, stepDef, playbookDef);
+  const promptText = preparePromptText({
+    stepDef,
+    playbook,
+    runRoot,
+    repoRoot,
+    goal,
+    context,
+  });
+
+  const repoCommit = tryGitCommit(repoRoot);
+  const repoSourceFingerprint = computeRepoSourceFingerprint(repoRoot);
+  const stepIdentityHash = computeStepIdentity({
+    playbookId: playbookDef.id,
+    playbookVersion: playbookDef.version,
+    stepId,
+    goal,
+    inputRefs,
+    binding,
+    renderedPrompt: promptText,
+    repoCommit,
+    repoSourceFingerprint,
+    pstackVersion: playbookDef.upstream?.pstackVersion ?? null,
+  });
+
+  const resultPath = resultPathForStep(runRoot, stepId);
+  const stdoutLog = stdoutLogForStep(runRoot, stepId);
+
+  const reuse = canReuseCompletedStep({
+    stepRecord,
+    stepIdentityHash,
+    resultPath,
+    outputContract: stepDef.outputContract,
+    role: stepDef.role,
+    validationProfile: validationProfileForRole(stepDef.role),
+    stdoutLogPath: stdoutLog,
+  });
+
+  if (reuse.reuse) {
+    eventSink.emit('step.completed', { runId, stepId, resumed: true, reuse: true });
+    const updated = updateManifestStep(manifest, stepId, {
+      stepIdentityHash,
+      lastErrors: null,
+    });
+    writeManifestAtomic(runRoot, updated);
+    return updated;
+  }
+
+  if (
+    reuse.reason === 'result_invalid' ||
+    reuse.reason === 'result_missing' ||
+    reuse.reason === 'identity_mismatch'
+  ) {
+    manifest = updateManifestStep(manifest, stepId, {
+      status: 'pending',
+      validResult: false,
+    });
+    writeManifestAtomic(runRoot, manifest);
+  }
+
+  eventSink.emit('step.started', { runId, stepId, stepIdentityHash });
+
+  const taskSpec = {
+    goal,
+    inputRefs,
+    outputContract: stepDef.outputContract,
+    timeout: resolveTimeout(config, stepDef.role),
+  };
+
+  const wRoot = workerDir(runRoot, stepId);
+  const workerId = `${stepId}-${Date.now()}`;
+  const attempt = {
+    workerId,
+    startedAt: new Date().toISOString(),
+    binding,
+    taskSpec,
+    stepIdentityHash,
+  };
+
+  let manifestPatched = updateManifestStep(manifest, stepId, {
+    status: 'running',
+    stepIdentityHash,
+    attempts: [...stepRecord.attempts, attempt],
+  });
+  writeManifestAtomic(runRoot, manifestPatched);
+
+  const patchAttemptPid = (pid) => {
+    const stepNow = manifestPatched.steps.find((s) => s.stepId === stepId);
+    const attemptsWithPid = [...stepNow.attempts];
+    const lastIdx = attemptsWithPid.length - 1;
+    if (lastIdx >= 0) {
+      attemptsWithPid[lastIdx] = { ...attemptsWithPid[lastIdx], pid };
+    }
+    manifestPatched = updateManifestStep(manifestPatched, stepId, {
+      attempts: attemptsWithPid,
+    });
+    writeManifestAtomic(runRoot, manifestPatched);
+  };
+
+  const outcome = await runWorkerForBinding({
+    binding,
+    taskSpec,
+    workerRoot: wRoot,
+    repoRoot: path.resolve(repoRoot),
+    promptText,
+    eventSink,
+    workerId,
+    runId,
+    stepId,
+    onWorkerSpawned: ({ pid }) => patchAttemptPid(pid),
+  });
+
+  if (manifestWasCancelled(runRoot)) {
+    return readManifest(runRoot);
+  }
+
+  const validation = validateWorkerResult({
+    exitCode: outcome.exitCode,
+    resultPath: outcome.resultPath,
+    outputContract: stepDef.outputContract,
+    processExited: outcome.processExited,
+    role: stepDef.role,
+    validationProfile: validationProfileForRole(stepDef.role),
+    stdoutLogPath: stdoutLog,
+  });
+
+  attempt.finishedAt = new Date().toISOString();
+  attempt.exitCode = outcome.exitCode;
+  attempt.validation = validation;
+  attempt.cliVersion = outcome.cliVersion;
+
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { buildCodexArgv, workerEnv } from '../permissions.mjs';
+import {
+  accumulateCodexReadSignals,
+  detectCodexShellInvocation,
+  detectCodexShellMutation,
+} from '../shellSignals.mjs';
+import { appendChunk } from './stream.mjs';
+
+export async function runCodexWorker({
+  binding,
+  taskSpec,
+  workerRoot,
+  repoRoot,
+  promptText,
+  eventSink,
+  workerId,
+  runId,
+  stepId,
+  onWorkerSpawned,
+}) {
+  const stdoutLog = path.join(workerRoot, 'stdout.log');
+  const stderrLog = path.join(workerRoot, 'stderr.log');
+  const codexLastMessage = path.join(workerRoot, 'codex-last-message.txt');
+  const resultPath = path.join(workerRoot, 'result.json');
+  const promptPath = path.join(workerRoot, 'prompt.md');
+
+  fs.mkdirSync(workerRoot, { recursive: true });
+  fs.writeFileSync(promptPath, promptText, 'utf8');
+  fs.writeFileSync(stdoutLog, '');
+  fs.writeFileSync(stderrLog, '');
+
+  const argv = [
+    ...buildCodexArgv({
+      model: binding.model,
+      repoRoot,
+      permissionProfile: binding.permissionProfile,
+      resultOutPath: codexLastMessage,
+    }),
+    promptText,
+  ];
+
+  const child = spawn(argv[0], argv.slice(1), {
+    cwd: repoRoot,
+    env: workerEnv('codex'),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  eventSink.emit('worker.spawned', {
+    runId,
+    stepId,
+    workerId,
+    runtime: 'codex',
+    model: binding.model,
+    pid: child.pid,
+    cwd: repoRoot,
+    argv,
+  });
+  onWorkerSpawned?.({ pid: child.pid });
+
+  const timeout = setTimeout(() => {
+    eventSink.emit('worker.timeout', { runId, stepId, workerId, pid: child.pid });
+    child.kill('SIGTERM');
+    setTimeout(() => child.kill('SIGKILL'), 5000);
+  }, taskSpec.timeout);
+
+  const exitCode = await new Promise((resolve, reject) => {
+    child.stdout.on('data', (buf) => {
+      const chunk = buf.toString();
+      appendChunk(stdoutLog, chunk);
+      eventSink.emit('worker.output', {
+        runId,
+        stepId,
+        workerId,
+        stream: 'stdout',
+        chunk,
+      });
+    });
+    child.stderr.on('data', (buf) => {
+      const chunk = buf.toString();
+      appendChunk(stderrLog, chunk);
+      eventSink.emit('worker.stderr', {
+        runId,
+        stepId,
+        workerId,
+        stream: 'stderr',
+        chunk,
+      });
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      clearTimeout(timeout);
+      resolve(code ?? 1);
+    });
+  });
+
+  let text = '';
+  if (fs.existsSync(codexLastMessage)) {
+    text = fs.readFileSync(codexLastMessage, 'utf8').trim();
+  }
+  if (!text && fs.existsSync(stdoutLog)) {
+    text = fs.readFileSync(stdoutLog, 'utf8').trim();
+  }
+
+  const stderrText = fs.existsSync(stderrLog) ? fs.readFileSync(stderrLog, 'utf8') : '';
+  const shellInvoked = detectCodexShellInvocation(stderrText);
+  const shellMutationInvoked = shellInvoked
+    ? detectCodexShellMutation(stderrText)
+    : false;
+  const readSignals = accumulateCodexReadSignals(stderrText);
+
+  const result = {
+    ok: exitCode === 0 && text.length >= 32,
+    text: text || '(empty)',
+    format: 'markdown',
+    exitCode,
+    runtime: 'codex',
+    model: binding.model,
+    cliVersion: null,
+    nativeSessionId: null,
+    signals: { shellInvoked, shellMutationInvoked, ...readSignals },
+  };
+
+  fs.writeFileSync(resultPath, JSON.stringify(result, null, 2), 'utf8');
+
+  if (exitCode === 0 && result.ok) {
+    eventSink.emit('worker.completed', { runId, stepId, workerId, exitCode });
+  } else {
+    eventSink.emit('worker.failed', {
+      runId,
+      stepId,
+      workerId,
+      exitCode,
+      reason: 'exit_or_empty',
+    });
+  }
+
+  return { exitCode, resultPath, processExited: true };
+}
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { buildClaudeArgv, workerEnv } from '../permissions.mjs';
+import {
+  accumulateClaudeSignals,
+  appendChunk,
+  extractClaudeStreamText,
+} from './stream.mjs';
+
+export async function runClaudeWorker({
+  binding,
+  taskSpec,
+  workerRoot,
+  repoRoot,
+  promptText,
+  eventSink,
+  workerId,
+  runId,
+  stepId,
+  onWorkerSpawned,
+}) {
+  const stdoutLog = path.join(workerRoot, 'stdout.log');
+  const stderrLog = path.join(workerRoot, 'stderr.log');
+  const resultPath = path.join(workerRoot, 'result.json');
+  const promptPath = path.join(workerRoot, 'prompt.md');
+
+  fs.mkdirSync(workerRoot, { recursive: true });
+  fs.writeFileSync(promptPath, promptText, 'utf8');
+  fs.writeFileSync(stdoutLog, '');
+  fs.writeFileSync(stderrLog, '');
+
+  const argv = buildClaudeArgv({
+    model: binding.model,
+    permissionProfile: binding.permissionProfile,
+    repoRoot,
+  });
+
+  const child = spawn(argv[0], argv.slice(1), {
+    cwd: repoRoot,
+    env: workerEnv('claude'),
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  eventSink.emit('worker.spawned', {
+    runId,
+    stepId,
+    workerId,
+    runtime: 'claude',
+    model: binding.model,
+    pid: child.pid,
+    cwd: repoRoot,
+    argv,
+  });
+  onWorkerSpawned?.({ pid: child.pid });
+
+  child.stdin.write(promptText);
+  child.stdin.end();
+
+  let aggregatedText = '';
+  let terminalResultText = null;
+  let lineBuf = '';
+  const signals = { readAttempts: 0, readSuccess: 0, readDenied: 0 };
+
+  const timeout = setTimeout(() => {
+    eventSink.emit('worker.timeout', { runId, stepId, workerId, pid: child.pid });
+    child.kill('SIGTERM');
+    setTimeout(() => child.kill('SIGKILL'), 5000);
+  }, taskSpec.timeout);
+
+  await new Promise((resolve, reject) => {
+    child.stdout.on('data', (buf) => {
+      const chunk = buf.toString();
+      appendChunk(stdoutLog, chunk);
+      eventSink.emit('worker.output', {
+        runId,
+        stepId,
+        workerId,
+        stream: 'stdout',
+        chunk,
+      });
+
+      lineBuf += chunk;
+      const lines = lineBuf.split('\n');
+      lineBuf = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        accumulateClaudeSignals(line, signals);
+        const { chunk, terminalResult } = extractClaudeStreamText(line);
+        if (terminalResult) terminalResultText = terminalResult;
+        if (chunk) aggregatedText += chunk;
+      }
+    });
+
+    child.stderr.on('data', (buf) => {
+      const chunk = buf.toString();
+      appendChunk(stderrLog, chunk);
+      eventSink.emit('worker.stderr', {
+        runId,
+        stepId,
+        workerId,
+        stream: 'stderr',
+        chunk,
+      });
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      clearTimeout(timeout);
+      resolve(code ?? 1);
+    });
+  });
+
+  if (lineBuf.trim()) {
+    accumulateClaudeSignals(lineBuf, signals);
+    const { chunk, terminalResult } = extractClaudeStreamText(lineBuf);
+    if (terminalResult) terminalResultText = terminalResult;
+    if (chunk) aggregatedText += chunk;
+  }
+
+  const exitCode = child.exitCode ?? 1;
+  const text = (terminalResultText ?? aggregatedText).trim();
+
+  const result = {
+    ok: exitCode === 0,
+    text: text || '(empty)',
+    format: 'markdown',
+    exitCode,
+    runtime: 'claude',
+    model: binding.model,
+    cliVersion: null,
+    nativeSessionId: null,
+    signals,
+  };
+
+  fs.writeFileSync(resultPath, JSON.stringify(result, null, 2), 'utf8');
+
+  if (exitCode === 0) {
+    eventSink.emit('worker.completed', { runId, stepId, workerId, exitCode, signals });
+  } else {
+    eventSink.emit('worker.failed', {
+      runId,
+      stepId,
+      workerId,
+      exitCode,
+      reason: 'nonzero_exit',
+    });
+  }
+
+  return { exitCode, resultPath, processExited: true };
+}
+
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+exec
+/bin/zsh -lc "wc -c docs/discuss-next-claude-opus.txt docs/review-v04-claude-opus.txt docs/review-v04-codex-sol-last.txt && rg -n 'E2BIG|stdin|effort|inherit|parallel|paralel|fan-out|backlog|pendiente|NO.GO|GO|MH-Next|write' docs src playbooks tests -g '"'!discuss-next-codex*'"' -g '"'!*.err'"'" in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+       0 docs/discuss-next-claude-opus.txt
+    6094 docs/review-v04-claude-opus.txt
+    6400 docs/review-v04-codex-sol-last.txt
+   12494 total
+tests/setup-config.test.mjs:14:    fs.writeFileSync(
+src/pstackPrompts.mjs:104:    'Read-only design package. No file writes. Types/signatures + rationale only.',
+docs/AUDIT_REQUEST_1_2.md:17:1. **Orden de entrega**: ¿repo GitHub primero (vacío + CI) y luego P2 en el mismo repo, o P2 en MH-Next y luego `git subtree`/copy?
+docs/AUDIT_REQUEST_1_2.md:22:6. **GO/NO-GO**: lista priorizada máx. 5 ítems para 1.2 (no Session 2).
+tests/manifest.test.mjs:6:import { readManifest, writeManifestAtomic } from '../src/manifest.mjs';
+tests/manifest.test.mjs:8:describe('manifest atomic write', () => {
+tests/manifest.test.mjs:9:  it('writes readable manifest', () => {
+tests/manifest.test.mjs:12:    writeManifestAtomic(dir, m);
+tests/resume-regression.test.mjs:32:    fs.writeFileSync(
+tests/resume-regression.test.mjs:63:    fs.writeFileSync(
+playbooks/architecture-review/prompts/synthesize.md:5:{{GOAL}}
+tests/watch-run.test.mjs:14:function writeEvent(eventsPath, type, extra = {}) {
+tests/watch-run.test.mjs:27:  fs.writeFileSync(eventsPath, initialLines);
+tests/watch-run.test.mjs:71:    writeEvent(eventsPath, 'run.started', { runId });
+tests/watch-run.test.mjs:72:    writeEvent(eventsPath, 'worker.spawned', { stepId: 'explore', workerId: 'w1' });
+tests/watch-run.test.mjs:73:    writeEvent(eventsPath, 'worker.completed', { stepId: 'explore', workerId: 'w1', exitCode: 0 });
+tests/watch-run.test.mjs:74:    writeEvent(eventsPath, 'run.completed', { runId });
+tests/watch-run.test.mjs:84:      writeLine: (line) => lines.push(line),
+tests/watch-run.test.mjs:106:      writeLine: (line) => lines.push(line),
+tests/watch-run.test.mjs:109:    writeEvent(eventsPath, 'run.started', { runId });
+tests/watch-run.test.mjs:110:    writeEvent(eventsPath, 'run.awaiting_judgment', { runId });
+tests/watch-run.test.mjs:113:    writeEvent(eventsPath, 'run.completed', { runId });
+tests/watch-run.test.mjs:126:    writeEvent(eventsPath, 'run.failed', { runId });
+tests/watch-run.test.mjs:134:      writeLine: (line) => lines.push(line),
+tests/watch-run.test.mjs:144:      writeLine: (line) => lines.push(line),
+tests/model-sheet.test.mjs:12:  it('parses effort suffix', () => {
+tests/model-sheet.test.mjs:13:    assert.deepEqual(parseModelValue('opus @high'), { model: 'opus', effort: 'high' });
+tests/model-sheet.test.mjs:21:default effort: session
+tests/judgment.test.mjs:18:    fs.writeFileSync(instructionsPath, body);
+tests/judgment.test.mjs:19:    fs.writeFileSync(judgmentPath, body);
+tests/judgment.test.mjs:28:    fs.writeFileSync(instructionsPath, 'template');
+tests/judgment.test.mjs:29:    fs.writeFileSync(
+tests/judgment.test.mjs:41:    fs.writeFileSync(
+tests/judgment.test.mjs:45:    fs.writeFileSync(
+tests/validation.test.mjs:12:    fs.writeFileSync(
+tests/validation.test.mjs:28:    fs.writeFileSync(
+docs/review-v04-claude-opus.txt:4:- **Effort is dead end-to-end.** `bindingsFromSheet` writes `effort` (`src/modelSheet.mjs:143`) but `resolveRoleBinding` returns only runtime/model/permissionProfile (`src/config.mjs:61-65`) and neither `buildClaudeArgv` nor `buildCodexArgv` emit a reasoning flag (`src/permissions.mjs:44-83`).
+docs/review-v04-claude-opus.txt:5:- **Sequential, not fan-out.** `src/run.mjs:394-421` is a `for…of` loop; independent steps (reviewers a/b/c, runners a/b) run serially.
+docs/review-v04-claude-opus.txt:6:- **Codex passes the full prompt as argv** (`src/runtimes/codex.mjs:42`, emitted in `worker.spawned.argv` at :51-60), while Claude uses stdin (`src/runtimes/claude.mjs:57`).
+docs/review-v04-claude-opus.txt:11:**GO-with-fixes** — architecture is sound and the read-only boundary holds, but a validation-role mismatch and the sequential-vs-fanout gap should land before a production `/zedpstack`.
+docs/review-v04-claude-opus.txt:22:| Medium | Gaps vs pstack | Independent steps run sequentially; pstack fans out reviewers/runners in parallel. 3 reviewers + lead run one-at-a-time (`src/run.mjs:394-421`). | Group steps with no shared `inputFrom` into a `Promise.all` wave; manifest already tracks per-step state. |
+docs/review-v04-claude-opus.txt:23:| Medium | Correctness / security | Codex receives the entire rendered prompt (incl. `--context-file` diff) as an argv element and records it in `worker.spawned.argv`; large diffs risk `E2BIG`, and the prompt is visible via `ps` / persisted in `events.jsonl` (`src/runtimes/codex.mjs:42,51-60`). Claude avoids this via stdin. | Pass the prompt to Codex via stdin/file and redact/omit the prompt arg from the emitted `argv`. |
+docs/review-v04-claude-opus.txt:25:| Low | Setup / sheet parse | When a sheet row lists more models than mapped zed roles (e.g. 3 values for `architect runners` → 2 roles), the extra value silently overwrites the last role (`src/modelSheet.mjs:136`). | Push overflow values into `droppedLines` or warn in the `setup apply` result. |
+docs/review-v04-claude-opus.txt:30:- **Fix the reviewer validation role matching and wire `effort` through** (`resolveRoleBinding` → runtime argv, e.g. Codex `-c model_reasoning_effort`), or explicitly drop `effort` from the sheet/SKILL so config doesn't carry dead contract.
+docs/review-v04-claude-opus.txt:31:- **Parallel fan-out for independent steps** to match "pstack completo" latency; sequential 3×-reviewer runs are the main parity/perf gap.
+docs/review-v04-claude-opus.txt:32:- **Harden `watch`/Codex-argv ergonomics**: auto-exit watch on terminal run state and move Codex prompts off argv (stdin/file) to avoid `E2BIG` and prompt leakage in `events.jsonl`/`ps`.
+src/setupConfig.mjs:66:  fs.writeFileSync(cfgFile, `${JSON.stringify(configData, null, 2)}\n`, 'utf8');
+src/setupConfig.mjs:89:      fs.writeFileSync(
+src/setupConfig.mjs:99:      fs.writeFileSync(target, body, 'utf8');
+playbooks/architecture-review/prompts/explorer.md:5:{{GOAL}}
+src/runtimes/claude.mjs:29:  fs.writeFileSync(promptPath, promptText, 'utf8');
+src/runtimes/claude.mjs:30:  fs.writeFileSync(stdoutLog, '');
+src/runtimes/claude.mjs:31:  fs.writeFileSync(stderrLog, '');
+src/runtimes/claude.mjs:57:  child.stdin.write(promptText);
+src/runtimes/claude.mjs:58:  child.stdin.end();
+src/runtimes/claude.mjs:136:  fs.writeFileSync(resultPath, JSON.stringify(result, null, 2), 'utf8');
+src/manifest.mjs:5:export function writeManifestAtomic(runRoot, manifest) {
+src/manifest.mjs:9:  fs.writeFileSync(tmp, body, 'utf8');
+src/runtimes/codex.mjs:31:  fs.writeFileSync(promptPath, promptText, 'utf8');
+src/runtimes/codex.mjs:32:  fs.writeFileSync(stdoutLog, '');
+src/runtimes/codex.mjs:33:  fs.writeFileSync(stderrLog, '');
+src/runtimes/codex.mjs:126:  fs.writeFileSync(resultPath, JSON.stringify(result, null, 2), 'utf8');
+tests/config-resolve.test.mjs:18:          effort: 'high',
+tests/config-resolve.test.mjs:34:    assert.equal(b.effort, 'high');
+src/run.mjs:21:  writeManifestAtomic,
+src/run.mjs:194:    writeManifestAtomic(runRoot, updated);
+src/run.mjs:207:    writeManifestAtomic(runRoot, manifest);
+src/run.mjs:234:  writeManifestAtomic(runRoot, manifestPatched);
+src/run.mjs:246:    writeManifestAtomic(runRoot, manifestPatched);
+src/run.mjs:310:  writeManifestAtomic(runRoot, manifestPatched);
+src/run.mjs:314:function writeJudgmentInstructionsIfNeeded(runRoot, playbook, playbookDef, manifest, runId) {
+src/run.mjs:323:      GOAL: manifest.goal,
+src/run.mjs:330:  fs.writeFileSync(instructionsPath, judgmentTemplate, 'utf8');
+src/run.mjs:353:    fs.writeFileSync(path.join(runRoot, 'context-input.md'), context, 'utf8');
+src/run.mjs:371:      writeManifestAtomic(runRoot, manifest);
+src/run.mjs:388:    writeManifestAtomic(runRoot, manifest);
+src/run.mjs:403:      writeManifestAtomic(runRoot, manifest);
+src/run.mjs:424:    writeJudgmentInstructionsIfNeeded(runRoot, playbook, playbookDef, manifest, runId);
+src/run.mjs:427:    writeManifestAtomic(runRoot, manifest);
+src/run.mjs:454:  writeManifestAtomic(runRoot, manifest);
+tests/cancel-manifest.test.mjs:7:import { createInitialManifest, writeManifestAtomic } from '../src/manifest.mjs';
+tests/cancel-manifest.test.mjs:25:    writeManifestAtomic(runRoot, manifest);
+docs/AUDIT_REQUEST_1_2_CLOSE.md:5:Lee `zedpstack/src/` y tests. ¿GO para publicar `nndsk/zedpstack` y etiquetar v0.1.2?
+src/config.mjs:79:  if (binding.effort) {
+src/config.mjs:80:    out.effort = binding.effort;
+src/constants.mjs:9:    description: 'No repo writes; workers must not use dangerous bypass flags',
+src/events/sink.mjs:20:      fs.writeFileSync(this.#eventsPath, '');
+src/events/sink.mjs:36:      process.stderr.write(`[zedpstack] ${line}`);
+src/modelSheet.mjs:2: * Parse / write pstack-compatible model override sheets (setup-pstack shape).
+src/modelSheet.mjs:37:/** List length sets subagent count; extra entries must not overwrite the last slot. */
+src/modelSheet.mjs:45:  if (!trimmed || trimmed === 'inherit-parent' || trimmed === 'auto') {
+src/modelSheet.mjs:46:    return { model: trimmed, effort: null };
+src/modelSheet.mjs:51:    const effort = trimmed.slice(at + 2).trim().toLowerCase();
+src/modelSheet.mjs:52:    if (EFFORT_LEVELS.has(effort)) {
+src/modelSheet.mjs:53:      return { model, effort };
+src/modelSheet.mjs:56:  return { model: trimmed, effort: null };
+src/modelSheet.mjs:82:    if (key === 'default effort') {
+src/modelSheet.mjs:102:  if (!model || model === 'inherit-parent' || model === 'auto') {
+src/modelSheet.mjs:120:  const { model, effort } = parseModelValue(raw);
+src/modelSheet.mjs:121:  if (!model || model === 'inherit-parent' || model === 'auto') {
+src/modelSheet.mjs:129:  const eff = effort ?? globalEffort;
+src/modelSheet.mjs:130:  if (eff) binding.effort = eff;
+src/modelSheet.mjs:148: *   bindings: Record<string, { runtime: string, model: string, permissionProfile: string, effort?: string }>,
+src/modelSheet.mjs:217:default effort: session
+tests/validation-text-type.test.mjs:12:    fs.writeFileSync(resultPath, JSON.stringify({ ok: true, text: null }));
+tests/validation-text-type.test.mjs:28:    fs.writeFileSync(
+tests/validation-text-type.test.mjs:53:    fs.writeFileSync(
+src/cancel.mjs:3:import { readManifest, writeManifestAtomic } from './manifest.mjs';
+src/cancel.mjs:59:  writeManifestAtomic(runRoot, manifest);
+tests/validation-reviewer.test.mjs:12:    fs.writeFileSync(
+tests/validation-explorer.test.mjs:15:    fs.writeFileSync(
+tests/validation-explorer.test.mjs:37:    fs.writeFileSync(
+tests/validation-explorer.test.mjs:45:    fs.writeFileSync(
+tests/validation-explorer.test.mjs:65:    fs.writeFileSync(
+docs/AUDIT_REQUEST.md:3:Audita la implementación en el directorio `zedpstack/` (repo canónico embebido en MH-Next).
+src/watchRun.mjs:84:  writeLine = (line) => process.stderr.write(`${line}\n`),
+src/watchRun.mjs:107:        writeLine(formatEvent(event));
+docs/review-v04-codex-sol-last.txt:3:NO-GO
+docs/review-v04-codex-sol-last.txt:11:Reviewed v0.4.0 at `e596487`. All 28 non-writing tests passed; additional defects were reproduced in memory. No files were modified. Live model workflows and tests that write files were not run.
+docs/review-v04-codex-sol-last.txt:18:| P1 | Setup synchronization | `inherit-parent` and `auto` generate no binding. Apply merges existing bindings, so switching to inheritance or deleting a row silently retains the old model. [modelSheet.mjs:131-135](/Users/nndsk/Projects/zedpstack/src/modelSheet.mjs:131), [setupConfig.mjs:45-49](/Users/nndsk/Projects/zedpstack/src/setupConfig.mjs:45) | Reconcile generated overrides, including removals. Define inheritance explicitly or reject unsupported inheritance before writing. |
+docs/review-v04-codex-sol-last.txt:19:| P1 | Config aliases | New panel/lens aliases require multiple hops, but resolution follows one. Existing v0.3.1 configs consequently fail to resolve architect, interrogate, and reflect roles. Timeout inheritance also stops early. [config.mjs:32-74](/Users/nndsk/Projects/zedpstack/src/config.mjs:32) | Traverse aliases consistently or flatten them to supported fallback bindings. |
+docs/review-v04-codex-sol-last.txt:25:| P2, conditional | Read-only enforcement | Claude restricts built-in tools but inherits HOME and host configuration without isolating MCP or hooks. Read-only behavior is therefore configuration-dependent. No exploit was demonstrated. [permissions.mjs:44-102](/Users/nndsk/Projects/zedpstack/src/permissions.mjs:44) | Control inherited settings, hooks, and MCP configuration; verify the effective tool set. |
+docs/review-v04-codex-sol-last.txt:27:| P2 | Effort | Setup saves `effort`, but binding resolution discards it entirely. Neither runtime applies it; the documentation understates this as incomplete level support. [config.mjs:61-65](/Users/nndsk/Projects/zedpstack/src/config.mjs:61), [setup skill:53-55](/Users/nndsk/Projects/zedpstack/setup-zedpstack/SKILL.md:53) | Implement verified runtime mappings or report effort as unsupported during setup and dispatch. |
+docs/review-v04-codex-sol-last.txt:31:- Acceptance coverage for canonical sheets, inheritance resets, config migration, valid reviewer responses, and concurrent watch appends.
+docs/review-v04-codex-sol-last.txt:32:- Configurable panel fan-out. Dispatch currently awaits every step sequentially. [run.mjs:394-417](/Users/nndsk/Projects/zedpstack/src/run.mjs:394)
+docs/review-v04-codex-sol-last.txt:33:- For “pstack completo,” write workflows, babysit, shipping, swarm, and arena remain outside the five documented read-only adapters. Adding them requires separately agreed scope. [PSTACK_ADAPTERS.md:3-13](/Users/nndsk/Projects/zedpstack/docs/PSTACK_ADAPTERS.md:3)
+docs/REVIEW_REQUEST_v0.4.md:12:4. **Gaps vs “pstack completo”** — read-only boundary, effort field unused in CLI, sequential vs fan-out
+docs/REVIEW_REQUEST_v0.4.md:18:GO / NO-GO / GO-with-fixes (one line)
+src/playbook.mjs:139:  const vars = { GOAL: goal, REPO_ROOT: repoRoot };
+docs/PSTACK_ADAPTERS.md:11:No adaptados (siguen en pstack nativo / futuro): swarm, arena fan-out paralelo, feature, bug-fix (escritura), babysit, shipping.
+docs/AUDIT_REQUEST_PSTACK_ADAPTER.md:5:¿GO? 3 riesgos. Español breve.
+docs/DISCUSSION_NEXT_STEP.md:6:- Backlog conocido: fan-out paralelo, Codex stdin/E2BIG, effort en CLI, inherit-parent reconcile, write playbooks (feature/bug-fix), arena/swarm.
+docs/DISCUSSION_NEXT_STEP.md:11:2. Ordena top 5 ítems del backlog con **una frase de por qué** cada uno.
+docs/DISCUSSION_NEXT_STEP.md:13:4. Criterio de “listo para uso diario” en MH-Next: checklist 5 bullets medible.
+docs/DISCUSSION_NEXT_STEP.md:15:Responde en español. Sé explícito si discrepas con el otro revisor (asume que Codex prioriza rigor/NO-GO y Claude prioriza pragmatismo GO-with-fixes).
+docs/DISCUSSION_NEXT_STEP.md:19:## Top 5 backlog
+docs/SESSION1_2_EVIDENCE.md:6:- Claude (explorer): `docs/audit-1.2-claude-plan.txt` — P2 en MH-Next → subtree; eventos filtrados; shellInvoked; cancel con SIGTERM.
+docs/SESSION1_2_EVIDENCE.md:34:- Re-auditoría Codex GO tras fixes (opcional).
+docs/AUDIT_REQUEST_1_1.md:16:5. Veredicto breve: **GO** / **GO con reservas** / **NO-GO** para continuar desarrollo del runtime.
+docs/SESSION1_1B_EVIDENCE.md:21:- `docs/audit-1.1b-codex-last.txt` — NO-GO parcial antes de fingerprint de fuentes; revalidar tras commit de 1.1b.
+docs/SESSION1_EVIDENCE.md:6:- **Repo:** MH-Next @ `0fe4a3d39885f7b523511b479f35242e28da4302`
+docs/AUDIT_REQUEST_1_1B.md:8:Verifica P1 originales + estos fixes. ¿Veredicto GO/NO-GO para cerrar 1.1b?
+
+hook: PostToolUse
+hook: PostToolUse Completed
+codex
+La documentación confirma que los cinco adaptadores corren en secuencia y que `effort` todavía no llega al CLI. Mi hipótesis es priorizar un flujo read-only confiable desde Cursor; voy a contrastar si el mayor freno está en la espera de los paneles o en la configuración.
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc 'cat tests/setup-config.test.mjs tests/model-sheet.test.mjs tests/config-resolve.test.mjs tests/events-sink.test.mjs tests/stream-dedupe.test.mjs' in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { applyModelSheetToConfig } from '../src/setupConfig.mjs';
+
+describe('setupConfig', () => {
+  it('applyModelSheetToConfig surfaces panel overflow and dropped sheet lines', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zedpstack-setup-'));
+    const sheetPath = path.join(tmp, 'pstack-models.md');
+    const configPath = path.join(tmp, 'zedpstack.config.json');
+
+    fs.writeFileSync(
+      sheetPath,
+      `architect runners: opus, fable, sonnet
+line without colon is dropped
+how explorer: haiku
+`,
+      'utf8',
+    );
+
+    const result = applyModelSheetToConfig({ sheetPath, configPath });
+
+    assert.deepEqual(result.droppedLines, ['line without colon is dropped']);
+    assert.equal(result.overflows.length, 1);
+    assert.equal(result.overflows[0].model, 'sonnet');
+    assert.equal(result.overflowWarnings.length, 1);
+    assert.equal(result.rolesUpdated.includes('architect-runner-a'), true);
+    assert.equal(result.rolesUpdated.includes('architect-runner-b'), true);
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.equal(config.roles['architect-runner-b'].model, 'fable');
+  });
+});
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  bindingsFromSheet,
+  inferRuntimeForModel,
+  parseModelSheet,
+  parseModelValue,
+  sheetBindingOverflowWarnings,
+} from '../src/modelSheet.mjs';
+
+describe('modelSheet', () => {
+  it('parses effort suffix', () => {
+    assert.deepEqual(parseModelValue('opus @high'), { model: 'opus', effort: 'high' });
+  });
+
+  it('maps sheet to zedpstack bindings', () => {
+    const parsed = parseModelSheet(`
+how explorer: haiku
+how explainer: gpt-6.1-sol
+interrogate reviewers: haiku, gpt-6.1-sol, haiku
+default effort: session
+`);
+    const { bindings } = bindingsFromSheet(parsed);
+    assert.equal(bindings['how-explorer'].runtime, 'claude');
+    assert.equal(bindings['how-explainer'].runtime, 'codex');
+    assert.equal(bindings['interrogate-reviewer-b'].model, 'gpt-6.1-sol');
+  });
+
+  it('infers codex for gpt slugs', () => {
+    assert.equal(inferRuntimeForModel('gpt-6.1-sol'), 'codex');
+    assert.equal(inferRuntimeForModel('haiku'), 'claude');
+  });
+
+  it('parseModelSheet records lines without a role separator as dropped', () => {
+    const parsed = parseModelSheet(`
+how explorer: haiku
+this line has no colon
+# comment ignored
+---
+orphan value
+reflect judgment: opus
+`);
+    assert.deepEqual(parsed.droppedLines, [
+      'this line has no colon',
+      'orphan value',
+    ]);
+    assert.equal(parsed.roles['how explorer']?.[0], 'haiku');
+    assert.equal(parsed.roles['reflect judgment']?.[0], 'opus');
+  });
+
+  it('canonical reflect line with one model binds judgment, divergent, and synthesize', () => {
+    const parsed = parseModelSheet(
+      'reflect judgment, divergent, synthesizer: cursor-grok-4.6-high\n',
+    );
+    const { bindings, overflows } = bindingsFromSheet(parsed);
+    assert.equal(overflows.length, 0);
+    assert.equal(bindings['reflect-reviewer-judgment'].model, 'cursor-grok-4.6-high');
+    assert.equal(bindings['reflect-reviewer-divergent'].model, 'cursor-grok-4.6-high');
+    assert.equal(bindings['reflect-synthesize'].model, 'cursor-grok-4.6-high');
+  });
+
+  it('architect runners overflow reports extra models without overwriting slot b', () => {
+    const parsed = parseModelSheet('architect runners: opus, fable, sonnet\n');
+    const { bindings, overflows } = bindingsFromSheet(parsed);
+    assert.equal(bindings['architect-runner-a'].model, 'opus');
+    assert.equal(bindings['architect-runner-b'].model, 'fable');
+    assert.deepEqual(overflows, [
+      { sheetRole: 'architect runners', model: 'sonnet', index: 2 },
+    ]);
+    const warnings = sheetBindingOverflowWarnings(overflows);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /architect runners/);
+    assert.match(warnings[0], /sonnet/);
+  });
+});
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { resolveRoleBinding, resolveRoleBindingKey, resolveTimeout } from '../src/config.mjs';
+
+describe('resolveRoleBinding', () => {
+  const config = {
+    data: {
+      roles: {
+        explorer: {
+          runtime: 'claude',
+          model: 'haiku',
+          permissionProfile: 'read-only',
+        },
+        'interrogate-reviewer': {
+          runtime: 'claude',
+          model: 'sonnet',
+          permissionProfile: 'read-only',
+          effort: 'high',
+        },
+      },
+      timeouts: {
+        explorer: 120_000,
+      },
+    },
+  };
+
+  it('follows alias chain to binding', () => {
+    assert.equal(
+      resolveRoleBindingKey(config.data.roles, 'interrogate-reviewer-a'),
+      'interrogate-reviewer',
+    );
+    const b = resolveRoleBinding(config, 'interrogate-reviewer-c');
+    assert.equal(b.model, 'sonnet');
+    assert.equal(b.effort, 'high');
+  });
+
+  it('resolves timeout through alias chain', () => {
+    assert.equal(resolveTimeout(config, 'interrogate-reviewer-b'), 120_000);
+  });
+});
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { EventSink } from '../src/events/sink.mjs';
+
+describe('EventSink stream filtering', () => {
+  it('does not persist worker.output by default', () => {
+    const runRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-events-'));
+    const sink = new EventSink(runRoot);
+    sink.emit('run.started', { runId: 'r1' });
+    sink.emit('worker.output', { chunk: 'noise' });
+    const lines = fs.readFileSync(path.join(runRoot, 'events.jsonl'), 'utf8').trim().split('\n');
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /run\.started/);
+  });
+
+  it('persists worker.output when persistWorkerStream is true', () => {
+    const runRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-events-'));
+    const sink = new EventSink(runRoot, { persistWorkerStream: true });
+    sink.emit('worker.output', { chunk: 'x' });
+    const lines = fs.readFileSync(path.join(runRoot, 'events.jsonl'), 'utf8').trim().split('\n');
+    assert.equal(lines.length, 1);
+  });
+});
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { extractClaudeStreamText } from '../src/runtimes/stream.mjs';
+
+describe('claude stream dedupe', () => {
+  it('prefers terminal result event over assistant chunks', () => {
+    const assistant = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'Hello world repeated' }] },
+    });
+    const terminal = JSON.stringify({
+      type: 'result',
+      result: 'Hello world repeated',
+    });
+    const a = extractClaudeStreamText(assistant);
+    const t = extractClaudeStreamText(terminal);
+    assert.equal(a.chunk, 'Hello world repeated');
+    assert.equal(t.terminalResult, 'Hello world repeated');
+  });
+});
+
+hook: PostToolUse
+hook: PostToolUse Completed
+exec
+/bin/zsh -lc "nl -ba src/run.mjs | sed -n '275,465p'; nl -ba src/watchRun.mjs | sed -n '1,145p'" in /Users/nndsk/Projects/zedpstack
+exec
+/bin/zsh -lc "nl -ba src/modelSheet.mjs | sed -n '38,185p'; nl -ba src/setupConfig.mjs | sed -n '1,125p'" in /Users/nndsk/Projects/zedpstack
+exec
+/bin/zsh -lc "nl -ba src/permissions.mjs | sed -n '1,150p'; nl -ba src/runtimes/codex.mjs | sed -n '20,95p'" in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+   275	
+   276	  attempt.finishedAt = new Date().toISOString();
+   277	  attempt.exitCode = outcome.exitCode;
+   278	  attempt.validation = validation;
+   279	  attempt.cliVersion = outcome.cliVersion;
+   280	
+   281	  const stepWithFinishedAttempt = manifestPatched.steps.find((s) => s.stepId === stepId);
+   282	  const attempts = [...stepWithFinishedAttempt.attempts];
+   283	  attempts[attempts.length - 1] = {
+   284	    ...attempts[attempts.length - 1],
+   285	    ...attempt,
+   286	  };
+   287	
+   288	  if (validation.valid) {
+   289	    eventSink.emit('step.validated', { runId, stepId, workerId, stages: validation.stages });
+   290	    manifestPatched = updateManifestStep(manifestPatched, stepId, {
+   291	      status: 'completed',
+   292	      stepIdentityHash,
+   293	      validResult: true,
+   294	      resultRef: path.relative(repoRoot, outcome.resultPath),
+   295	      attempts,
+   296	      lastErrors: null,
+   297	    });
+   298	    eventSink.emit('step.completed', { runId, stepId, workerId });
+   299	  } else {
+   300	    manifestPatched = updateManifestStep(manifestPatched, stepId, {
+   301	      status: 'failed',
+   302	      validResult: false,
+   303	      lastErrors: validation.errors,
+   304	      attempts,
+   305	    });
+   306	    eventSink.emit('run.failed', { runId, stepId, errors: validation.errors });
+   307	    manifestPatched.status = 'failed';
+   308	  }
+   309	
+   310	  writeManifestAtomic(runRoot, manifestPatched);
+   311	  return manifestPatched;
+   312	}
+   313	
+   314	function writeJudgmentInstructionsIfNeeded(runRoot, playbook, playbookDef, manifest, runId) {
+   315	  const instructionsPath = path.join(runRoot, JUDGMENT_INSTRUCTIONS_FILE);
+   316	  if (fs.existsSync(instructionsPath)) {
+   317	    return;
+   318	  }
+   319	  const judgmentTemplate = loadPrompt(
+   320	    playbook.root,
+   321	    playbookDef.judgment.promptTemplate,
+   322	    {
+   323	      GOAL: manifest.goal,
+   324	      REPO_ROOT: manifest.repoRoot,
+   325	      RUN_ID: runId,
+   326	      ZEDPSTACK_ROOT: zedpstackRoot(),
+   327	      JUDGMENT_OUTPUT_FILE: ORCHESTRATOR_JUDGMENT_FILE,
+   328	    },
+   329	  );
+   330	  fs.writeFileSync(instructionsPath, judgmentTemplate, 'utf8');
+   331	}
+   332	
+   333	export async function runPlaybook({
+   334	  playbookId,
+   335	  goal,
+   336	  repoRoot,
+   337	  runId: existingRunId,
+   338	  teeEvents = false,
+   339	  persistStreamEvents = false,
+   340	  context = '',
+   341	}) {
+   342	  const config = loadConfig();
+   343	  const playbook = loadPlaybook(playbookId);
+   344	  const playbookDef = attachPstackUpstreamMeta(playbook.def);
+   345	  if (playbookDef.upstream?.pstackSkill) {
+   346	    resolvePstackInstall();
+   347	  }
+   348	
+   349	  const runId = existingRunId ?? randomUUID();
+   350	  const runRoot = runDir(repoRoot, runId);
+   351	  fs.mkdirSync(runRoot, { recursive: true });
+   352	  if (context) {
+   353	    fs.writeFileSync(path.join(runRoot, 'context-input.md'), context, 'utf8');
+   354	  }
+   355	
+   356	  const eventSink = new EventSink(runRoot, {
+   357	    tee: teeEvents,
+   358	    persistWorkerStream: persistStreamEvents,
+   359	  });
+   360	  let manifest;
+   361	
+   362	  if (existingRunId && fs.existsSync(path.join(runRoot, 'manifest.json'))) {
+   363	    manifest = readManifest(runRoot);
+   364	    if (manifest.status === 'completed') {
+   365	      eventSink.emit('run.started', { runId, resumed: true, skipped: 'already_completed' });
+   366	      return { runId, runRoot, manifest, eventSink };
+   367	    }
+   368	    if (manifest.status === 'failed' || manifest.status === 'cancelled') {
+   369	      manifest.status = 'running';
+   370	      manifest.updatedAt = new Date().toISOString();
+   371	      writeManifestAtomic(runRoot, manifest);
+   372	    }
+   373	    eventSink.emit('run.started', { runId, resumed: true, playbook: playbookId });
+   374	  } else {
+   375	    const bindings = {};
+   376	    for (const step of playbookDef.steps) {
+   377	      bindings[step.role] = resolveRoleBinding(config, step.role);
+   378	    }
+   379	    manifest = createInitialManifest({
+   380	      runId,
+   381	      repoRoot: path.resolve(repoRoot),
+   382	      gitCommit: tryGitCommit(repoRoot),
+   383	      playbook: playbookId,
+   384	      goal,
+   385	      bindings,
+   386	      steps: initStepRecords(playbookDef, config),
+   387	    });
+   388	    writeManifestAtomic(runRoot, manifest);
+   389	    eventSink.emit('run.started', { runId, playbook: playbookId, goal });
+   390	  }
+   391	
+   392	  // Siempre pasar por executeStep: revalida identidad, artefactos y resultado
+   393	  // (evita el bypass de allStepsDone en resume).
+   394	  for (const step of playbookDef.steps) {
+   395	    manifest = readManifest(runRoot);
+   396	    if (manifest.status === 'failed' || manifest.status === 'cancelled') {
+   397	      break;
+   398	    }
+   399	    const rec = manifest.steps.find((s) => s.stepId === step.id);
+   400	    if (rec.status === 'failed') {
+   401	      manifest = updateManifestStep(manifest, step.id, { status: 'pending' });
+   402	      manifest.status = 'running';
+   403	      writeManifestAtomic(runRoot, manifest);
+   404	    }
+   405	
+   406	    manifest = await executeStep({
+   407	      manifest,
+   408	      playbook,
+   409	      playbookDef,
+   410	      config,
+   411	      runRoot,
+   412	      repoRoot: path.resolve(repoRoot),
+   413	      goal: manifest.goal ?? goal,
+   414	      stepId: step.id,
+   415	      eventSink,
+   416	      runId,
+   417	    });
+   418	    if (manifest.status === 'failed') {
+   419	      return { runId, runRoot, manifest, eventSink };
+   420	    }
+   421	  }
+   422	
+   423	  if (manifest.status !== 'failed' && manifest.status !== 'completed') {
+   424	    writeJudgmentInstructionsIfNeeded(runRoot, playbook, playbookDef, manifest, runId);
+   425	    manifest.status = 'awaiting_judgment';
+   426	    manifest.updatedAt = new Date().toISOString();
+   427	    writeManifestAtomic(runRoot, manifest);
+   428	    eventSink.emit('run.awaiting_judgment', { runId });
+   429	  }
+   430	
+   431	  return { runId, runRoot, manifest, eventSink };
+   432	}
+   433	
+   434	export function completeJudgment({ repoRoot, runId }) {
+   435	  const runRoot = runDir(repoRoot, runId);
+   436	  const instructionsPath = path.join(runRoot, JUDGMENT_INSTRUCTIONS_FILE);
+   437	  const judgmentPath = path.join(runRoot, ORCHESTRATOR_JUDGMENT_FILE);
+   438	
+   439	  const judgmentCheck = validateOrchestratorJudgment({
+   440	    instructionsPath,
+   441	    judgmentPath,
+   442	  });
+   443	  if (!judgmentCheck.valid) {
+   444	    throw new Error(`Invalid judgment: ${judgmentCheck.errors.join('; ')}`);
+   445	  }
+   446	
+   447	  const manifest = readManifest(runRoot);
+   448	  if (manifest.status !== 'awaiting_judgment') {
+   449	    throw new Error(`Run status is ${manifest.status}, expected awaiting_judgment`);
+   450	  }
+   451	  manifest.status = 'completed';
+   452	  manifest.judgmentRef = ORCHESTRATOR_JUDGMENT_FILE;
+   453	  manifest.updatedAt = new Date().toISOString();
+   454	  writeManifestAtomic(runRoot, manifest);
+   455	  const eventSink = new EventSink(runRoot);
+   456	  eventSink.emit('run.completed', { runId });
+   457	  return manifest;
+   458	}
+     1	import fs from 'node:fs';
+     2	import path from 'node:path';
+     3	import { runDir } from './paths.mjs';
+     4	
+     5	/** Run-level events that end `watch` when `follow` is true. */
+     6	export const TERMINAL_RUN_EVENTS = new Set([
+     7	  'run.completed',
+     8	  'run.failed',
+     9	  'run.cancelled',
+    10	]);
+    11	
+    12	const HUMAN_TYPES = new Set([
+    13	  'run.started',
+    14	  'run.completed',
+    15	  'run.failed',
+    16	  'run.cancelled',
+    17	  'run.awaiting_judgment',
+    18	  'step.started',
+    19	  'step.completed',
+    20	  'step.failed',
+    21	  'step.validated',
+    22	  'worker.spawned',
+    23	  'worker.completed',
+    24	  'worker.failed',
+    25	  'worker.timeout',
+    26	  'worker.output',
+    27	  'worker.stderr',
+    28	]);
+    29	
+    30	export function shouldDisplayEvent(type) {
+    31	  return Boolean(type && HUMAN_TYPES.has(type));
+    32	}
+    33	
+    34	export function isTerminalRunEvent(type) {
+    35	  return TERMINAL_RUN_EVENTS.has(type);
+    36	}
+    37	
+    38	function previewChunk(chunk, maxLen = 120) {
+    39	  const preview = chunk.replace(/\s+/g, ' ').slice(0, maxLen);
+    40	  return `${preview}${chunk.length > maxLen ? '…' : ''}`;
+    41	}
+    42	
+    43	export function formatEvent(event) {
+    44	  const { ts, type, stepId, workerId, runtime, model, status, errors, chunk } = event;
+    45	  const head = `[${ts}] ${type}`;
+    46	  const parts = [head];
+    47	  if (stepId) parts.push(`step=${stepId}`);
+    48	  if (workerId) parts.push(`worker=${workerId}`);
+    49	  if (runtime) parts.push(`${runtime}/${model ?? '?'}`);
+    50	  if (status) parts.push(`status=${status}`);
+    51	  if (errors?.length) parts.push(`errors=${errors.join('; ')}`);
+    52	  if ((type === 'worker.output' || type === 'worker.stderr') && chunk) {
+    53	    parts.push(`| ${previewChunk(chunk)}`);
+    54	  }
+    55	  return parts.join(' ');
+    56	}
+    57	
+    58	function readGrowth(eventsPath, offset, buf) {
+    59	  let nextOffset = offset;
+    60	  let buffer = buf;
+    61	  let st = fs.statSync(eventsPath);
+    62	  while (st.size > nextOffset) {
+    63	    const fd = fs.openSync(eventsPath, 'r');
+    64	    const len = st.size - nextOffset;
+    65	    const chunk = Buffer.alloc(len);
+    66	    const bytesRead = fs.readSync(fd, chunk, 0, len, nextOffset);
+    67	    fs.closeSync(fd);
+    68	    nextOffset += bytesRead;
+    69	    buffer += chunk.subarray(0, bytesRead).toString('utf8');
+    70	    st = fs.statSync(eventsPath);
+    71	  }
+    72	  return { offset: nextOffset, buf: buffer };
+    73	}
+    74	
+    75	/**
+    76	 * Follow events.jsonl for a run (like tee-events, but readable).
+    77	 */
+    78	export async function watchRun({
+    79	  repoRoot,
+    80	  runId,
+    81	  fromStart = false,
+    82	  follow = true,
+    83	  pollMs = 500,
+    84	  writeLine = (line) => process.stderr.write(`${line}\n`),
+    85	}) {
+    86	  const eventsPath = path.join(runDir(repoRoot, runId), 'events.jsonl');
+    87	  if (!fs.existsSync(eventsPath)) {
+    88	    throw new Error(`No events at ${eventsPath}`);
+    89	  }
+    90	
+    91	  let offset = fromStart ? 0 : fs.statSync(eventsPath).size;
+    92	  let buf = '';
+    93	  let sawTerminal = false;
+    94	
+    95	  const drain = () => {
+    96	    const lines = buf.split('\n');
+    97	    buf = lines.pop() ?? '';
+    98	    for (const line of lines) {
+    99	      if (!line.trim()) continue;
+   100	      let event;
+   101	      try {
+   102	        event = JSON.parse(line);
+   103	      } catch {
+   104	        continue;
+   105	      }
+   106	      if (shouldDisplayEvent(event.type)) {
+   107	        writeLine(formatEvent(event));
+   108	      }
+   109	      if (isTerminalRunEvent(event.type)) {
+   110	        sawTerminal = true;
+   111	      }
+   112	    }
+   113	  };
+   114	
+   115	  const pull = () => {
+   116	    const grown = readGrowth(eventsPath, offset, buf);
+   117	    offset = grown.offset;
+   118	    buf = grown.buf;
+   119	    drain();
+   120	    return sawTerminal;
+   121	  };
+   122	
+   123	  if (fromStart) {
+   124	    pull();
+   125	  }
+   126	
+   127	  if (!follow) return;
+   128	
+   129	  if (sawTerminal) return;
+   130	
+   131	  return new Promise((resolve) => {
+   132	    let interval;
+   133	    const stop = () => {
+   134	      if (interval) clearInterval(interval);
+   135	      resolve();
+   136	    };
+   137	
+   138	    const tick = () => {
+   139	      try {
+   140	        if (pull()) stop();
+   141	      } catch {
+   142	        stop();
+   143	      }
+   144	    };
+   145	
+
+ succeeded in 0ms:
+    38	const PANEL_SHEET_ROLES = new Set(['architect runners', 'interrogate reviewers']);
+    39	
+    40	/**
+    41	 * @param {string} slugWithOptionalEffort e.g. "haiku @high" or "gpt-6.1-sol"
+    42	 */
+    43	export function parseModelValue(raw) {
+    44	  const trimmed = raw.trim();
+    45	  if (!trimmed || trimmed === 'inherit-parent' || trimmed === 'auto') {
+    46	    return { model: trimmed, effort: null };
+    47	  }
+    48	  const at = trimmed.lastIndexOf(' @');
+    49	  if (at > 0) {
+    50	    const model = trimmed.slice(0, at).trim();
+    51	    const effort = trimmed.slice(at + 2).trim().toLowerCase();
+    52	    if (EFFORT_LEVELS.has(effort)) {
+    53	      return { model, effort };
+    54	    }
+    55	  }
+    56	  return { model: trimmed, effort: null };
+    57	}
+    58	
+    59	/**
+    60	 * @param {string} text full sheet body
+    61	 * @returns {{ roles: Record<string, string[]>, defaultEffort: string|null, sessionHook: string|null, droppedLines: string[] }}
+    62	 */
+    63	export function parseModelSheet(text) {
+    64	  const roles = {};
+    65	  let defaultEffort = null;
+    66	  let sessionHook = null;
+    67	  const droppedLines = [];
+    68	
+    69	  for (const line of text.split('\n')) {
+    70	    const stripped = line.trim();
+    71	    if (!stripped || stripped.startsWith('#')) continue;
+    72	    if (stripped.startsWith('---')) continue;
+    73	
+    74	    const colon = stripped.indexOf(':');
+    75	    if (colon < 0) {
+    76	      droppedLines.push(stripped);
+    77	      continue;
+    78	    }
+    79	    const key = stripped.slice(0, colon).trim().toLowerCase();
+    80	    const value = stripped.slice(colon + 1).trim();
+    81	
+    82	    if (key === 'default effort') {
+    83	      defaultEffort = value;
+    84	      continue;
+    85	    }
+    86	    if (key === 'session hook') {
+    87	      sessionHook = value;
+    88	      continue;
+    89	    }
+    90	
+    91	    const parts = value.split(',').map((p) => p.trim()).filter(Boolean);
+    92	    roles[key] = parts;
+    93	  }
+    94	
+    95	  return { roles, defaultEffort, sessionHook, droppedLines };
+    96	}
+    97	
+    98	/**
+    99	 * Infer CLI runtime from model slug (heuristic; user can override in config).
+   100	 */
+   101	export function inferRuntimeForModel(model) {
+   102	  if (!model || model === 'inherit-parent' || model === 'auto') {
+   103	    return 'claude';
+   104	  }
+   105	  const s = model.toLowerCase();
+   106	  if (
+   107	    s.includes('gpt') ||
+   108	    s.includes('codex') ||
+   109	    s.includes('-sol') ||
+   110	    s.includes('o3') ||
+   111	    s.includes('o4') ||
+   112	    s.startsWith('chatgpt')
+   113	  ) {
+   114	    return 'codex';
+   115	  }
+   116	  return 'claude';
+   117	}
+   118	
+   119	function bindingForModel(raw, globalEffort) {
+   120	  const { model, effort } = parseModelValue(raw);
+   121	  if (!model || model === 'inherit-parent' || model === 'auto') {
+   122	    return null;
+   123	  }
+   124	  const binding = {
+   125	    runtime: inferRuntimeForModel(model),
+   126	    model,
+   127	    permissionProfile: 'read-only',
+   128	  };
+   129	  const eff = effort ?? globalEffort;
+   130	  if (eff) binding.effort = eff;
+   131	  return binding;
+   132	}
+   133	
+   134	/**
+   135	 * Human-readable warnings for panel overflow (extra models with no slot).
+   136	 * @param {{ sheetRole: string, model: string, index: number }[]} overflows
+   137	 */
+   138	export function sheetBindingOverflowWarnings(overflows) {
+   139	  return overflows.map(
+   140	    (entry) =>
+   141	      `Sheet row "${entry.sheetRole}" has more models than slots; ignored "${entry.model}" at position ${entry.index + 1}.`,
+   142	  );
+   143	}
+   144	
+   145	/**
+   146	 * Build zedpstack config role entries from a parsed sheet.
+   147	 * @returns {{
+   148	 *   bindings: Record<string, { runtime: string, model: string, permissionProfile: string, effort?: string }>,
+   149	 *   overflows: { sheetRole: string, model: string, index: number }[],
+   150	 * }}
+   151	 */
+   152	export function bindingsFromSheet(parsed, { defaultEffort = 'session' } = {}) {
+   153	  const globalEffort =
+   154	    parsed.defaultEffort && parsed.defaultEffort !== 'session'
+   155	      ? parsed.defaultEffort
+   156	      : defaultEffort !== 'session'
+   157	        ? defaultEffort
+   158	        : null;
+   159	
+   160	  const out = {};
+   161	  const overflows = [];
+   162	
+   163	  for (const [sheetRole, values] of Object.entries(parsed.roles)) {
+   164	    const zedRoles = SHEET_TO_ZEDPSTACK_ROLES[sheetRole];
+   165	    if (!zedRoles?.length) continue;
+   166	
+   167	    const usable = values
+   168	      .map((raw) => ({ raw, binding: bindingForModel(raw, globalEffort) }))
+   169	      .filter((entry) => entry.binding);
+   170	
+   171	    if (SHARED_SHEET_ROLES.has(sheetRole) && usable.length === 1) {
+   172	      const binding = usable[0].binding;
+   173	      for (const targetRole of zedRoles) {
+   174	        out[targetRole] = binding;
+   175	      }
+   176	      continue;
+   177	    }
+   178	
+   179	    const panel = PANEL_SHEET_ROLES.has(sheetRole);
+   180	
+   181	    usable.forEach(({ raw, binding }, index) => {
+   182	      if (panel && index >= zedRoles.length) {
+   183	        overflows.push({
+   184	          sheetRole,
+   185	          model: parseModelValue(raw).model,
+     1	import fs from 'node:fs';
+     2	import path from 'node:path';
+     3	import os from 'node:os';
+     4	import { loadConfig } from './config.mjs';
+     5	import {
+     6	  bindingsFromSheet,
+     7	  defaultSheetTemplate,
+     8	  parseModelSheet,
+     9	  sheetBindingOverflowWarnings,
+    10	} from './modelSheet.mjs';
+    11	import { zedpstackRoot } from './paths.mjs';
+    12	
+    13	export function defaultModelSheetPath() {
+    14	  const cursor = path.join(os.homedir(), '.cursor', 'rules', 'pstack-models.mdc');
+    15	  if (fs.existsSync(cursor)) return cursor;
+    16	  const plain = path.join(os.homedir(), '.cursor', 'rules', 'pstack-models.md');
+    17	  if (fs.existsSync(plain)) return plain;
+    18	  return path.join(os.homedir(), '.zedpstack', 'pstack-models.md');
+    19	}
+    20	
+    21	export function readModelSheet(filePath) {
+    22	  const resolved = path.resolve(filePath);
+    23	  if (!fs.existsSync(resolved)) {
+    24	    return { path: resolved, text: defaultSheetTemplate(), exists: false };
+    25	  }
+    26	  let text = fs.readFileSync(resolved, 'utf8');
+    27	  if (resolved.endsWith('.mdc')) {
+    28	    text = text.replace(/^---[\s\S]*?---\s*/m, '');
+    29	  }
+    30	  return { path: resolved, text, exists: true };
+    31	}
+    32	
+    33	/**
+    34	 * Merge sheet bindings into zedpstack.config.json (preserves timeouts / unknown roles).
+    35	 */
+    36	export function applyModelSheetToConfig({
+    37	  sheetPath,
+    38	  configPath,
+    39	  allowMissingSheet = false,
+    40	} = {}) {
+    41	  const resolvedPath = sheetPath ?? process.env.ZEDPSTACK_MODEL_SHEET ?? defaultModelSheetPath();
+    42	  const sheet = readModelSheet(resolvedPath);
+    43	  if (!sheet.exists && !allowMissingSheet) {
+    44	    throw new Error(
+    45	      `Model sheet not found at ${sheet.path}. Run "dispatch setup init" or pass --file.`,
+    46	    );
+    47	  }
+    48	  const parsed = parseModelSheet(sheet.text);
+    49	  const { bindings, overflows } = bindingsFromSheet(parsed);
+    50	
+    51	  const cfgFile =
+    52	    configPath ??
+    53	    process.env.ZEDPSTACK_CONFIG ??
+    54	    path.join(zedpstackRoot(), 'zedpstack.config.json');
+    55	
+    56	  let configData = { roles: {}, timeouts: {} };
+    57	  if (fs.existsSync(cfgFile)) {
+    58	    configData = JSON.parse(fs.readFileSync(cfgFile, 'utf8'));
+    59	  }
+    60	  configData.roles = { ...(configData.roles ?? {}), ...bindings };
+    61	  if (!configData.$schema) {
+    62	    configData.$schema = './schemas/config.schema.json';
+    63	  }
+    64	
+    65	  fs.mkdirSync(path.dirname(cfgFile), { recursive: true });
+    66	  fs.writeFileSync(cfgFile, `${JSON.stringify(configData, null, 2)}\n`, 'utf8');
+    67	
+    68	  return {
+    69	    sheetPath: sheet.path,
+    70	    sheetExists: sheet.exists,
+    71	    configPath: cfgFile,
+    72	    rolesUpdated: Object.keys(bindings),
+    73	    overflows,
+    74	    overflowWarnings: overflows.length
+    75	      ? sheetBindingOverflowWarnings(overflows)
+    76	      : [],
+    77	    defaultEffort: parsed.defaultEffort,
+    78	    sessionHook: parsed.sessionHook,
+    79	    droppedLines: parsed.droppedLines,
+    80	  };
+    81	}
+    82	
+    83	export function initModelSheet(filePath) {
+    84	  const target = path.resolve(filePath ?? defaultModelSheetPath());
+    85	  fs.mkdirSync(path.dirname(target), { recursive: true });
+    86	  if (!fs.existsSync(target)) {
+    87	    const body = defaultSheetTemplate();
+    88	    if (target.endsWith('.mdc')) {
+    89	      fs.writeFileSync(
+    90	        target,
+    91	        `---
+    92	description: pstack per-role model choices (zedpstack sync)
+    93	alwaysApply: true
+    94	---
+    95	${body}`,
+    96	        'utf8',
+    97	      );
+    98	    } else {
+    99	      fs.writeFileSync(target, body, 'utf8');
+   100	    }
+   101	  }
+   102	  return target;
+   103	}
+   104	
+   105	export function showSetupStatus() {
+   106	  const sheet = readModelSheet(
+   107	    process.env.ZEDPSTACK_MODEL_SHEET ?? defaultModelSheetPath(),
+   108	  );
+   109	  const { path: cfgPath, data } = loadConfig();
+   110	  return {
+   111	    modelSheet: sheet.path,
+   112	    modelSheetExists: sheet.exists,
+   113	    configPath: cfgPath,
+   114	    roleCount: Object.keys(data.roles ?? {}).length,
+   115	    roles: data.roles ?? {},
+   116	  };
+   117	}
+
+ succeeded in 0ms:
+     1	import { spawnSync } from 'node:child_process';
+     2	import { PERMISSION_PROFILES } from './constants.mjs';
+     3	
+     4	const CLAUDE_READ_ONLY_TOOLS = 'Read,Grep,Glob';
+     5	
+     6	export function assertPermissionProfile(binding) {
+     7	  const profile = PERMISSION_PROFILES[binding.permissionProfile];
+     8	  if (!profile) {
+     9	    throw new Error(`Unknown permissionProfile: ${binding.permissionProfile}`);
+    10	  }
+    11	  if (binding.permissionProfile !== 'read-only') {
+    12	    throw new Error(`Session 1 only supports read-only; got ${binding.permissionProfile}`);
+    13	  }
+    14	}
+    15	
+    16	export function verifyRuntimeAvailable(binding) {
+    17	  const bin = binding.runtime === 'claude' ? 'claude' : 'codex';
+    18	  const check = spawnSync(bin, ['--version'], { encoding: 'utf8' });
+    19	  if (check.error || check.status !== 0) {
+    20	    throw new Error(`CLI "${bin}" not available or failed --version`);
+    21	  }
+    22	  return (check.stdout || check.stderr || '').trim().split('\n')[0];
+    23	}
+    24	
+    25	/**
+    26	 * Falla antes de lanzar si el perfil read-only de Claude no puede aplicarse.
+    27	 */
+    28	export function verifyClaudeReadOnlyProfile({ repoRoot }) {
+    29	  if (!repoRoot) {
+    30	    throw new Error('claude read-only requires repoRoot for --add-dir');
+    31	  }
+    32	  const probe = spawnSync('claude', ['--help'], { encoding: 'utf8' });
+    33	  if (probe.error || probe.status !== 0) {
+    34	    throw new Error(`claude CLI probe failed: ${probe.error?.message ?? probe.status}`);
+    35	  }
+    36	  if (!probe.stdout.includes('--tools')) {
+    37	    throw new Error('claude CLI lacks --tools flag; cannot enforce read-only profile');
+    38	  }
+    39	}
+    40	
+    41	/**
+    42	 * Build argv for worker — no shell, no model-generated strings in sh -c.
+    43	 */
+    44	export function buildClaudeArgv({ model, permissionProfile, repoRoot }) {
+    45	  if (permissionProfile !== 'read-only') {
+    46	    throw new Error('claude adapter: only read-only in v0');
+    47	  }
+    48	  verifyClaudeReadOnlyProfile({ repoRoot });
+    49	  return [
+    50	    'claude',
+    51	    '-p',
+    52	    '--model',
+    53	    model,
+    54	    '--permission-mode',
+    55	    'dontAsk',
+    56	    '--tools',
+    57	    CLAUDE_READ_ONLY_TOOLS,
+    58	    '--add-dir',
+    59	    repoRoot,
+    60	    '--verbose',
+    61	    '--output-format',
+    62	    'stream-json',
+    63	    '--include-partial-messages',
+    64	  ];
+    65	}
+    66	
+    67	export function buildCodexArgv({ model, repoRoot, permissionProfile, resultOutPath }) {
+    68	  if (permissionProfile !== 'read-only') {
+    69	    throw new Error('codex adapter: only read-only in v0');
+    70	  }
+    71	  return [
+    72	    'codex',
+    73	    'exec',
+    74	    '-s',
+    75	    'read-only',
+    76	    '-m',
+    77	    model,
+    78	    '-C',
+    79	    repoRoot,
+    80	    '-o',
+    81	    resultOutPath,
+    82	  ];
+    83	}
+    84	
+    85	export function workerEnv(runtime, baseEnv = process.env) {
+    86	  const common = ['PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TMPDIR'];
+    87	  const claudeKeys = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'];
+    88	  const codexKeys = ['OPENAI_API_KEY', 'CODEX_HOME'];
+    89	  const allow =
+    90	    runtime === 'claude'
+    91	      ? [...common, ...claudeKeys]
+    92	      : runtime === 'codex'
+    93	        ? [...common, ...codexKeys]
+    94	        : common;
+    95	
+    96	  const env = {};
+    97	  for (const key of allow) {
+    98	    if (baseEnv[key] !== undefined) {
+    99	      env[key] = baseEnv[key];
+   100	    }
+   101	  }
+   102	  return env;
+   103	}
+    20	  runId,
+    21	  stepId,
+    22	  onWorkerSpawned,
+    23	}) {
+    24	  const stdoutLog = path.join(workerRoot, 'stdout.log');
+    25	  const stderrLog = path.join(workerRoot, 'stderr.log');
+    26	  const codexLastMessage = path.join(workerRoot, 'codex-last-message.txt');
+    27	  const resultPath = path.join(workerRoot, 'result.json');
+    28	  const promptPath = path.join(workerRoot, 'prompt.md');
+    29	
+    30	  fs.mkdirSync(workerRoot, { recursive: true });
+    31	  fs.writeFileSync(promptPath, promptText, 'utf8');
+    32	  fs.writeFileSync(stdoutLog, '');
+    33	  fs.writeFileSync(stderrLog, '');
+    34	
+    35	  const argv = [
+    36	    ...buildCodexArgv({
+    37	      model: binding.model,
+    38	      repoRoot,
+    39	      permissionProfile: binding.permissionProfile,
+    40	      resultOutPath: codexLastMessage,
+    41	    }),
+    42	    promptText,
+    43	  ];
+    44	
+    45	  const child = spawn(argv[0], argv.slice(1), {
+    46	    cwd: repoRoot,
+    47	    env: workerEnv('codex'),
+    48	    stdio: ['ignore', 'pipe', 'pipe'],
+    49	  });
+    50	
+    51	  eventSink.emit('worker.spawned', {
+    52	    runId,
+    53	    stepId,
+    54	    workerId,
+    55	    runtime: 'codex',
+    56	    model: binding.model,
+    57	    pid: child.pid,
+    58	    cwd: repoRoot,
+    59	    argv,
+    60	  });
+    61	  onWorkerSpawned?.({ pid: child.pid });
+    62	
+    63	  const timeout = setTimeout(() => {
+    64	    eventSink.emit('worker.timeout', { runId, stepId, workerId, pid: child.pid });
+    65	    child.kill('SIGTERM');
+    66	    setTimeout(() => child.kill('SIGKILL'), 5000);
+    67	  }, taskSpec.timeout);
+    68	
+    69	  const exitCode = await new Promise((resolve, reject) => {
+    70	    child.stdout.on('data', (buf) => {
+    71	      const chunk = buf.toString();
+    72	      appendChunk(stdoutLog, chunk);
+    73	      eventSink.emit('worker.output', {
+    74	        runId,
+    75	        stepId,
+    76	        workerId,
+    77	        stream: 'stdout',
+    78	        chunk,
+    79	      });
+    80	    });
+    81	    child.stderr.on('data', (buf) => {
+    82	      const chunk = buf.toString();
+    83	      appendChunk(stderrLog, chunk);
+    84	      eventSink.emit('worker.stderr', {
+    85	        runId,
+    86	        stepId,
+    87	        workerId,
+    88	        stream: 'stderr',
+    89	        chunk,
+    90	      });
+    91	    });
+    92	    child.on('error', reject);
+    93	    child.on('close', (code) => {
+    94	      clearTimeout(timeout);
+    95	      resolve(code ?? 1);
+
+hook: PostToolUse
+hook: PostToolUse
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+hook: PostToolUse
+exec
+/bin/zsh -lc "cat playbooks/interrogate-review/playbook.json playbooks/architect-sketch/playbook.json && nl -ba src/events/sink.mjs | sed -n '1,85p' && nl -ba SKILL.md | sed -n '16,67p'" in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+{
+  "id": "interrogate-review",
+  "version": 1,
+  "description": "pstack interrogate sequential: 3 reviewers + lead (pass --context-file diff)",
+  "upstream": { "pstackSkill": "interrogate" },
+  "steps": [
+    {
+      "id": "review-a",
+      "role": "interrogate-reviewer-a",
+      "promptSource": "pstack-interrogate-reviewer",
+      "promptMeta": { "reviewerLabel": "A" },
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "review-b",
+      "role": "interrogate-reviewer-b",
+      "promptSource": "pstack-interrogate-reviewer",
+      "promptMeta": { "reviewerLabel": "B" },
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "review-c",
+      "role": "interrogate-reviewer-c",
+      "promptSource": "pstack-interrogate-reviewer",
+      "promptMeta": { "reviewerLabel": "C" },
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "synthesize",
+      "role": "interrogate-lead",
+      "promptSource": "pstack-interrogate-lead",
+      "inputFrom": ["review-a", "review-b", "review-c"],
+      "outputContract": "markdown-report"
+    }
+  ],
+  "judgment": {
+    "promptTemplate": "judgment.md",
+    "artifact": "orchestrator-judgment.md"
+  }
+}
+{
+  "id": "architect-sketch",
+  "version": 1,
+  "description": "pstack architect Phase A+B read-only: ground (how) + 2 runners + synthesize",
+  "upstream": { "pstackSkill": "architect" },
+  "steps": [
+    {
+      "id": "ground",
+      "role": "architect-ground",
+      "promptSource": "pstack-how-explorer",
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "sketch-a",
+      "role": "architect-runner-a",
+      "promptSource": "pstack-architect-runner",
+      "promptMeta": { "candidateLabel": "A" },
+      "inputFrom": ["ground"],
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "sketch-b",
+      "role": "architect-runner-b",
+      "promptSource": "pstack-architect-runner",
+      "promptMeta": { "candidateLabel": "B" },
+      "inputFrom": ["ground"],
+      "outputContract": "markdown-report"
+    },
+    {
+      "id": "synthesize",
+      "role": "architect-synthesize",
+      "promptSource": "pstack-architect-synthesize",
+      "inputFrom": ["sketch-a", "sketch-b", "ground"],
+      "outputContract": "markdown-report"
+    }
+  ],
+  "judgment": {
+    "promptTemplate": "judgment.md",
+    "artifact": "orchestrator-judgment.md"
+  }
+}
+     1	import fs from 'node:fs';
+     2	import path from 'node:path';
+     3	
+     4	/**
+     5	 * Append-only event stream + optional tee for realtime observability.
+     6	 */
+     7	const STREAM_EVENT_TYPES = new Set(['worker.output', 'worker.stderr']);
+     8	
+     9	export class EventSink {
+    10	  #eventsPath;
+    11	  #tee;
+    12	  #persistWorkerStream;
+    13	
+    14	  constructor(runRoot, { tee = false, persistWorkerStream = false } = {}) {
+    15	    this.#eventsPath = path.join(runRoot, 'events.jsonl');
+    16	    this.#tee = tee;
+    17	    this.#persistWorkerStream = persistWorkerStream;
+    18	    fs.mkdirSync(runRoot, { recursive: true });
+    19	    if (!fs.existsSync(this.#eventsPath)) {
+    20	      fs.writeFileSync(this.#eventsPath, '');
+    21	    }
+    22	  }
+    23	
+    24	  emit(type, payload = {}) {
+    25	    const event = {
+    26	      ts: new Date().toISOString(),
+    27	      type,
+    28	      ...payload,
+    29	    };
+    30	    const line = `${JSON.stringify(event)}\n`;
+    31	    const isStreamChunk = STREAM_EVENT_TYPES.has(type);
+    32	    if (!isStreamChunk || this.#persistWorkerStream) {
+    33	      fs.appendFileSync(this.#eventsPath, line);
+    34	    }
+    35	    if (this.#tee) {
+    36	      process.stderr.write(`[zedpstack] ${line}`);
+    37	    }
+    38	    return event;
+    39	  }
+    40	}
+    16	2. **`/setup-zedpstack`** o `dispatch setup init` + editar hoja + `dispatch setup apply`.
+    17	3. `npm test` en el paquete.
+    18	
+    19	## Routing (`/zedpstack <objetivo>`)
+    20	
+    21	| Intención | `--playbook` |
+    22	|-----------|----------------|
+    23	| Cómo funciona X | `how-investigation` (default) |
+    24	| Por qué / rationale | `why-rationale` |
+    25	| Diseño previo | `architect-sketch` |
+    26	| Review adversarial | `interrogate-review` + `--context-file` |
+    27	| Reflect sesión | `reflect-session` + `--context-file` |
+    28	
+    29	```bash
+    30	node ~/.agents/skills/zedpstack/scripts/dispatch.mjs run \
+    31	  --goal "<objetivo>" \
+    32	  --repo "<repo-absoluto>" \
+    33	  --playbook how-investigation \
+    34	  --tee-events
+    35	```
+    36	
+    37	`list` playbooks: `dispatch list`.
+    38	
+    39	## Ver progreso (streaming)
+    40	
+    41	| Modo | Uso |
+    42	|------|-----|
+    43	| **JSONL en vivo** | `--tee-events` en `run`/`resume` → stderr `[zedpstack] {...}` |
+    44	| **Seguimiento legible** | Terminal 2: `dispatch watch --run-id <id> --repo <repo> --from-start` |
+    45	| **Artefactos** | `.zedpstack/runs/<id>/events.jsonl`, `workers/*/stdout.log` |
+    46	
+    47	Chunks `worker.output` no se persisten en `events.jsonl` por defecto (solo tee); usa `--persist-stream-events` si necesitas replay completo.
+    48	
+    49	## Judgment
+    50	
+    51	Tras `awaiting_judgment`: lee `workers/*/result.json`, escribe `orchestrator-judgment.md`, `dispatch judgment --run-id …`.
+    52	
+    53	## Configuración de modelos
+    54	
+    55	Skill dedicado: [setup-zedpstack/SKILL.md](./setup-zedpstack/SKILL.md) (misma hoja que pstack `setup-pstack`).
+    56	
+    57	## Referencia
+    58	
+    59	[docs/PSTACK_ADAPTERS.md](./docs/PSTACK_ADAPTERS.md) · [docs/STREAMING.md](./docs/STREAMING.md)
+
+hook: PostToolUse Completed
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+/bin/zsh -lc 'nl -ba src/manifest.mjs | head -75 && git diff --stat && git status --short' in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+     1	import fs from 'node:fs';
+     2	import path from 'node:path';
+     3	import { MANIFEST_SCHEMA_VERSION, ZEDPSTACK_VERSION } from './constants.mjs';
+     4	
+     5	export function writeManifestAtomic(runRoot, manifest) {
+     6	  const target = path.join(runRoot, 'manifest.json');
+     7	  const tmp = `${target}.tmp`;
+     8	  const body = JSON.stringify(manifest, null, 2);
+     9	  fs.writeFileSync(tmp, body, 'utf8');
+    10	  fs.renameSync(tmp, target);
+    11	}
+    12	
+    13	export function readManifest(runRoot) {
+    14	  const target = path.join(runRoot, 'manifest.json');
+    15	  return JSON.parse(fs.readFileSync(target, 'utf8'));
+    16	}
+    17	
+    18	export function createInitialManifest({
+    19	  runId,
+    20	  repoRoot,
+    21	  gitCommit,
+    22	  playbook,
+    23	  goal,
+    24	  bindings,
+    25	  steps,
+    26	}) {
+    27	  const now = new Date().toISOString();
+    28	  return {
+    29	    schemaVersion: MANIFEST_SCHEMA_VERSION,
+    30	    runId,
+    31	    repoRoot,
+    32	    gitCommit,
+    33	    playbook,
+    34	    goal,
+    35	    status: 'running',
+    36	    createdAt: now,
+    37	    updatedAt: now,
+    38	    zedpstackVersion: ZEDPSTACK_VERSION,
+    39	    upstream: {
+    40	      pstackReference: 'pstack-claude@0.9.67',
+    41	      note: 'documentation only; not a runtime dependency',
+    42	    },
+    43	    bindings,
+    44	    steps,
+    45	  };
+    46	}
+    47	
+    48	export function updateManifestStep(manifest, stepId, patch) {
+    49	  const steps = manifest.steps.map((s) => {
+    50	    if (s.stepId !== stepId) return s;
+    51	    const next = { ...s, ...patch };
+    52	    if (patch.lastErrors === null) {
+    53	      delete next.lastErrors;
+    54	    }
+    55	    return next;
+    56	  });
+    57	  return {
+    58	    ...manifest,
+    59	    steps,
+    60	    updatedAt: new Date().toISOString(),
+    61	  };
+    62	}
+?? docs/DISCUSSION_NEXT_STEP.md
+?? docs/discuss-next-claude-opus.err
+?? docs/discuss-next-claude-opus.txt
+?? docs/discuss-next-codex-sol.err
+?? docs/discuss-next-codex-sol.stdout
+
+hook: PostToolUse
+hook: PostToolUse Completed
+exec
+/bin/zsh -lc "node --input-type=module -e 'import { parseModelSheet, bindingsFromSheet } from \"./src/modelSheet.mjs\";
+const oldBinding = { runtime: \"claude\", model: \"old-explicit-model\", permissionProfile: \"read-only\" };
+for (const sheet of [\"how explorer: inherit-parent\", \"how explorer: auto\", \"\"]) {
+  const { bindings } = bindingsFromSheet(parseModelSheet(sheet));
+  const merged = { \"how-explorer\": oldBinding, ...bindings };
+  process.stdout.write(JSON.stringify({ sheet, generatedRoles: Object.keys(bindings), mergedExplorerModel: merged[\"how-explorer\"].model }) + \"\\n\");
+}'" in /Users/nndsk/Projects/zedpstack
+ succeeded in 0ms:
+{"sheet":"how explorer: inherit-parent","generatedRoles":[],"mergedExplorerModel":"old-explicit-model"}
+{"sheet":"how explorer: auto","generatedRoles":[],"mergedExplorerModel":"old-explicit-model"}
+{"sheet":"","generatedRoles":[],"mergedExplorerModel":"old-explicit-model"}
+
+hook: PostToolUse
+hook: PostToolUse Completed
+codex
+La comprobación en memoria confirmó que `inherit-parent`, `auto` o borrar una fila no generan un reemplazo y, con el merge actual, conservan el modelo anterior. Pondría eso antes que el paralelismo. El fan-out también exige coordinar las actualizaciones del manifest para no perder estados; no basta con agregar `Promise.all`.
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PostToolUse
+hook: PostToolUse Completed
+codex
+## Recomendación principal
+
+**Un único milestone, “v0.5, uso diario read-only confiable desde Cursor”.** Dedicaría las 2–4 semanas a cerrar el recorrido `/setup-zedpstack` → `/zedpstack` → progreso visible → resultado → judgment, con los cinco playbooks existentes.
+
+El operador gana investigaciones y revisiones repetibles sin tener que reparar configuración o completar comandos manualmente. Experience First determina ese alcance; Prove It Works exige demostrarlo en MH-Next.
+
+Discrepo con un **NO-GO por faltar paralelismo**. Un flujo secuencial puede justificar uso diario. Frente al pragmatismo GO-with-fixes atribuido a Claude, bloquearía esa declaración mientras setup pueda ejecutar silenciosamente otro modelo. La herencia actualmente no genera reemplazo y el [merge conserva bindings anteriores](/Users/nndsk/Projects/zedpstack/src/setupConfig.mjs:60).
+
+## Top 5 backlog
+
+1. **Reconcile de `inherit-parent`, `auto` y borrados.** Prioridad máxima porque cambiar la hoja debe eliminar overrides obsoletos y producir una configuración efectiva verificable.
+2. **Codex por stdin.** Elimina el riesgo de `E2BIG` en contextos grandes, ya que hoy [el prompt completo viaja en argv](/Users/nndsk/Projects/zedpstack/src/runtimes/codex.mjs:35).
+3. **Effort efectivo en CLI.** Aplicar los valores soportados y rechazar explícitamente los demás hace que setup represente lo que realmente ejecuta.
+4. **Fan-out acotado para los paneles actuales.** Reduce espera entre reviewers independientes, después de resolver configuración, transporte y actualización del estado compartido.
+5. **Un primer `bug-fix` de escritura acotado.** Aporta ejecución sobre código con un defecto reproducible y un resultado verificable antes de abordar `feature` general.
+
+Los tres primeros pertenecen al milestone; los dos últimos quedan después de su aceptación.
+
+## Evitar ahora
+
+- **Arena/swarm y más catálogo.** Amplían coordinación y coste antes de demostrar utilidad diaria del recorrido existente.
+- **Write playbooks dentro de v0.5.** Añaden aislamiento, permisos y validación de cambios, y desbordan este objetivo.
+- **Un scheduler genérico.** Cuando llegue fan-out, empezaría con concurrencia limitada y un único responsable del manifest; hoy [cada paso actualiza el manifest completo](/Users/nndsk/Projects/zedpstack/src/run.mjs:281), por lo que agregar `Promise.all` puede perder actualizaciones.
+- **Una UI nueva.** Primero comprobaría la experiencia desde Cursor, incluida la transición a judgment y la salida de `watch`.
+
+## Checklist uso diario
+
+Son **umbrales propuestos**, todavía no comprobados en MH-Next.
+
+- [ ] `/setup-zedpstack` supera cambios A→B→herencia, `auto`, borrado y reaplicación; cero modelos antiguos retenidos silenciosamente y effort aplicado o rechazado antes del spawn.
+- [ ] Diez ejecuciones reales desde Cursor durante cinco días, dos por playbook y cubriendo ambos runtimes; diez cierres hasta judgment y al menos ocho resultados útiles según el operador.
+- [ ] Un contexto de 256 KiB llega íntegro a ambos adaptadores, sin `E2BIG`; ningún resultado vacío o inválido termina como completado.
+- [ ] Cada ejecución muestra paso, runtime y modelo; los eventos recibidos aparecen en ≤2 segundos y distingue claramente `awaiting_judgment` del cierre final.
+- [ ] Cancelación, timeout y resume superan un caso cada uno; cero workers vivos diez segundos después de detenerlos, reutilización correcta de pasos válidos y cero modificaciones en archivos fuente.
+
+## Si solo una semana
+
+**Reconcile de configuración + stdin de Codex + dos recorridos completos en MH-Next**, uno por runtime, desde los comandos de Cursor hasta judgment con streaming visible. Para effort aún no soportado, error explícito.
+
+Eso justificaría un piloto controlado. La declaración de uso diario esperaría al checklist.
+hook: Stop
+hook: Stop Completed
+tokens used
+61.676

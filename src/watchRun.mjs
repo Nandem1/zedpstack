@@ -15,6 +15,7 @@ const HUMAN_TYPES = new Set([
   'run.failed',
   'run.cancelled',
   'run.awaiting_judgment',
+  'step.wave.started',
   'step.started',
   'step.completed',
   'step.failed',

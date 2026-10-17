@@ -64,11 +64,19 @@ export function buildClaudeArgv({ model, permissionProfile, repoRoot }) {
   ];
 }
 
-export function buildCodexArgv({ model, repoRoot, permissionProfile, resultOutPath }) {
+const CODEX_EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh']);
+
+export function buildCodexArgv({
+  model,
+  repoRoot,
+  permissionProfile,
+  resultOutPath,
+  effort,
+}) {
   if (permissionProfile !== 'read-only') {
     throw new Error('codex adapter: only read-only in v0');
   }
-  return [
+  const argv = [
     'codex',
     'exec',
     '-s',
@@ -80,6 +88,10 @@ export function buildCodexArgv({ model, repoRoot, permissionProfile, resultOutPa
     '-o',
     resultOutPath,
   ];
+  if (effort && CODEX_EFFORT_LEVELS.has(effort)) {
+    argv.push('-c', `model_reasoning_effort="${effort}"`);
+  }
+  return argv;
 }
 
 export function workerEnv(runtime, baseEnv = process.env) {

@@ -5,7 +5,9 @@ import {
   inferRuntimeForModel,
   parseModelSheet,
   parseModelValue,
+  rolesAffectedBySheet,
   sheetBindingOverflowWarnings,
+  zedpstackManagedRoles,
 } from '../src/modelSheet.mjs';
 
 describe('modelSheet', () => {
@@ -57,6 +59,39 @@ reflect judgment: opus
     assert.equal(bindings['reflect-reviewer-judgment'].model, 'cursor-grok-4.6-high');
     assert.equal(bindings['reflect-reviewer-divergent'].model, 'cursor-grok-4.6-high');
     assert.equal(bindings['reflect-synthesize'].model, 'cursor-grok-4.6-high');
+  });
+
+  it('records skipped inheritance and roles affected for inherit-parent', () => {
+    const parsed = parseModelSheet(`
+how explorer: inherit-parent
+architect runners: haiku, auto
+`);
+    const { bindings, rolesAffected, skippedInheritance } = bindingsFromSheet(parsed);
+    assert.equal(Object.keys(bindings).length, 1);
+    assert.equal(bindings['architect-runner-a'].model, 'haiku');
+    assert.equal(rolesAffected.includes('how-explorer'), true);
+    assert.equal(rolesAffected.includes('explorer'), true);
+    assert.equal(rolesAffected.includes('architect-runner-b'), true);
+    assert.equal(
+      skippedInheritance.some(
+        (e) => e.sheetRole === 'how explorer' && e.zedRole === 'how-explorer',
+      ),
+      true,
+    );
+    assert.equal(
+      skippedInheritance.some(
+        (e) => e.sheetRole === 'architect runners' && e.zedRole === 'architect-runner-b',
+      ),
+      true,
+    );
+    assert.deepEqual(rolesAffectedBySheet(parsed), rolesAffected);
+  });
+
+  it('zedpstackManagedRoles lists every mapped worker id', () => {
+    const managed = zedpstackManagedRoles();
+    assert.equal(managed.includes('how-explorer'), true);
+    assert.equal(managed.includes('interrogate-reviewer-c'), true);
+    assert.equal(managed.includes('explorer'), true);
   });
 
   it('architect runners overflow reports extra models without overwriting slot b', () => {

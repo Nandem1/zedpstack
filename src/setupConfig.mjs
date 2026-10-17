@@ -5,8 +5,11 @@ import { loadConfig } from './config.mjs';
 import {
   bindingsFromSheet,
   defaultSheetTemplate,
+  GENERIC_ALIAS_ROLES,
   parseModelSheet,
   sheetBindingOverflowWarnings,
+  sheetRowMapsToZedRole,
+  zedpstackManagedRoles,
 } from './modelSheet.mjs';
 import { zedpstackRoot } from './paths.mjs';
 
@@ -31,8 +34,34 @@ export function readModelSheet(filePath) {
 }
 
 /**
- * Merge sheet bindings into zedpstack.config.json (preserves timeouts / unknown roles).
+ * Apply sheet bindings and drop stale zedpstack-managed overrides (preserves unknown roles).
  */
+export function reconcileConfigRoles(existingRoles, bindings, rolesAffected, parsed) {
+  const roles = { ...(existingRoles ?? {}) };
+  const managed = new Set(zedpstackManagedRoles());
+  const affected = new Set(rolesAffected);
+
+  for (const [role, binding] of Object.entries(bindings)) {
+    roles[role] = binding;
+  }
+
+  for (const role of affected) {
+    if (!(role in bindings)) {
+      delete roles[role];
+    }
+  }
+
+  for (const role of managed) {
+    if (role in bindings || affected.has(role)) continue;
+    if (GENERIC_ALIAS_ROLES.has(role) && sheetRowMapsToZedRole(parsed, role)) {
+      continue;
+    }
+    delete roles[role];
+  }
+
+  return roles;
+}
+
 export function applyModelSheetToConfig({
   sheetPath,
   configPath,
@@ -46,7 +75,8 @@ export function applyModelSheetToConfig({
     );
   }
   const parsed = parseModelSheet(sheet.text);
-  const { bindings, overflows } = bindingsFromSheet(parsed);
+  const { bindings, overflows, rolesAffected, skippedInheritance } =
+    bindingsFromSheet(parsed);
 
   const cfgFile =
     configPath ??
@@ -57,7 +87,13 @@ export function applyModelSheetToConfig({
   if (fs.existsSync(cfgFile)) {
     configData = JSON.parse(fs.readFileSync(cfgFile, 'utf8'));
   }
-  configData.roles = { ...(configData.roles ?? {}), ...bindings };
+  const previousRoles = configData.roles ?? {};
+  configData.roles = reconcileConfigRoles(
+    previousRoles,
+    bindings,
+    rolesAffected,
+    parsed,
+  );
   if (!configData.$schema) {
     configData.$schema = './schemas/config.schema.json';
   }
@@ -65,11 +101,18 @@ export function applyModelSheetToConfig({
   fs.mkdirSync(path.dirname(cfgFile), { recursive: true });
   fs.writeFileSync(cfgFile, `${JSON.stringify(configData, null, 2)}\n`, 'utf8');
 
+  const rolesRemoved = Object.keys(previousRoles).filter(
+    (role) => role in previousRoles && !(role in configData.roles),
+  );
+
   return {
     sheetPath: sheet.path,
     sheetExists: sheet.exists,
     configPath: cfgFile,
     rolesUpdated: Object.keys(bindings),
+    rolesAffected,
+    rolesRemoved,
+    skippedInheritance,
     overflows,
     overflowWarnings: overflows.length
       ? sheetBindingOverflowWarnings(overflows)

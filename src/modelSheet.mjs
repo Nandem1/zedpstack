@@ -37,6 +37,27 @@ const SHARED_SHEET_ROLES = new Set(['reflect judgment, divergent, synthesizer'])
 /** List length sets subagent count; extra entries must not overwrite the last slot. */
 const PANEL_SHEET_ROLES = new Set(['architect runners', 'interrogate reviewers']);
 
+/** Generic config aliases; kept when another sheet row still maps to them. */
+export const GENERIC_ALIAS_ROLES = new Set(['explorer', 'synthesizer']);
+
+/** Union of zedpstack worker role ids driven by the model sheet. */
+export function zedpstackManagedRoles() {
+  const ids = new Set();
+  for (const mapped of Object.values(SHEET_TO_ZEDPSTACK_ROLES)) {
+    for (const role of mapped) ids.add(role);
+  }
+  return [...ids].sort();
+}
+
+/** Whether a parsed sheet still contains a row that maps to this alias role. */
+export function sheetRowMapsToZedRole(parsed, zedRole) {
+  for (const [sheetRole, mapped] of Object.entries(SHEET_TO_ZEDPSTACK_ROLES)) {
+    if (!mapped.includes(zedRole)) continue;
+    if (sheetRole in parsed.roles) return true;
+  }
+  return false;
+}
+
 /**
  * @param {string} slugWithOptionalEffort e.g. "haiku @high" or "gpt-6.1-sol"
  */
@@ -143,10 +164,20 @@ export function sheetBindingOverflowWarnings(overflows) {
 }
 
 /**
+ * Zed role ids touched by the current sheet rows (including inherit-parent / auto).
+ * @param {ReturnType<typeof parseModelSheet>} parsed
+ */
+export function rolesAffectedBySheet(parsed, options) {
+  return bindingsFromSheet(parsed, options).rolesAffected;
+}
+
+/**
  * Build zedpstack config role entries from a parsed sheet.
  * @returns {{
  *   bindings: Record<string, { runtime: string, model: string, permissionProfile: string, effort?: string }>,
  *   overflows: { sheetRole: string, model: string, index: number }[],
+ *   rolesAffected: string[],
+ *   skippedInheritance: { sheetRole: string, zedRole: string, raw: string }[],
  * }}
  */
 export function bindingsFromSheet(parsed, { defaultEffort = 'session' } = {}) {
@@ -159,42 +190,103 @@ export function bindingsFromSheet(parsed, { defaultEffort = 'session' } = {}) {
 
   const out = {};
   const overflows = [];
+  const rolesAffectedSet = new Set();
+  const skippedInheritance = [];
 
   for (const [sheetRole, values] of Object.entries(parsed.roles)) {
     const zedRoles = SHEET_TO_ZEDPSTACK_ROLES[sheetRole];
     if (!zedRoles?.length) continue;
 
-    const usable = values
-      .map((raw) => ({ raw, binding: bindingForModel(raw, globalEffort) }))
-      .filter((entry) => entry.binding);
-
-    if (SHARED_SHEET_ROLES.has(sheetRole) && usable.length === 1) {
-      const binding = usable[0].binding;
+    if (SHARED_SHEET_ROLES.has(sheetRole)) {
       for (const targetRole of zedRoles) {
-        out[targetRole] = binding;
+        rolesAffectedSet.add(targetRole);
+      }
+      const entries = values.map((raw) => ({
+        raw,
+        binding: bindingForModel(raw, globalEffort),
+      }));
+      const usable = entries.filter((entry) => entry.binding);
+      if (usable.length === 1) {
+        const binding = usable[0].binding;
+        for (const targetRole of zedRoles) {
+          out[targetRole] = binding;
+        }
+      } else {
+        for (const { raw } of entries) {
+          const { model } = parseModelValue(raw);
+          if (model === 'inherit-parent' || model === 'auto') {
+            for (const zedRole of zedRoles) {
+              skippedInheritance.push({ sheetRole, zedRole, raw });
+            }
+          }
+        }
       }
       continue;
     }
 
     const panel = PANEL_SHEET_ROLES.has(sheetRole);
 
-    usable.forEach(({ raw, binding }, index) => {
-      if (panel && index >= zedRoles.length) {
-        overflows.push({
-          sheetRole,
-          model: parseModelValue(raw).model,
-          index,
-        });
+    if (panel) {
+      for (let index = 0; index < zedRoles.length; index++) {
+        const targetRole = zedRoles[index];
+        rolesAffectedSet.add(targetRole);
+        const raw = values[index];
+        if (raw === undefined) continue;
+        const binding = bindingForModel(raw, globalEffort);
+        if (!binding) {
+          skippedInheritance.push({ sheetRole, zedRole: targetRole, raw });
+          continue;
+        }
+        out[targetRole] = binding;
+      }
+      values.forEach((raw, index) => {
+        if (index >= zedRoles.length) {
+          overflows.push({
+            sheetRole,
+            model: parseModelValue(raw).model,
+            index,
+          });
+        }
+      });
+      continue;
+    }
+
+    if (values.length === 1 && zedRoles.length > 1) {
+      const raw = values[0];
+      for (const targetRole of zedRoles) {
+        rolesAffectedSet.add(targetRole);
+      }
+      const binding = bindingForModel(raw, globalEffort);
+      if (!binding) {
+        for (const zedRole of zedRoles) {
+          skippedInheritance.push({ sheetRole, zedRole, raw });
+        }
+        continue;
+      }
+      for (const targetRole of zedRoles) {
+        out[targetRole] = binding;
+      }
+      continue;
+    }
+
+    values.forEach((raw, index) => {
+      const targetRole = zedRoles[index] ?? zedRoles[zedRoles.length - 1];
+      rolesAffectedSet.add(targetRole);
+      const binding = bindingForModel(raw, globalEffort);
+      if (!binding) {
+        skippedInheritance.push({ sheetRole, zedRole: targetRole, raw });
         return;
       }
-      const targetRole = panel
-        ? zedRoles[index]
-        : (zedRoles[index] ?? zedRoles[zedRoles.length - 1]);
       out[targetRole] = binding;
     });
   }
 
-  return { bindings: out, overflows };
+  return {
+    bindings: out,
+    overflows,
+    rolesAffected: [...rolesAffectedSet].sort(),
+    skippedInheritance,
+  };
 }
 
 export function defaultSheetTemplate() {

@@ -38,14 +38,15 @@ export async function runCodexWorker({
       repoRoot,
       permissionProfile: binding.permissionProfile,
       resultOutPath: codexLastMessage,
+      effort: binding.effort,
     }),
-    promptText,
+    '-',
   ];
 
   const child = spawn(argv[0], argv.slice(1), {
     cwd: repoRoot,
     env: workerEnv('codex'),
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
 
   eventSink.emit('worker.spawned', {
@@ -57,8 +58,14 @@ export async function runCodexWorker({
     pid: child.pid,
     cwd: repoRoot,
     argv,
+    promptDelivery: 'stdin',
+    promptPath: path.relative(repoRoot, promptPath),
+    promptBytes: Buffer.byteLength(promptText, 'utf8'),
   });
   onWorkerSpawned?.({ pid: child.pid });
+
+  child.stdin.write(promptText);
+  child.stdin.end();
 
   const timeout = setTimeout(() => {
     eventSink.emit('worker.timeout', { runId, stepId, workerId, pid: child.pid });
