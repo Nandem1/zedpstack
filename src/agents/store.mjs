@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { AGENTS_DIR } from '../constants.mjs';
+import { checkModel } from '../modelCheck.mjs';
 
 /**
  * One writer per file, so no record is ever read-modified-written:
@@ -185,9 +186,9 @@ function fromV1(record) {
 }
 
 /**
- * Merged AgentView `{spec, run, launch, stop, cleanup, status, error, finishedAt}`.
- * `error` and `finishedAt` are derived alongside `status` so callers never
- * re-branch on which file decided it.
+ * Merged AgentView `{spec, run, launch, stop, cleanup, status, error, finishedAt, modelCheck}`.
+ * `error`, `finishedAt` and `modelCheck` are derived alongside `status` so
+ * callers never re-branch on which file decided it.
  */
 export function loadAgent(repoRoot, id, nowMs = Date.now()) {
   const dir = agentDir(repoRoot, id);
@@ -212,7 +213,12 @@ export function loadAgent(repoRoot, id, nowMs = Date.now()) {
   } else if (status === 'failed') {
     error = RUNNER_LOST_ERROR;
   }
-  return { spec, run, launch, stop, cleanup, status, error, finishedAt };
+  const modelCheck = checkModel({
+    requested: spec.binding.model,
+    effective: run?.effectiveModel,
+    expected: spec.expectedModel,
+  });
+  return { spec, run, launch, stop, cleanup, status, error, finishedAt, modelCheck };
 }
 
 export function listAgentIds(repoRoot) {

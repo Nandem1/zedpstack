@@ -174,7 +174,11 @@ describe('MCP server', () => {
       { repo: sb.repo, agent_ids: [id], timeout_seconds: 20 },
       { progressToken: 'tok-1' },
     );
-    assert.match(waited.result.content[0].text, /✓ How: board check {2}haiku → claude-haiku-fake · Claude\n {2}done in/);
+    assert.match(waited.result.content[0].text, /✓ How: board check {2}haiku → claude-haiku-fake \(alias\) · Claude\n {2}done in/);
+    const done = JSON.parse(waited.result.content.at(-1).text).done[0];
+    assert.deepEqual(done.model_check, {
+      state: 'unverified', requested: 'haiku', effective: 'claude-haiku-fake', expected: null, note: 'alias haiku resolved to claude-haiku-fake',
+    });
     const progress = server.notifications.filter((n) => n.method === 'notifications/progress' && n.params.progressToken === 'tok-1');
     assert.ok(progress.length >= 1, 'at least one progress notification');
     assert.match(progress[0].params.message, /How: board check/);

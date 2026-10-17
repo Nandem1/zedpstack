@@ -3,25 +3,17 @@
  *
  *   ⠿ How: backend tracking SQL  composer-2.5 · Cursor
  *     > Searching for "UPDATE tracking"
+ *   ✓ Review plan  opus → claude-opus-4-8 ⚠ esperado claude-opus-5-5 · Claude
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { modelLabel } from '../modelCheck.mjs';
 import { agentDir } from './store.mjs';
 
 const RUNTIME_LABEL = { claude: 'Claude', codex: 'Codex', cursor: 'Cursor' };
 export const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const STATUS_ICON = { starting: '⠿', running: '⠿', completed: '✓', failed: '✗', stopped: '■' };
-
-const norm = (s) => String(s ?? '').toLowerCase().replace(/[\s_]+/g, '-');
-
-/** `opus → claude-opus-4-8` when the CLI resolved an alias to something else. */
-export function modelLabel(model, effectiveModel) {
-  if (!effectiveModel) return model;
-  const eff = effectiveModel.replace(/-\d{8}$/, '');
-  if (norm(eff) === norm(model)) return model;
-  return `${model} → ${eff}`;
-}
 
 export function formatElapsed(ms) {
   if (!Number.isFinite(ms) || ms < 0) return '';
@@ -65,7 +57,8 @@ export function boardRows(repoRoot, views, now = Date.now()) {
       id: spec.id,
       status: v.status,
       title: spec.description ?? spec.role ?? spec.id,
-      model: modelLabel(spec.binding.model, run?.effectiveModel),
+      model: modelLabel(v.modelCheck),
+      model_check: v.modelCheck,
       runtime: RUNTIME_LABEL[spec.binding.runtime] ?? spec.binding.runtime,
       readonly: spec.binding.permissionProfile === 'read-only',
       elapsed: formatElapsed(end - start),

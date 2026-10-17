@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createActivityParser, narrationLine } from '../src/runtimes/activity.mjs';
-import { modelLabel } from '../src/agents/board.mjs';
 
 function collect(runtime) {
   const seen = { activity: [], meta: [] };
@@ -40,12 +39,5 @@ describe('worker activity', () => {
 
   it('narration is clipped to one line', () => {
     assert.equal(narrationLine('a'.repeat(200)).length, 2 + 96);
-  });
-
-  it('labels a resolved alias and hides an identical one', () => {
-    assert.equal(modelLabel('opus', 'claude-opus-4-8'), 'opus → claude-opus-4-8');
-    assert.equal(modelLabel('haiku', 'claude-haiku-4-5-20251001'), 'haiku → claude-haiku-4-5');
-    assert.equal(modelLabel('composer-2.5', 'Composer 2.5'), 'composer-2.5');
-    assert.equal(modelLabel('gpt-6.1-sol', 'gpt-6.1-sol'), 'gpt-6.1-sol');
   });
 });

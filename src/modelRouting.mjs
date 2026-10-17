@@ -11,7 +11,7 @@
 
 export const WORKER_RUNTIMES = ['claude', 'codex', 'cursor'];
 
-const CLAUDE_ALIASES = new Set(['haiku', 'sonnet', 'opus', 'fable']);
+export const CLAUDE_ALIASES = new Set(['haiku', 'sonnet', 'opus', 'fable']);
 
 const RULES = [
   { runtime: 'claude', provider: 'anthropic', re: /^claude-/, reason: 'Anthropic model id for Claude Code CLI' },

@@ -16,6 +16,7 @@ import {
   writeLaunch,
   writeRun,
 } from '../src/agents/store.mjs';
+import { formatBoardAnsi, formatBoardMarkdown, formatBoardText } from '../src/agents/board.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 import { childEnv } from './helpers/env.mjs';
 
@@ -348,5 +349,82 @@ describe('agent origin', () => {
       if (prev === undefined) delete process.env.ZEDPSTACK_ACP_SESSION;
       else process.env.ZEDPSTACK_ACP_SESSION = prev;
     }
+  });
+});
+
+describe('model check', () => {
+  let sb;
+  before(() => {
+    sb = makeSandbox();
+    fs.mkdirSync(process.env.ZEDPSTACK_HOME, { recursive: true });
+    fs.writeFileSync(
+      path.join(process.env.ZEDPSTACK_HOME, 'model-probe.json'),
+      JSON.stringify({ 'claude:opus': { ok: true, effective: 'claude-opus-4-8', at: new Date().toISOString() } }),
+    );
+  });
+
+  const SUMMARY_KEYS = [
+    'agent_id', 'status', 'description', 'role', 'runtime', 'model', 'effort', 'readonly', 'isolation', 'cwd', 'created_at', 'finished_at',
+  ];
+
+  it('flags a CLI that ran another model everywhere the model is shown, and keeps the worker completed', async () => {
+    const spawned = spawnAgent({
+      repo: sb.repo, model: 'claude-opus-5-5', readonly: true, description: 'Review plan', prompt: 'FAKE_MODEL=claude-opus-4-8 review',
+    });
+    assert.equal(loadAgent(sb.repo, spawned.agent_id).spec.expectedModel, 'claude-opus-5-5');
+    assert.deepEqual(spawned.model_check, {
+      state: 'unverified', requested: 'claude-opus-5-5', effective: null, expected: 'claude-opus-5-5', note: 'no evidence',
+    });
+    for (const key of SUMMARY_KEYS) assert.ok(key in spawned, `summary keeps ${key}`);
+
+    const waited = await waitAgents({ repo: sb.repo, ids: [spawned.agent_id], timeoutSeconds: 20, pollMs: 100 });
+    const [done] = waited.done;
+    assert.equal(done.status, 'completed');
+    assert.equal(done.model_check.state, 'mismatch');
+    assert.equal(done.model_check.effective, 'claude-opus-4-8');
+    assert.equal(done.warnings.length, 1);
+    assert.ok(done.text.startsWith(`${done.warnings[0]}\n\n`), 'the warning leads the report');
+    assert.match(done.text, /fake claude report/);
+    assert.equal(agentStatus({ repo: sb.repo, id: spawned.agent_id }).model_check.state, 'mismatch');
+    assert.equal(listAgents({ repo: sb.repo }).find((a) => a.agent_id === spawned.agent_id).model_check.state, 'mismatch');
+
+    const [row] = agentBoard({ repo: sb.repo, ids: [spawned.agent_id] });
+    assert.equal(row.model, 'claude-opus-5-5 → claude-opus-4-8 ⚠ esperado claude-opus-5-5');
+    assert.equal(row.model_check.state, 'mismatch');
+    assert.match(formatBoardText([row]), /✓ Review plan {2}claude-opus-5-5 → claude-opus-4-8 ⚠ esperado claude-opus-5-5 · Claude/);
+    assert.match(formatBoardMarkdown([row]), /\*\*Review plan\*\* · claude-opus-5-5 → claude-opus-4-8 ⚠ esperado claude-opus-5-5 \(Claude\)/);
+    assert.match(formatBoardAnsi([row]), /⚠ esperado claude-opus-5-5/);
+  });
+
+  it('expects the probed id for an alias, and only notes an alias nobody probed', async () => {
+    const opus = spawnAgent({ repo: sb.repo, model: 'opus', readonly: true, prompt: 'FAKE_MODEL=claude-opus-4-8-20260101 look' });
+    const moved = spawnAgent({ repo: sb.repo, model: 'opus', readonly: true, prompt: 'FAKE_MODEL=claude-opus-5-5 look' });
+    const haiku = spawnAgent({ repo: sb.repo, model: 'haiku', readonly: true, prompt: 'look' });
+    assert.equal(loadAgent(sb.repo, opus.agent_id).spec.expectedModel, 'claude-opus-4-8');
+    assert.equal(loadAgent(sb.repo, haiku.agent_id).spec.expectedModel, null);
+    const ids = [opus.agent_id, moved.agent_id, haiku.agent_id];
+    const waited = await waitAgents({ repo: sb.repo, ids, timeoutSeconds: 20, pollMs: 100 });
+    const byId = Object.fromEntries(waited.done.map((d) => [d.agent_id, d]));
+    assert.equal(byId[opus.agent_id].model_check.state, 'ok');
+    assert.equal(byId[opus.agent_id].warnings, undefined);
+    assert.equal(byId[moved.agent_id].model_check.state, 'mismatch');
+    assert.equal(byId[haiku.agent_id].model_check.state, 'unverified');
+    assert.equal(byId[haiku.agent_id].model_check.note, 'alias haiku resolved to claude-haiku-fake');
+    const rows = agentBoard({ repo: sb.repo, ids: [opus.agent_id, haiku.agent_id] });
+    assert.deepEqual(rows.map((r) => r.model), ['opus → claude-opus-4-8', 'haiku → claude-haiku-fake (alias)']);
+  });
+
+  it('names the CLI version when the API wants a newer CLI', async () => {
+    const spawned = spawnAgent({ repo: sb.repo, model: 'claude-opus-5-5', readonly: true, prompt: 'FAKE_TOO_OLD' });
+    const waited = await waitAgents({ repo: sb.repo, ids: [spawned.agent_id], timeoutSeconds: 20, pollMs: 100 });
+    assert.equal(waited.done[0].status, 'failed');
+    assert.match(waited.done[0].error, /^claude CLI 9\.9\.9 cannot run claude-opus-5-5: the API requires 2\.1\.280 or later/);
+  });
+
+  it('derives the check on read without writing', () => {
+    const before = mtimes(sb.repo);
+    for (const a of listAgents({ repo: sb.repo })) agentResult({ repo: sb.repo, id: a.agent_id });
+    agentBoard({ repo: sb.repo });
+    assert.deepEqual(mtimes(sb.repo), before);
   });
 });

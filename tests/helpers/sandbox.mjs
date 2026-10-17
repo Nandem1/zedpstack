@@ -26,6 +26,8 @@ export function makeSandbox({ sheet = 'how explorer: haiku\narchitect runners: g
     PSTACK_ROOT: path.join(FIXTURES, 'pstack'),
     ZEDPSTACK_MODEL_SHEET: sheetPath,
     ZEDPSTACK_WORKTREES: path.join(root, 'worktrees'),
+    // Keeps the user's probe cache out of expectedModel.
+    ZEDPSTACK_HOME: path.join(root, 'zp-home'),
     TMPDIR: tmp,
   });
   const log = path.join(tmp, 'fake-cli.log');

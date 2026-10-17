@@ -4,10 +4,12 @@ import path from 'node:path';
 import { loadConfig } from '../config.mjs';
 import { DEFAULT_AGENT_TIMEOUT_MS } from '../constants.mjs';
 import { EventSink } from '../events/sink.mjs';
+import { cliRejection, expectedModelFor, modelWarning } from '../modelCheck.mjs';
 import { dispatchScriptPath } from '../paths.mjs';
 import { verifyRuntimeAvailable } from '../permissions.mjs';
 import { resolvePstackInstall } from '../pstack.mjs';
 import { runWorkerProcess } from '../runtimes/worker.mjs';
+import { readProbeCache } from '../setupWizard.mjs';
 import { resolveAgentModel } from '../workerModels.mjs';
 import { boardRows } from './board.mjs';
 import {
@@ -152,7 +154,7 @@ export function spawnAgent(req, { frontend = 'mcp' } = {}) {
     notes,
     createdAt: new Date().toISOString(),
     origin: agentOrigin(frontend),
-    expectedModel: null,
+    expectedModel: expectedModelFor(binding, { probeCache: readProbeCache() }),
   });
 
   const runnerLog = fs.openSync(path.join(dir, 'runner.log'), 'a');
@@ -228,11 +230,25 @@ export async function execAgent({ repo, id }) {
 
   const { result } = outcome;
   if (changes?.commit && !result.ok) changes.partial = true;
+  const rejection = result.ok
+    ? null
+    : cliRejection({
+      runtime: spec.binding.runtime,
+      model: spec.binding.model,
+      cliVersion: spec.cliVersion,
+      text: [result.text, ...tailLines(path.join(dir, 'stderr.log'), 5)].join('\n'),
+    });
+  let error = null;
+  if (!result.ok) {
+    error = outcome.timedOut
+      ? 'timeout'
+      : rejection ?? `exit ${outcome.exitCode}${result.text === '(empty)' ? ', empty output' : ''}`;
+  }
   return finish({
     ok: result.ok,
     exitCode: outcome.exitCode,
     timedOut: outcome.timedOut,
-    error: result.ok ? null : outcome.timedOut ? 'timeout' : `exit ${outcome.exitCode}${result.text === '(empty)' ? ', empty output' : ''}`,
+    error,
     changes,
     changeError,
   });
@@ -264,6 +280,7 @@ function summarize(view) {
   if (spec.notes?.length) out.notes = spec.notes;
   if (spec.worktree) out.branch = spec.worktree.branch;
   if (view.run?.effectiveModel) out.effective_model = view.run.effectiveModel;
+  out.model_check = view.modelCheck;
   return out;
 }
 
@@ -291,6 +308,11 @@ export function agentResult({ repo, id, maxChars = MAX_INLINE_RESULT_CHARS }) {
     text = JSON.parse(fs.readFileSync(resultPath, 'utf8')).text ?? '';
   }
   out.text = text.length > maxChars ? `${text.slice(0, maxChars)}\n\n[truncated; full text in ${resultPath}]` : text;
+  const warning = modelWarning(view.modelCheck);
+  if (warning) {
+    out.warnings = [warning];
+    out.text = `${warning}\n\n${out.text}`;
+  }
   out.result_path = resultPath;
   const outcome = view.run?.outcome;
   if (outcome?.changes) out.changes = outcome.changes;

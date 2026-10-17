@@ -1,5 +1,6 @@
 // Stand-in for claude / codex / agent in tests. Behaviour is driven by markers
-// in the prompt: FAKE_WRITE writes a file in cwd, FAKE_SLEEP hangs, FAKE_FAIL exits 3.
+// in the prompt: FAKE_WRITE writes a file in cwd, FAKE_SLEEP hangs, FAKE_FAIL exits 3,
+// FAKE_MODEL=<id> reports <id> as the model the CLI ran, FAKE_TOO_OLD rejects like an outdated CLI.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -40,6 +41,12 @@ process.stdin.on('end', () => {
     fs.writeFileSync(path.join(process.cwd(), 'fake-output.txt'), `written by fake ${runtime}\n`);
   }
   const model = flag('--model') ?? flag('-m');
+  const reported = /FAKE_MODEL=(\S+)/.exec(input)?.[1];
+  if (input.includes('FAKE_TOO_OLD')) {
+    const message = `API Error: 400 The model ${model} requires Claude Code 2.1.280 or later. Run claude update.`;
+    process.stdout.write(`${JSON.stringify({ type: 'result', is_error: true, result: message })}\n`);
+    process.exit(1);
+  }
   if (runtime === 'claude' && model === 'fable') {
     process.stdout.write(`${JSON.stringify({ type: 'system', subtype: 'init', model: 'claude-fable-5' })}\n`);
     process.stdout.write(`${JSON.stringify({ type: 'result', is_error: true, result: 'Fable 5 requires usage credits.' })}\n`);
@@ -48,11 +55,11 @@ process.stdin.on('end', () => {
   const report = `fake ${runtime} report\nmodel=${model}\nreadonly=${input.includes('You are read-only')}\nsrc/index.mjs:1 cited`;
   if (runtime === 'codex') {
     fs.writeFileSync(flag('-o'), report);
-    process.stderr.write(`model: ${model}\ncodex\nReading the brief first.\nexec\n/bin/zsh -lc "rg foo" in /tmp\nsucceeded in 3ms:\n`);
+    process.stderr.write(`model: ${reported ?? model}\ncodex\nReading the brief first.\nexec\n/bin/zsh -lc "rg foo" in /tmp\nsucceeded in 3ms:\n`);
     process.exit(0);
   }
   const lines = [
-    { type: 'system', subtype: 'init', model: `claude-${model}-fake` },
+    { type: 'system', subtype: 'init', model: reported ?? `claude-${model}-fake` },
     { type: 'assistant', message: { content: [{ type: 'text', text: 'Tracing the fake write path. Then more.' }] } },
     { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: `${process.cwd()}/src/index.mjs` } }] } },
     { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] } },
