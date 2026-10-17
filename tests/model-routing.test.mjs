@@ -34,3 +34,22 @@ describe('modelRouting', () => {
     assert.equal(bad.inferred, 'cursor');
   });
 });
+
+describe('modelRouting edge cases', () => {
+  it('keeps full Claude ids and gpt-5.x on their native CLIs', () => {
+    assert.equal(classifyModelSlug('claude-opus-5-5').runtime, 'claude');
+    assert.equal(classifyModelSlug('claude-sonnet-5-5').runtime, 'claude');
+    assert.equal(classifyModelSlug('gpt-5.5').runtime, 'codex');
+    assert.equal(classifyModelSlug('gpt-6-astra').runtime, 'codex');
+  });
+
+  it('an explicit prefix wins and is stripped from the model', () => {
+    const r = classifyModelSlug('cursor:claude-opus-5-5');
+    assert.deepEqual([r.runtime, r.model], ['cursor', 'claude-opus-5-5']);
+  });
+
+  it('unknown slugs are low confidence and never fail validation', () => {
+    assert.equal(classifyModelSlug('mystery-9').confident, false);
+    assert.equal(validateModelForRuntime('mystery-9', 'cursor').ok, true);
+  });
+});

@@ -1,9 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ZedpstackConfig",
+  "description": "Batch-playbook role bindings (dispatch run) and worker permission settings. spawn_agent reads models from the worker sheet, not from here.",
   "type": "object",
   "properties": {
     "roles": { "type": "object" },
-    "timeouts": { "type": "object" }
+    "timeouts": { "type": "object" },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "claudeWriteAllowedTools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Bash patterns a Claude writer may run, e.g. \"Bash(npm test *)\". Replaces the built-in list."
+        }
+      }
+    }
   }
 }

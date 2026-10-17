@@ -134,9 +134,10 @@ function bindingForModel(raw, globalEffort) {
   if (!model || model === 'inherit-parent' || model === 'auto') {
     return null;
   }
+  const routed = classifyModelSlug(model);
   const binding = {
-    runtime: inferRuntimeForModel(model),
-    model,
+    runtime: routed.runtime,
+    model: routed.model,
     permissionProfile: 'read-only',
   };
   const eff = effort ?? globalEffort;
@@ -282,23 +283,29 @@ export function bindingsFromSheet(parsed, { defaultEffort = 'session' } = {}) {
 }
 
 export function defaultSheetTemplate() {
-  return `# pstack model configuration (zedpstack sync)
+  return `# zedpstack worker sheet: pstack role lines (as in /setup-pstack), values are worker CLI slugs.
+# claude: haiku, sonnet, opus, fable · codex: gpt-6.1-sol, ... · cursor: composer-2.5, ...
+# Prefix a slug to force the CLI when it exists on several: cursor:claude-opus-5-5, codex:gpt-6-sol.
+# Panel rows (lists) run one worker per entry. Edit with /setup-zedpstack; check with "dispatch doctor --human".
 
+feature, refactoring: opus
+bug-fix: fable
+perf-issue: fable
+hillclimb: fable
+judgment and prose: opus
+strongest judgment: fable
 how explorer: haiku
-how explainer: gpt-6.1-sol
-why investigators: gpt-6.1-sol
-why synthesizer: haiku
-architect ground: haiku
-architect runners: gpt-6.1-sol, haiku
-architect synthesize: gpt-6.1-sol
-interrogate reviewers: haiku, haiku, haiku
-interrogate lead: gpt-6.1-sol
+how explainer: sonnet
+why investigators: sonnet
+why synthesizer: sonnet
 reflect tooling: haiku
-reflect judgment: haiku
-reflect divergent: haiku
-reflect synthesizer: haiku
+reflect judgment, divergent, synthesizer: sonnet
+arena runners: opus, gpt-6.1-sol, sonnet
+arena cross-judge pool: opus, gpt-6.1-sol
+swarm workers: sonnet
+architect runners: gpt-6.1-sol, opus
+interrogate reviewers: opus, gpt-6.1-sol, sonnet
 
 default effort: session
-session hook: on
 `;
 }

@@ -1,64 +1,74 @@
 # zedpstack
 
-Orquestación portable: **playbooks pstack** (how, Investigation, …) ejecutados con Claude/Codex CLI.
+Usa **pstack** (poteto-mode) en cualquier host, como Claude Code, Codex, Cursor o los agentes ACP de Zed, y elige qué CLI y qué modelo corre cada subagente.
 
-> **The LLM decides; the dispatcher executes.**
+> **El LLM decide; el dispatcher ejecuta.**
 
-- `SKILL.md` — juicio del orquestador (routing, síntesis, judgment).
-- `scripts/dispatch.mjs` — mecánica determinista (spawn, manifest, eventos, validación).
+El agente con el que chateas es el orquestador. Lee poteto-mode, clasifica la tarea (bug fix, feature, investigation…) y sigue el playbook de pstack. Cada vez que pstack dice "lanza un subagente", el orquestador llama a `spawn_agent` de zedpstack, y zedpstack lo ejecuta como `claude -p`, `codex exec` o `agent -p` (Cursor) según tu hoja de modelos. Por ejemplo: explorers en haiku, los runners de architect en Codex y los reviewers de interrogate repartidos entre los tres.
 
 ## Instalación
+
+Requisitos: Node ≥ 20, pstack instalado (plugin de Codex o de Claude Code, o `PSTACK_ROOT`) y al menos uno de `claude`, `codex` o `agent`.
 
 ```bash
 git clone https://github.com/Nandem1/zedpstack.git
 cd zedpstack
-cp zedpstack.config.example.json zedpstack.config.json
-# editar modelos según tu cuenta (archivo local, no se commitea)
 npm test
+node scripts/dispatch.mjs install            # vista previa
+node scripts/dispatch.mjs install --apply    # registra MCP + skill en Claude Code, Codex y Cursor
+node scripts/dispatch.mjs doctor --human
 ```
 
-En Zed/Cursor, symlink de skill (playbooks/config se resuelven desde la ruta real del paquete):
-
-```bash
-ln -sfn "$(pwd)" ~/.agents/skills/zedpstack
-```
-
-Opcional: `export ZEDPSTACK_ROOT=/ruta/al/clon` si necesitas forzar otra raíz que no sea la del código instalado.
+`install` registra el servidor MCP (`scripts/mcp.mjs`) y enlaza los skills `zedpstack` y `setup-zedpstack`. Zed usa JSONC, así que `install --host zed` imprime el bloque `context_servers` para que lo pegues tú. Reinicia el host después.
 
 ## Uso
 
-Desde la raíz del repositorio bajo revisión:
+En el chat del host:
 
-Requiere [pstack-claude](https://github.com/) instalado en Codex (o `PSTACK_ROOT`). Ver [docs/PSTACK_ADAPTER.md](./docs/PSTACK_ADAPTER.md).
+- `/zedpstack arregla el bug del login`. Como skill en Claude Code y Codex, o como prompt MCP (en Claude Code, `/mcp__zedpstack__zedpstack`).
+- `/setup-zedpstack` para elegir modelos por rol.
 
-```bash
-node ~/Projects/zedpstack/scripts/dispatch.mjs run \
-  --playbook how-investigation \
-  --goal "¿Cómo funciona el gate de sesión en este repo?" \
-  --repo /path/to/repo
+Herramientas MCP que usa el orquestador:
+
+| Herramienta | Para qué |
+|-------------|----------|
+| `spawn_agent` | lanza un subagente en segundo plano (`prompt`, `role`/`slot` o `model`, `readonly`, `subagent_type`, `skills`) |
+| `wait_agent` | espera a uno o varios agentes y devuelve sus informes |
+| `agent_status` / `agent_result` | progreso en vivo e informe final, con el commit si es un writer |
+| `apply_agent_changes` | trae el commit de un writer a tu working tree, sin commitear |
+| `close_agent` | detiene el agente y opcionalmente borra su worktree |
+| `list_agents` / `list_models` / `read_skill` | inventario, hoja de modelos y lectura de skills de pstack |
+
+Sin MCP, los mismos comandos existen en la CLI: `node scripts/dispatch.mjs agent spawn|wait|status|result|apply|close|list` (salida JSON).
+
+## Modelos
+
+`~/.zedpstack/pstack-models.md` usa las mismas filas de rol que `/setup-pstack`, pero cada valor es un slug que un CLI puede lanzar:
+
+```
+how explorer: haiku
+architect runners: gpt-6.1-sol, opus
+interrogate reviewers: opus, gpt-6.1-sol, composer-2.5
 ```
 
-Estado en `.zedpstack/runs/<runId>/`.
+El runtime se deduce del slug. Para forzarlo, usa un prefijo: `cursor:claude-opus-5-5`. La hoja del host (por ejemplo `~/.cursor/rules/pstack-models.mdc`) nunca se usa para los workers.
 
-### Modelos (`/setup-zedpstack`)
+## Seguridad
 
-```bash
-node scripts/dispatch.mjs setup init    # hoja pstack-models
-node scripts/dispatch.mjs setup apply   # → zedpstack.config.json
-node scripts/dispatch.mjs setup show
-```
+- Los subagentes con `readonly: true` no pueden escribir: Claude solo recibe `Read,Grep,Glob`, Codex corre con `-s read-only` y Cursor con `--mode ask`.
+- Los writers trabajan en un git worktree propio (`~/.zedpstack/worktrees/…`, rama `zedpstack/<id>`). zedpstack commitea su resultado y tú decides si lo aplicas.
+- Cada worker recibe un entorno filtrado: PATH, HOME y las credenciales de su propio CLI.
 
-Skill: `setup-zedpstack/SKILL.md` (symlink opcional a `~/.agents/skills/setup-zedpstack`).
+## Modo batch (sin orquestador)
 
-### Ver progreso
+Los playbooks fijos de versiones anteriores siguen disponibles:
 
 ```bash
-node scripts/dispatch.mjs run ... --tee-events
-node scripts/dispatch.mjs watch --run-id <id> --repo <repo> --from-start
+node scripts/dispatch.mjs run --playbook how-investigation --goal "¿Cómo funciona X?" --repo /ruta --tee-events
 ```
 
-Ver [docs/STREAMING.md](./docs/STREAMING.md).
+Ver [docs/PSTACK_ADAPTERS.md](./docs/PSTACK_ADAPTERS.md) y [docs/STREAMING.md](./docs/STREAMING.md). El diseño completo está en [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
 ## Licencia
 
-MIT — ver `LICENSE`. Contenido upstream de pstack no está vendoreado; ver `docs/UPSTREAM.md`.
+MIT, ver `LICENSE`. El contenido de pstack no está incluido en este repo; ver `docs/UPSTREAM.md`.

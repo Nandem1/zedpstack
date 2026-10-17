@@ -1,43 +1,44 @@
 ---
 name: setup-zedpstack
-description: Configura workers zedpstack al estilo pstack — mostrar estado, routing por CLI, decisión del usuario. No copiar slugs Cursor→Claude.
+description: Configure which worker CLI and model zedpstack spawns for each pstack role, and register zedpstack with the host. Use for /setup-zedpstack, "configure zedpstack models", or when doctor reports problems.
 disable-model-invocation: true
 ---
 
 # setup-zedpstack
 
-Filosofía **pstack**: el orquestador **muestra** cómo está configurado; si falta algo o hay conflicto, **el usuario decide** (preguntas en chat o edición de hoja). No ejecutar `apply` a ciegas desde la hoja de Cursor.
+The worker sheet `~/.zedpstack/pstack-models.md` (override with `ZEDPSTACK_MODEL_SHEET`) uses the same role lines as `/setup-pstack`. What differs is the values: each one is a slug a worker CLI can spawn, not a slug for your host's subagent tool. `spawn_agent {"role": ...}` reads it on every call, so edits apply at once.
 
-## Dos hojas
+`Z` below is `node <zedpstack>/scripts/dispatch.mjs`.
 
-| Hoja | Ruta | Para qué |
-|------|------|----------|
-| Orquestador IDE | `~/.cursor/rules/pstack-models.mdc` | Task / composer / grok en Cursor |
-| Workers dispatch | `~/.zedpstack/pstack-models.md` | `claude` / `codex` / `agent` spawn |
+## 1. Inspect
 
-## Routing de modelos (workers)
+Run `$Z doctor --human`. It shows the pstack install, which worker CLIs exist, every role with the runtime and model it spawns, host registration, and problems. Show the user the roles section and the problems verbatim.
 
-| Slugs | Runtime | CLI |
-|-------|---------|-----|
-| `haiku`, `sonnet`, `opus` | `claude` | `claude -p` |
-| `gpt-*`, `*-sol` | `codex` | `codex exec` |
-| `composer-*`, `cursor-grok-*`, `grok-*`, `glm-*` | `cursor` | `agent -p --mode plan` |
+## 2. Detect models
 
-Detalle: `docs/SETUP_ORCHESTRATOR_AND_ROUTING.md` en el clon `~/Projects/zedpstack`.
+Never write a slug you have not seen listed. Per runtime:
 
-## Flujo del orquestador
+| Runtime | CLI | How to list | Typical slugs |
+|---------|-----|-------------|---------------|
+| `claude` | `claude -p` | the family aliases `claude --help` names under `--model` | `haiku`, `sonnet`, `opus`, `fable` |
+| `codex` | `codex exec` | the models configured in `~/.codex/config.toml` and the Codex model picker | `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-luna` |
+| `cursor` | `agent -p` | `agent --list-models` | `composer-2.5`, `grok-*`, plus Claude and GPT models served by Cursor |
 
-1. `dispatch setup diagnose --human`
-2. Si falta hoja workers: `setup init --file ~/.zedpstack/pstack-models.md`
-3. Preguntar al usuario y editar filas worker (traducir slugs Cursor → runtime correcto)
-4. `setup apply --dry-run --file ~/.zedpstack/pstack-models.md`
-5. Tras confirmación: `setup apply --file ~/.zedpstack/pstack-models.md` (`--strict` opcional)
-6. `setup show`
+The runtime is inferred from the slug. When a slug exists on more than one CLI (Cursor also serves Claude and GPT models), prefix it: `cursor:claude-opus-5-5`, `codex:gpt-6-sol`, `claude:opus`.
 
-## Orquestador agnóstico
+## 3. Choose with the user
 
-`ZEDPSTACK_ORCHESTRATOR=cursor|claude-code|codex|zed` — workers leen solo `zedpstack.config.json`.
+Start from the current sheet, or from `$Z setup init` if it is missing. Show every role with its current value and ask whether to keep it or change specific roles, offering the detected slugs. Prefer the host's structured question tool; plain text otherwise.
 
-## Progreso UI
+- Panel rows (`arena runners`, `architect runners`, `interrogate reviewers`, `arena cross-judge pool`) are lists. One worker runs per entry, so the length sets the fan-out. Recommend different runtimes across a panel: the adversarial signal comes from model diversity.
+- A value may carry an effort, `gpt-6.1-sol @high`. `default effort` sets it for values without one; `session` sets none.
+- `inherit-parent` and `auto` cannot be honored by a separate CLI; zedpstack runs the pstack default instead. Recommend a concrete slug.
+- Rows only the batch playbooks use (`architect ground`, `architect synthesize`, `interrogate lead`, `reflect judgment`, `reflect divergent`, `reflect synthesizer`) may stay.
 
-`--tee-events` en TTY → líneas legibles; `dispatch watch --from-start` igual.
+## 4. Write and verify
+
+Overwrite the whole sheet with the chosen rows, keeping the header comment. Then run `$Z models` and `$Z doctor --human` and confirm there are no problems. For the batch playbooks (`dispatch run`), also run `$Z setup apply --dry-run`, show the diff, and `$Z setup apply` after the user agrees.
+
+## 5. Register hosts
+
+If doctor shows a host as not ready, run `$Z install --host <host>` to preview and `--apply` to write. Claude Code, Codex and Cursor are automatic. Zed needs the printed `context_servers` snippet merged into its settings by hand. Tell the user to restart the host so it loads the MCP server.

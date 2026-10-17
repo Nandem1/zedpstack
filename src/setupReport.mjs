@@ -1,141 +1,85 @@
-import { classifyModelSlug } from './modelRouting.mjs';
-import {
-  bindingsFromSheet,
-  parseModelSheet,
-  SHEET_TO_ZEDPSTACK_ROLES,
-} from './modelSheet.mjs';
-import { loadConfig } from './config.mjs';
-import {
-  orchestratorModelSheetPath,
-  readModelSheet,
-  workerModelSheetPath,
-} from './setupConfig.mjs';
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import { ZEDPSTACK_VERSION } from './constants.mjs';
+import { planInstall } from './install.mjs';
 import { detectOrchestratorHost } from './orchestratorHost.mjs';
+import { RUNTIME_BINARIES } from './permissions.mjs';
+import { resolvePstackInstall } from './pstack.mjs';
+import { orchestratorModelSheetPath } from './setupConfig.mjs';
+import { describeWorkerModels, loadWorkerModels } from './workerModels.mjs';
 
-function sheetRolePreview(parsed) {
-  const rows = [];
-  for (const [sheetRole, models] of Object.entries(parsed.roles)) {
-    const zedRoles = SHEET_TO_ZEDPSTACK_ROLES[sheetRole];
-    if (!zedRoles?.length) continue;
-    for (const raw of models) {
-      const model = raw.split('@')[0].trim();
-      const { runtime, provider, reason } = classifyModelSlug(model);
-      rows.push({
-        sheetRole,
-        model: raw,
-        zedRoles,
-        inferredRuntime: runtime,
-        provider,
-        reason,
-      });
-    }
+function probeRuntimes() {
+  const out = {};
+  for (const [runtime, bin] of Object.entries(RUNTIME_BINARIES)) {
+    const res = spawnSync(bin, [runtime === 'cursor' ? '-v' : '--version'], { encoding: 'utf8' });
+    out[runtime] = res.status === 0 ? { bin, version: (res.stdout || res.stderr).trim().split('\n')[0] } : { bin, version: null };
   }
-  return rows;
+  return out;
 }
 
-/**
- * Full setup picture for orchestrator + workers (pstack-style: show, then user decides).
- */
-export function buildSetupDiagnosis() {
-  const orchestratorPath = orchestratorModelSheetPath();
-  const workerPath = workerModelSheetPath();
-  const orchestratorSheet = readModelSheet(orchestratorPath);
-  const workerSheet = readModelSheet(workerPath);
-  const orchestratorParsed = parseModelSheet(orchestratorSheet.text);
-  const workerParsed = workerSheet.exists ? parseModelSheet(workerSheet.text) : null;
+/** One picture of everything that has to line up for spawn_agent to work. */
+export function buildDoctorReport() {
+  const problems = [];
+  let pstack = null;
+  try {
+    pstack = resolvePstackInstall();
+  } catch (err) {
+    problems.push(err.message);
+  }
 
-  const workerBindings = workerParsed
-    ? bindingsFromSheet(workerParsed).bindings
-    : {};
-  const orchestratorBindings = bindingsFromSheet(orchestratorParsed).bindings;
-
-  const { path: cfgPath, data: configData } = loadConfig();
-  const configRoles = configData.roles ?? {};
-
-  const orchestratorPreview = sheetRolePreview(orchestratorParsed);
-  const cursorOnlyOnOrchestrator = orchestratorPreview.filter(
-    (r) => r.inferredRuntime === 'cursor',
-  );
-
-  const blindApplyErrors = [];
-  for (const [role, binding] of Object.entries(orchestratorBindings)) {
-    const { runtime: inferred } = classifyModelSlug(binding.model);
-    if (inferred === 'cursor' && binding.runtime === 'claude') {
-      blindApplyErrors.push({
-        role,
-        model: binding.model,
-        issue: 'legacy_inferRuntime_would_spawn_claude',
-        fix: `runtime should be "cursor" (Cursor agent CLI)`,
-      });
+  const runtimes = probeRuntimes();
+  const models = loadWorkerModels();
+  const workerSheet = describeWorkerModels(models);
+  if (!models.sheetExists) {
+    problems.push(`worker sheet missing (${models.sheetPath}); roles fall back to pstack defaults. Run /setup-zedpstack or "dispatch setup init"`);
+  }
+  for (const [label, { entries, source }] of Object.entries(models.roles)) {
+    if (source !== 'sheet') continue;
+    for (const e of entries) {
+      if (e.inherit) continue;
+      if (!runtimes[e.runtime]?.version) problems.push(`"${label}" uses ${e.runtime}:${e.model} but the ${RUNTIME_BINARIES[e.runtime]} CLI is not installed`);
+      if (!e.confident) problems.push(`"${label}" slug "${e.model}" is unrecognized; prefix it with claude:, codex: or cursor:`);
     }
   }
 
-  const workerSheetMissing = !workerSheet.exists;
-  const usingSeparateWorkerSheet = workerSheet.exists && workerPath !== orchestratorPath;
+  const hosts = planInstall().map(({ host, actions }) => ({
+    host,
+    ready: actions.every((a) => a.state === 'ok'),
+    actions: actions.map(({ apply, ...rest }) => rest),
+  }));
 
+  const hostSheet = orchestratorModelSheetPath();
   return {
+    version: ZEDPSTACK_VERSION,
     orchestratorHost: detectOrchestratorHost(),
-    orchestratorSheet: {
-      path: orchestratorSheet.path,
-      exists: orchestratorSheet.exists,
-      preview: orchestratorPreview,
-      cursorOnlySlugs: cursorOnlyOnOrchestrator,
-    },
-    workerSheet: {
-      path: workerSheet.path,
-      exists: workerSheet.exists,
-      separateFromOrchestrator: usingSeparateWorkerSheet,
-      proposedBindings: workerBindings,
-    },
-    config: {
-      path: cfgPath,
-      roleCount: Object.keys(configRoles).length,
-      roles: configRoles,
-    },
-    risks: {
-      blindCopyFromCursorMdc: blindApplyErrors,
-      workerSheetMissing,
-      recommendation: workerSheetMissing
-        ? 'Run: dispatch setup init --file ~/.zedpstack/pstack-models.md then edit worker rows (CLI-safe). Do not apply from Cursor mdc alone.'
-        : usingSeparateWorkerSheet
-          ? 'Apply worker sheet only: ZEDPSTACK_MODEL_SHEET or dispatch setup apply --file ~/.zedpstack/pstack-models.md'
-          : 'Orchestrator and worker share one sheet path; consider splitting for Cursor-only slugs.',
-    },
+    pstack: pstack ? { root: pstack.root, version: pstack.version } : null,
+    runtimes,
+    workerSheet,
+    hostSheet: { path: hostSheet, exists: fs.existsSync(hostSheet), note: 'read by the orchestrator host only; never used to spawn workers' },
+    hosts,
+    problems,
   };
 }
 
-export function formatSetupDiagnosisHuman(report) {
-  const lines = [];
-  lines.push('## zedpstack setup');
-  lines.push('');
-  lines.push(`Orchestrator host (detected): **${report.orchestratorHost.id}** (${report.orchestratorHost.note})`);
-  lines.push('');
-  lines.push('### Hoja del orquestador (pstack / IDE)');
-  lines.push(`- Path: \`${report.orchestratorSheet.path}\` (${report.orchestratorSheet.exists ? 'exists' : 'missing'})`);
-  if (report.orchestratorSheet.cursorOnlySlugs.length) {
-    lines.push('- Slugs **solo Cursor agent** (no Claude CLI):');
-    for (const row of report.orchestratorSheet.cursorOnlySlugs.slice(0, 12)) {
-      lines.push(`  - ${row.sheetRole}: \`${row.model}\` → runtime **cursor**`);
-    }
+export function formatDoctorReport(r) {
+  const lines = [`zedpstack ${r.version} · orchestrator: ${r.orchestratorHost.id} (${r.orchestratorHost.note})`, ''];
+  lines.push(`pstack: ${r.pstack ? `${r.pstack.version} at ${r.pstack.root}` : 'NOT FOUND'}`);
+  lines.push('Worker CLIs:');
+  for (const [runtime, { bin, version }] of Object.entries(r.runtimes)) {
+    lines.push(`  ${runtime.padEnd(7)} ${bin.padEnd(7)} ${version ?? 'missing'}`);
   }
-  lines.push('');
-  lines.push('### Hoja de workers (dispatch spawn)');
-  lines.push(`- Path: \`${report.workerSheet.path}\` (${report.workerSheet.exists ? 'exists' : 'missing'})`);
-  if (report.workerSheet.separateFromOrchestrator) {
-    lines.push('- Separada del orquestador: **sí** (recomendado con Cursor + Zed ACP)');
+  lines.push('', `Worker sheet: ${r.workerSheet.sheetPath} (${r.workerSheet.sheetExists ? 'found' : 'missing'})`);
+  for (const [label, { source, slots }] of Object.entries(r.workerSheet.roles)) {
+    const shown = slots.map((s) => (s.inherit ? s.value : `${s.runtime}:${s.model}${s.effort ? ` @${s.effort}` : ''}`)).join(', ');
+    lines.push(`  ${label}: ${shown}${source === 'sheet' ? '' : '  (pstack default)'}`);
   }
-  lines.push('');
-  lines.push('### Config activa');
-  lines.push(`- \`${report.config.path}\` — ${report.config.roleCount} roles`);
-  lines.push('');
-  if (report.risks.blindCopyFromCursorMdc.length) {
-    lines.push('### ⚠ Si aplicaras la hoja Cursor sin routing');
-    for (const e of report.risks.blindCopyFromCursorMdc.slice(0, 8)) {
-      lines.push(`- ${e.role}: \`${e.model}\` — ${e.fix}`);
-    }
-    lines.push('');
+  lines.push('', 'Hosts:');
+  for (const h of r.hosts) {
+    const states = h.actions.map((a) => `${a.kind} ${a.state}`).join(', ');
+    lines.push(`  ${h.host.padEnd(11)} ${h.ready ? 'ready' : 'not ready'} (${states})`);
   }
-  lines.push(`### Siguiente paso sugerido`);
-  lines.push(report.risks.recommendation);
+  if (!r.hosts.every((h) => h.ready)) lines.push('  → dispatch install --host <host> --apply');
+  lines.push('', r.problems.length ? 'Problems:' : 'No problems found.');
+  for (const p of r.problems) lines.push(`  - ${p}`);
   return lines.join('\n');
 }

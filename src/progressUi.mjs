@@ -35,6 +35,25 @@ function toolActivityLine(toolName, input) {
   return `> ${name}`;
 }
 
+const CURSOR_TOOL_NAMES = {
+  readToolCall: 'Read',
+  grepToolCall: 'Grep',
+  globToolCall: 'Glob',
+  lsToolCall: 'Glob',
+  editToolCall: 'Edit',
+  writeToolCall: 'Write',
+  shellToolCall: 'Bash',
+};
+
+function cursorToolActivityLine(key, args) {
+  const name = CURSOR_TOOL_NAMES[key] ?? key.replace(/ToolCall$/, '');
+  return toolActivityLine(name, {
+    file_path: args.path,
+    pattern: args.pattern ?? args.globPattern ?? args.path,
+    command: args.command,
+  });
+}
+
 function shortPath(p) {
   const s = String(p);
   const idx = s.indexOf('/src/');
@@ -55,11 +74,10 @@ export function activityFromStreamJsonLine(line) {
         }
       }
     }
-    if (obj.type === 'stream_event' && obj.event?.type === 'content_block_start') {
-      const block = obj.event.content_block;
-      if (block?.type === 'tool_use') {
-        return toolActivityLine(block.name, block.input);
-      }
+    if (obj.type === 'tool_call' && obj.subtype === 'started' && obj.tool_call) {
+      const key = Object.keys(obj.tool_call)[0] ?? '';
+      const args = obj.tool_call[key]?.args ?? {};
+      return cursorToolActivityLine(key, args);
     }
   } catch {
     return null;

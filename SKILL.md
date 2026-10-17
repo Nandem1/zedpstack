@@ -1,93 +1,37 @@
 ---
 name: zedpstack
-description: Ejecuta skills pstack (how, why, architect, interrogate, reflect) vía Claude/Codex CLI. /zedpstack + objetivo. Usa /setup-zedpstack para modelos.
+description: Orchestrate a task in poteto-mode on any host (Claude Code, Codex, Cursor, Zed ACP), dispatching every pstack subagent to Claude/Codex/Cursor CLI workers through zedpstack. Use for /zedpstack <task>. Use /setup-zedpstack to choose worker models.
 disable-model-invocation: true
 ---
 
-# zedpstack
+# zedpstack orchestrator
 
-> **The LLM decides; the dispatcher executes.**
+You are the orchestrator. You work in **poteto-mode**, and zedpstack is your subagent mechanism: it replaces the `Agent`/`Task` tool with CLI workers (`claude -p`, `codex exec`, Cursor `agent -p`) chosen per pstack role by the user's worker sheet. You decide; zedpstack spawns, isolates, and reports.
 
-Orquestador = **poteto-mode** (routing en este chat). Workers = `dispatch.mjs` (prompts desde `PSTACK_ROOT`, spawn CLI, manifest, validación).
+## Start
 
-## Antes del primer run
+1. Load poteto-mode and read it in full. With the zedpstack MCP server: `read_skill {"skill": "poteto-mode"}`. Without it: `node <zedpstack>/scripts/dispatch.mjs skill poteto-mode`. Open every leaf it points to (`playbooks/<name>.md`, `principle-*` skills, routed skills such as `how` or `architect`) the same way.
+2. Read the tool mapping: `read_skill {"skill": "zedpstack", "file": "references/zedpstack-tools.md"}` (or `references/zedpstack-tools.md` next to this file). It is to zedpstack what poteto-mode's `references/codex-tools.md` is to Codex.
+3. Classify the task against poteto-mode's Playbooks (Investigation, Bug fix, Feature, Refactoring, ...), open the matched playbook, copy its steps into your todolist verbatim, and run it.
 
-1. `cp zedpstack.config.example.json zedpstack.config.json` (en el clon del paquete).
-2. **`/setup-zedpstack`** o `dispatch setup init` + editar hoja + `dispatch setup apply`.
-3. `npm test` en el paquete.
+## Rules
 
-## Routing (`/zedpstack <objetivo>`)
+- Every subagent dispatch that poteto-mode or a routed skill (`how`, `why`, `architect`, `arena`, `interrogate`, `swarm`, `reflect`) prescribes goes through `spawn_agent`, even when your host has its own subagent tool. That is what lets the worker sheet put the explorer on haiku, the architect runners on Codex, and a reviewer on Cursor.
+- Pass the skill's `role` line (and `slot` for panels) instead of a model, so the worker sheet decides. Call `list_models` once to see the roles and panel sizes.
+- Fan out by issuing several `spawn_agent` calls in one turn, then one `wait_agent` with every id. Call `wait_agent` again while `pending` is not empty.
+- You own every report. Read each one, check its claims against the code, and for writers review the commit (`agent_result` → `git show <commit>`) before `apply_agent_changes`.
+- Judgment, synthesis, and every message to the user stay in this chat.
 
-| Intención | `--playbook` |
-|-----------|----------------|
-| Cómo funciona X | `how-investigation` (default) |
-| Por qué / rationale | `why-rationale` |
-| Diseño previo | `architect-sketch` |
-| Review adversarial | `interrogate-review` + `--context-file` |
-| Reflect sesión | `reflect-session` + `--context-file` |
+## When the MCP server is missing
+
+The same operations exist as a CLI that prints JSON (`--repo` defaults to the cwd):
 
 ```bash
-node ~/.agents/skills/zedpstack/scripts/dispatch.mjs run \
-  --goal "<objetivo>" \
-  --repo "<repo-absoluto>" \
-  --playbook how-investigation \
-  --tee-events
+Z=<zedpstack>/scripts/dispatch.mjs
+node $Z models
+node $Z agent spawn --repo "$PWD" --role "how explorer" --readonly --description "map auth" --prompt-file /tmp/brief.md
+node $Z agent wait --repo "$PWD" --ids <id1>,<id2> --timeout 600
+node $Z agent result --id <id> | apply --id <id> | close --id <id> --remove-worktree
 ```
 
-`list` playbooks: `dispatch list`.
-
-## Ver progreso (streaming)
-
-### Cursor / Composer no muestra el subprocess
-
-Si el orquestador ejecuta `dispatch run` en un **bloque de terminal**, la UI solo enseña el comando hasta que **termina** (minutos). El stderr de `--tee-events` **no** se pinta en el chat.
-
-**Patrón obligatorio en Cursor:**
-
-1. Lanzar en segundo plano y obtener `runId` al instante:
-
-   ```bash
-   node ~/Projects/zedpstack/scripts/dispatch.mjs run --detach \
-     --goal "..." --repo "/ruta/repo" --playbook how-investigation
-   ```
-
-2. Seguir progreso legible (stdout, visible en salida del tool):
-
-   ```bash
-   node ~/Projects/zedpstack/scripts/dispatch.mjs follow \
-     --run-id <id> --repo "/ruta/repo" --from-start
-   ```
-
-3. O en **Terminal del IDE** (panel inferior):
-
-   ```bash
-   node ~/Projects/zedpstack/scripts/dispatch.mjs watch --run-id <id> --repo "/ruta/repo" --from-start
-   ```
-
-4. O leer el archivo que el orquestador puede ir mostrando:
-
-   `.zedpstack/runs/<id>/progress.log` (`Claude explorer — running`, `> Inspecting …`).
-
-El orquestador debe **repostar** líneas nuevas de `progress.log` o `follow` en el chat cada ~15–30 s mientras corre el run.
-
-| Modo | Uso |
-|------|-----|
-| **progress.log** | Siempre en el run dir (v0.5.1+) |
-| **follow** | Progreso humano en stdout |
-| **detach + follow** | Cursor-friendly |
-| **JSONL** | `--tee-events` → stderr (solo terminal real) |
-| **watch** | `events.jsonl` legible |
-
-Chunks `worker.output` no se persisten en `events.jsonl` por defecto; usa `--persist-stream-events` para replay completo.
-
-## Judgment
-
-Tras `awaiting_judgment`: lee `workers/*/result.json`, escribe `orchestrator-judgment.md`, `dispatch judgment --run-id …`.
-
-## Configuración de modelos
-
-Skill dedicado: [setup-zedpstack/SKILL.md](./setup-zedpstack/SKILL.md) (misma hoja que pstack `setup-pstack`).
-
-## Referencia
-
-[docs/PSTACK_ADAPTERS.md](./docs/PSTACK_ADAPTERS.md) · [docs/STREAMING.md](./docs/STREAMING.md)
+Register the server with `node $Z install --apply` and run `node $Z doctor --human` when something does not line up.

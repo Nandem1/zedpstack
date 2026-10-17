@@ -1,63 +1,79 @@
 /**
- * Classify pstack model slugs into worker runtimes.
+ * Classify model slugs into worker runtimes.
  * Provider (vendor) ≠ transport (which CLI spawns the worker).
+ *
+ * A slug may carry an explicit runtime prefix, `cursor:claude-opus-5-5` or
+ * `codex:gpt-6-sol`, which always wins over inference. Use it when one slug is
+ * valid on more than one CLI.
  */
 
 /** @typedef {'claude' | 'codex' | 'cursor'} WorkerRuntime */
 
-const CURSOR_SLUG_RE =
-  /^(composer|cursor-|grok|glm-|claude-haiku-5-5-thinking|claude-opus-5-5|gpt-5\.|muse-|gemini-|fable-)/i;
+export const WORKER_RUNTIMES = ['claude', 'codex', 'cursor'];
 
-const CODEX_SLUG_RE =
-  /^(gpt-|chatgpt|o[34]|codex)/i;
+const CLAUDE_ALIASES = new Set(['haiku', 'sonnet', 'opus', 'fable']);
 
-const ANTHROPIC_CLAUDE_CLI_RE =
-  /^(haiku|sonnet|opus|claude-)/i;
+const RULES = [
+  { runtime: 'claude', provider: 'anthropic', re: /^claude-/, reason: 'Anthropic model id for Claude Code CLI' },
+  { runtime: 'codex', provider: 'openai', re: /^(gpt-|chatgpt|codex|o[134](-|$))/, reason: 'OpenAI slug for Codex CLI' },
+  { runtime: 'codex', provider: 'openai', re: /-(sol|astra|luna)$/, reason: 'OpenAI tier slug for Codex CLI' },
+  {
+    runtime: 'cursor',
+    provider: 'cursor',
+    re: /^(composer|cursor-|grok|glm-|gemini-|kimi-|muse-|deepseek-)/,
+    reason: 'Cursor Agent CLI slug',
+  },
+];
 
 /**
- * @param {string} model raw slug (effort suffix already stripped)
+ * Split an optional `runtime:` prefix off a slug.
+ * @returns {{ runtime: WorkerRuntime | null, model: string }}
+ */
+export function splitRuntimePrefix(raw) {
+  const s = (raw ?? '').trim();
+  const idx = s.indexOf(':');
+  if (idx > 0) {
+    const prefix = s.slice(0, idx).toLowerCase();
+    if (WORKER_RUNTIMES.includes(prefix)) {
+      return { runtime: prefix, model: s.slice(idx + 1).trim() };
+    }
+  }
+  return { runtime: null, model: s };
+}
+
+/**
+ * @param {string} raw slug, optionally `runtime:slug` (effort suffix already stripped)
  * @returns {{
  *   runtime: WorkerRuntime,
- *   provider: 'anthropic' | 'openai' | 'cursor' | 'xai' | 'google' | 'unknown',
+ *   model: string,
+ *   provider: string,
  *   reason: string,
+ *   confident: boolean,
  * }}
  */
-export function classifyModelSlug(model) {
-  const s = (model ?? '').trim();
-  if (!s || s === 'inherit-parent' || s === 'auto') {
-    return { runtime: 'claude', provider: 'unknown', reason: 'inheritance placeholder' };
+export function classifyModelSlug(raw) {
+  const { runtime: forced, model } = splitRuntimePrefix(raw);
+  if (forced) {
+    return { runtime: forced, model, provider: 'explicit', reason: `explicit "${forced}:" prefix`, confident: true };
   }
-
-  const lower = s.toLowerCase();
-
-  if (CURSOR_SLUG_RE.test(lower) || lower.includes('cursor-grok') || lower.includes('composer')) {
-    return {
-      runtime: 'cursor',
-      provider: 'cursor',
-      reason: 'Cursor-only slug (composer / grok / glm / panel models)',
-    };
+  const lower = model.toLowerCase();
+  if (!lower || lower === 'inherit-parent' || lower === 'auto') {
+    return { runtime: 'claude', model, provider: 'unknown', reason: 'inheritance placeholder', confident: false };
   }
-
-  if (CODEX_SLUG_RE.test(lower) || lower.includes('-sol')) {
-    return {
-      runtime: 'codex',
-      provider: 'openai',
-      reason: 'OpenAI / Codex slug',
-    };
+  if (CLAUDE_ALIASES.has(lower)) {
+    return { runtime: 'claude', model, provider: 'anthropic', reason: 'Claude Code CLI alias', confident: true };
   }
-
-  if (ANTHROPIC_CLAUDE_CLI_RE.test(lower)) {
-    return {
-      runtime: 'claude',
-      provider: 'anthropic',
-      reason: 'Anthropic slug for Claude Code CLI',
-    };
+  for (const rule of RULES) {
+    if (rule.re.test(lower)) {
+      return { runtime: rule.runtime, model, provider: rule.provider, reason: rule.reason, confident: true };
+    }
   }
-
   return {
     runtime: 'claude',
+    model,
     provider: 'unknown',
-    reason: 'default runtime claude; verify with claude -p --model',
+    reason: 'unknown slug; defaulted to claude. Prefix it (cursor:, codex:, claude:) to be explicit',
+    confident: false,
   };
 }
 
@@ -66,8 +82,8 @@ export function classifyModelSlug(model) {
  * @param {WorkerRuntime} runtime
  */
 export function validateModelForRuntime(model, runtime) {
-  const { runtime: inferred, reason } = classifyModelSlug(model);
-  if (inferred === runtime) {
+  const { runtime: inferred, reason, confident } = classifyModelSlug(model);
+  if (inferred === runtime || !confident) {
     return { ok: true, inferred, reason };
   }
   return {

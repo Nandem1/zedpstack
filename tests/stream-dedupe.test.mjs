@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractClaudeStreamText } from '../src/runtimes/stream.mjs';
+import { extractStreamText } from '../src/runtimes/stream.mjs';
 
 describe('claude stream dedupe', () => {
   it('prefers terminal result event over assistant chunks', () => {
@@ -12,8 +12,8 @@ describe('claude stream dedupe', () => {
       type: 'result',
       result: 'Hello world repeated',
     });
-    const a = extractClaudeStreamText(assistant);
-    const t = extractClaudeStreamText(terminal);
+    const a = extractStreamText(assistant);
+    const t = extractStreamText(terminal);
     assert.equal(a.chunk, 'Hello world repeated');
     assert.equal(t.terminalResult, 'Hello world repeated');
   });

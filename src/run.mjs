@@ -141,12 +141,16 @@ export function computeReadyStepIds(manifest, playbookDef) {
   return ready;
 }
 
-function resetFailedStepsToPending(manifest, playbookDef) {
+/**
+ * Failed steps retry on resume. A step left `running` belongs to a dispatcher
+ * that died (crash, kill, missing CLI) because only one dispatcher drives a run.
+ */
+function resetFailedStepsToPending(manifest, playbookDef, { includeRunning = false } = {}) {
   let next = manifest;
   let changed = false;
   for (const step of playbookDef.steps) {
     const rec = next.steps.find((s) => s.stepId === step.id);
-    if (rec?.status === 'failed') {
+    if (rec?.status === 'failed' || (includeRunning && rec?.status === 'running')) {
       next = updateManifestStep(next, step.id, { status: 'pending' });
       if (next.status !== 'running') {
         next = { ...next, status: 'running' };
@@ -288,7 +292,9 @@ async function executeStep({
     });
   };
 
-  const outcome = await runWorkerForBinding({
+  let outcome;
+  try {
+    outcome = await runWorkerForBinding({
     binding,
     taskSpec,
     workerRoot: wRoot,
@@ -300,7 +306,27 @@ async function executeStep({
     stepId,
     role: stepDef.role,
     onWorkerSpawned: ({ pid }) => patchAttemptPid(pid),
-  });
+    });
+  } catch (err) {
+    const message = `worker_error: ${err.message}`;
+    eventSink.emit('step.failed', { runId, stepId, workerId, errors: [message] });
+    return updateManifestLocked(runId, runRoot, (current) => {
+      const rec = current.steps.find((s) => s.stepId === stepId);
+      const attempts = [...rec.attempts];
+      attempts[attempts.length - 1] = {
+        ...attempts[attempts.length - 1],
+        finishedAt: new Date().toISOString(),
+        error: message,
+      };
+      const failed = updateManifestStep(current, stepId, {
+        status: 'failed',
+        validResult: false,
+        lastErrors: [message],
+        attempts,
+      });
+      return { ...failed, status: failed.status === 'cancelled' ? 'cancelled' : 'failed' };
+    });
+  }
 
   manifest = await withManifestLock(runId, () => readManifest(runRoot));
   if (manifest.status === 'cancelled') {
@@ -435,13 +461,17 @@ export async function runPlaybook({
     eventSink.emit('run.started', { runId, playbook: playbookId, goal });
   }
 
+  let firstPass = true;
   while (true) {
     manifest = await withManifestLock(runId, () => readManifest(runRoot));
     if (manifest.status === 'failed' || manifest.status === 'cancelled') {
       break;
     }
 
-    const { manifest: afterReset, changed } = resetFailedStepsToPending(manifest, playbookDef);
+    const { manifest: afterReset, changed } = resetFailedStepsToPending(manifest, playbookDef, {
+      includeRunning: firstPass,
+    });
+    firstPass = false;
     if (changed) {
       manifest = await updateManifestLocked(runId, runRoot, () => afterReset);
     }
@@ -453,7 +483,7 @@ export async function runPlaybook({
 
     eventSink.emit('step.wave.started', { runId, stepIds: readyIds });
 
-    await Promise.all(
+    const settled = await Promise.allSettled(
       readyIds.map((stepId) =>
         executeStep({
           playbook,
@@ -468,6 +498,10 @@ export async function runPlaybook({
         }),
       ),
     );
+    const rejected = settled.find((r) => r.status === 'rejected');
+    if (rejected) {
+      throw rejected.reason;
+    }
 
     manifest = await withManifestLock(runId, () => readManifest(runRoot));
     if (manifest.status === 'failed') {
@@ -475,7 +509,19 @@ export async function runPlaybook({
     }
   }
 
-  if (manifest.status !== 'failed' && manifest.status !== 'completed') {
+  const incomplete = manifest.steps.filter((st) => st.status !== 'completed');
+  if (manifest.status === 'running' && incomplete.length) {
+    const errors = incomplete.map((st) => `step ${st.stepId} is ${st.status}`);
+    manifest = await updateManifestLocked(runId, runRoot, (current) => ({
+      ...current,
+      status: 'failed',
+      updatedAt: new Date().toISOString(),
+    }));
+    eventSink.emit('run.failed', { runId, errors });
+    return { runId, runRoot, manifest, eventSink };
+  }
+
+  if (manifest.status !== 'failed' && manifest.status !== 'completed' && manifest.status !== 'cancelled') {
     writeJudgmentInstructionsIfNeeded(runRoot, playbook, playbookDef, manifest, runId);
     manifest.status = 'awaiting_judgment';
     manifest.updatedAt = new Date().toISOString();

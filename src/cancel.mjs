@@ -25,13 +25,11 @@ export function terminateWorkerPid(pid) {
   }, 5000);
 }
 
-function findActivePid(manifest) {
-  const running = manifest.steps.find((s) => s.status === 'running');
-  if (!running?.attempts?.length) {
-    return null;
-  }
-  const last = running.attempts[running.attempts.length - 1];
-  return last.pid ?? null;
+function findActivePids(manifest) {
+  return manifest.steps
+    .filter((s) => s.status === 'running' && s.attempts?.length)
+    .map((s) => s.attempts[s.attempts.length - 1].pid)
+    .filter((pid) => typeof pid === 'number');
 }
 
 export function cancelRun({ repoRoot, runId }) {
@@ -49,8 +47,8 @@ export function cancelRun({ repoRoot, runId }) {
     return { manifest, alreadyTerminal: true };
   }
 
-  const pid = findActivePid(manifest);
-  if (pid) {
+  const pids = findActivePids(manifest);
+  for (const pid of pids) {
     terminateWorkerPid(pid);
   }
 
@@ -59,7 +57,7 @@ export function cancelRun({ repoRoot, runId }) {
   writeManifestAtomic(runRoot, manifest);
 
   const eventSink = new EventSink(runRoot);
-  eventSink.emit('run.cancelled', { runId, pid: pid ?? null });
+  eventSink.emit('run.cancelled', { runId, pids });
 
   return { manifest, alreadyTerminal: false };
 }

@@ -32,7 +32,7 @@ describe('explorer validation', () => {
     const resultPath = path.join(dir, 'result.json');
     const stdoutLogPath = path.join(dir, 'stdout.log');
     const text =
-      '# Informe\n\nLa app usa capas app → features → entities → shared según AGENTS.\n' +
+      '# Informe\n\nLa app usa capas app → features → entities → shared según AGENTS.md y src/app/index.ts.\n' +
       'x'.repeat(40);
     fs.writeFileSync(
       resultPath,

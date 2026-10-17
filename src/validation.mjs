@@ -23,25 +23,15 @@ function minTextLength(role) {
   return 32;
 }
 
-const EXPLORER_EVIDENCE = [
-  'app',
-  'features',
-  'entities',
-  'shared',
-  'AGENTS',
-  'transporte',
-  'auth',
-  'capas',
-];
 
 export function detectBlockedOutput(text) {
   const lower = text.toLowerCase();
   return BLOCKED_PHRASES.filter((p) => lower.includes(p.toLowerCase()));
 }
 
+/** An explorer report must cite at least one repo path (`dir/file`, `file.ext`). */
 export function explorerShowsRepoEvidence(text) {
-  const lower = text.toLowerCase();
-  return EXPLORER_EVIDENCE.some((k) => lower.includes(k.toLowerCase()));
+  return /[\w.-]+\/[\w.-]+|\b[\w-]+\.[a-z]{1,6}\b/i.test(text);
 }
 
 /**

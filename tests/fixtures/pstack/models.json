@@ -1,0 +1,10 @@
+{
+  "tiers": { "default": "opus", "strongest": "fable", "panel": ["opus", "fable", "sonnet"] },
+  "roles": [
+    { "role": "feature, refactoring", "models": "default" },
+    { "role": "bug-fix", "models": "strongest" },
+    { "role": "how explorer", "models": "default" },
+    { "role": "architect runners", "models": "panel" },
+    { "role": "reflect judgment, divergent, synthesizer", "models": "default" }
+  ]
+}

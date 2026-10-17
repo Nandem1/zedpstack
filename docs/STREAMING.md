@@ -1,5 +1,21 @@
 # Observabilidad y streaming (zedpstack)
 
+## Agentes (`spawn_agent`)
+
+Cada agente escribe en `<repo>/.zedpstack/agents/<id>/`:
+
+| Archivo | Contenido |
+|---------|-----------|
+| `agent.json` | estado (`starting`, `running`, `completed`, `failed`, `stopped`), runtime, modelo, PIDs, worktree, cambios |
+| `progress.log` | líneas legibles (`Claude how explorer — running (haiku)`, `> Inspecting src/…`) |
+| `events.jsonl` | eventos de máquina |
+| `prompt.md` / `task.md` | prompt completo enviado al worker / tarea original del orquestador |
+| `stdout.log`, `stderr.log`, `result.json` | salida cruda e informe final |
+| `runner.log` | errores del proceso runner |
+
+`agent_status` (MCP) o `dispatch agent status --id <id>` muestra las últimas líneas de `progress.log`. El resto de este documento cubre el modo batch (`dispatch run`).
+
+
 ## Eventos
 
 Cada run escribe `.zedpstack/runs/<runId>/events.jsonl` (append-only).

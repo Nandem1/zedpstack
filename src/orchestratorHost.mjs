@@ -1,20 +1,22 @@
 /**
- * Best-effort detection of who is driving the chat (orchestrator).
- * Workers always use dispatch + config; this is for setup UX only.
+ * Best-effort detection of who drives the chat. Workers never depend on it;
+ * doctor shows it so the user can tell which host config matters.
  */
-
-export function detectOrchestratorHost() {
-  if (process.env.ZEDPSTACK_ORCHESTRATOR) {
-    return { id: process.env.ZEDPSTACK_ORCHESTRATOR, note: 'from ZEDPSTACK_ORCHESTRATOR' };
+export function detectOrchestratorHost(env = process.env) {
+  if (env.ZEDPSTACK_ORCHESTRATOR) {
+    return { id: env.ZEDPSTACK_ORCHESTRATOR, note: 'from ZEDPSTACK_ORCHESTRATOR' };
   }
-  if (process.env.CURSOR_AGENT === '1' || process.env.CURSOR_TRACE_ID) {
-    return { id: 'cursor', note: 'Cursor IDE / agent session' };
+  if (env.CLAUDECODE === '1' || env.CLAUDE_CODE_ENTRYPOINT) {
+    return { id: 'claude-code', note: `Claude Code (${env.CLAUDE_CODE_ENTRYPOINT ?? 'cli'})` };
   }
-  if (process.env.CLAUDE_CODE || process.env.CLAUDE_SESSION) {
-    return { id: 'claude-code', note: 'Claude Code via ACP or terminal' };
+  if (env.CODEX_SANDBOX || env.CODEX_THREAD_ID || env.CODEX_MANAGED_BY_NPM) {
+    return { id: 'codex', note: 'Codex session' };
   }
-  if (process.env.CODEX_HOME || process.env.OPENAI_API_KEY) {
-    return { id: 'codex', note: 'Codex CLI context (heuristic)' };
+  if (env.CURSOR_AGENT === '1' || env.CURSOR_TRACE_ID) {
+    return { id: 'cursor', note: 'Cursor IDE or agent session' };
   }
-  return { id: 'unknown', note: 'Set ZEDPSTACK_ORCHESTRATOR=cursor|claude-code|codex|zed' };
+  if (env.ZED_TERM || env.TERM_PROGRAM === 'zed') {
+    return { id: 'zed', note: 'Zed terminal' };
+  }
+  return { id: 'unknown', note: 'Set ZEDPSTACK_ORCHESTRATOR=cursor|claude-code|codex|zed to override' };
 }

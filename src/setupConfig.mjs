@@ -13,6 +13,7 @@ import {
 } from './modelSheet.mjs';
 import { zedpstackRoot } from './paths.mjs';
 import { collectBindingRoutingErrors } from './modelRouting.mjs';
+import { workerSheetPath } from './workerModels.mjs';
 
 /** Cursor / IDE pstack override (orchestrator Task slugs). */
 export function orchestratorModelSheetPath() {
@@ -23,18 +24,13 @@ export function orchestratorModelSheetPath() {
   return path.join(os.homedir(), '.zedpstack', 'pstack-models.md');
 }
 
-/** Worker spawn sheet — never prefer Cursor mdc over an explicit worker file. */
+/** Worker spawn sheet. The orchestrator's host sheet is never a fallback: its slugs may not spawn. */
 export function workerModelSheetPath() {
-  return path.join(os.homedir(), '.zedpstack', 'pstack-models.md');
+  return workerSheetPath();
 }
 
 export function defaultModelSheetPath() {
-  if (process.env.ZEDPSTACK_MODEL_SHEET) {
-    return path.resolve(process.env.ZEDPSTACK_MODEL_SHEET);
-  }
-  const worker = workerModelSheetPath();
-  if (fs.existsSync(worker)) return worker;
-  return orchestratorModelSheetPath();
+  return workerSheetPath();
 }
 
 export function readModelSheet(filePath) {
@@ -157,7 +153,7 @@ export function applyModelSheetToConfig({
 }
 
 export function initModelSheet(filePath) {
-  const target = path.resolve(filePath ?? workerModelSheetPath());
+  const target = path.resolve(filePath ?? workerSheetPath());
   fs.mkdirSync(path.dirname(target), { recursive: true });
   if (!fs.existsSync(target)) {
     const body = defaultSheetTemplate();
@@ -182,7 +178,6 @@ export function showSetupStatus() {
   const sheet = readModelSheet(defaultModelSheetPath());
   const { path: cfgPath, data } = loadConfig();
   return {
-    orchestratorHost: process.env.ZEDPSTACK_ORCHESTRATOR ?? null,
     orchestratorSheet: orchestratorModelSheetPath(),
     workerSheet: workerModelSheetPath(),
     modelSheet: sheet.path,

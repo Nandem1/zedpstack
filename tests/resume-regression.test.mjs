@@ -59,7 +59,7 @@ describe('resume regression (Codex P1)', () => {
     const resultPath = path.join(dir, 'result.json');
     const text =
       '# Architecture\n\n' +
-      'Capas app → features → entities → shared con transporte y auth.\n';
+      'Capas app → features → entities → shared con transporte y auth (src/auth/session.ts).\n';
     fs.writeFileSync(
       resultPath,
       JSON.stringify({ ok: true, text, signals: { readSuccess: 2 } }),
