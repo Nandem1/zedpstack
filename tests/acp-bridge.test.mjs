@@ -6,7 +6,9 @@ import net from 'node:net';
 import path from 'node:path';
 import readline from 'node:readline';
 import { askHuman, bridgeDir, startBridge } from '../src/acp/bridge.mjs';
-import { shortHome } from './helpers/acpHub.mjs';
+import { engineEnv, shortHome } from './helpers/acpHub.mjs';
+import { startHubProcess } from './helpers/acpProcess.mjs';
+import { childEnv } from './helpers/env.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -41,6 +43,15 @@ function rawExchange(socketPath, chunks, count) {
 }
 
 describe('acp permission bridge', () => {
+  it('close waits for a pending listen before removing its socket', async () => {
+    const env = { ZEDPSTACK_HOME: shortHome('zp-br-close-') };
+    const bridge = startBridge({ env, onAsk: async () => ({ allowed: true }) });
+    const closing = bridge.close();
+    await bridge.ready;
+    await closing;
+    assert.equal(fs.existsSync(bridge.path), false);
+  });
+
   it('allows at once with no bridge configured, without touching the network', async () => {
     let settled = null;
     askHuman({ action: 'apply_agent_changes', title: 't', env: {} }).then((v) => {
@@ -159,5 +170,29 @@ describe('acp permission bridge', () => {
     const bridge = startBridge({ env, onAsk: async () => ({ allowed: true }) });
     await assert.rejects(bridge.ready, /socket path longer than/);
     await bridge.close();
+  });
+
+  it('two hub processes keep distinct sockets and a third removes only the dead hub socket', { timeout: 15000 }, async (t) => {
+    const home = shortHome('zp-bridges-');
+    const env = childEnv(engineEnv({ ZEDPSTACK_HOME: home }));
+    const hubs = [startHubProcess(t, env), startHubProcess(t, env)];
+    const sessions = await Promise.all(hubs.map((hub) => hub.peer.request('session/new', { cwd: home })));
+    const socketPaths = hubs.map((hub) => path.join(bridgeDir(env), `acp-${hub.child.pid}.sock`));
+    assert.ok(socketPaths.every((file) => fs.statSync(file).isSocket()));
+    for (let i = 0; i < 2; i += 1) {
+      assert.deepEqual(await askHuman({ action: 'setup_write', title: 'test', env: {
+        ZEDPSTACK_ACP_BRIDGE: socketPaths[i], ZEDPSTACK_ACP_SESSION: sessions[i].sessionId,
+      } }), { allowed: true });
+    }
+    hubs[0].child.kill('SIGKILL');
+    await hubs[0].exited;
+    assert.ok(fs.existsSync(socketPaths[0]), 'SIGKILL leaves the dead hub socket behind');
+    const third = startHubProcess(t, env);
+    await third.peer.request('initialize');
+    assert.equal(fs.existsSync(socketPaths[0]), false);
+    assert.ok(fs.existsSync(socketPaths[1]), 'a live hub socket survives stale cleanup');
+    assert.deepEqual(await askHuman({ action: 'setup_write', title: 'again', env: {
+      ZEDPSTACK_ACP_BRIDGE: socketPaths[1], ZEDPSTACK_ACP_SESSION: sessions[1].sessionId,
+    } }), { allowed: true });
   });
 });

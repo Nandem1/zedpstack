@@ -116,11 +116,11 @@ export function startBridge({ env = process.env, onAsk }) {
     path: socketPath,
     ready,
     close() {
-      closing ??= new Promise((resolve) => {
+      closing ??= ready.catch(() => {}).then(() => new Promise((resolve) => {
         for (const socket of sockets) socket.destroy();
         server.close(() => resolve());
         if (!server.listening) resolve();
-      }).finally(() => fs.rmSync(socketPath, { force: true }));
+      })).finally(() => fs.rmSync(socketPath, { force: true }));
       return closing;
     },
   };

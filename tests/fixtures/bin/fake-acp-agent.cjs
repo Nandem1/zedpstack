@@ -237,6 +237,13 @@ async function handleRequest(msg) {
     case 'session/set_config_option':
       if (process.env.FAKE_ACP_LEGACY === '1') throw new Error('legacy agent has no set_config_option');
       if (process.env.FAKE_ACP_FAIL_CONFIG_ID === params.configId) throw new Error('temporary config failure');
+      if (process.env.FAKE_ACP_CONFIG_GATE && params.configId === 'model') {
+        const deadline = Date.now() + 5000;
+        while (!fs.existsSync(process.env.FAKE_ACP_CONFIG_GATE)) {
+          if (Date.now() > deadline) throw new Error('config gate timed out');
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+      }
       if (params.configId === 'model') modelValue = params.value;
       nativeValues.set(params.configId, params.value);
       write(commandNotification(), { jsonrpc: '2.0', id, result: { configOptions: configOptions() } }, {
@@ -274,6 +281,24 @@ async function handleRequest(msg) {
       const sleeps = /\bSLEEP\b/.test(text);
       if (text.includes('CRASH')) {
         process.stderr.write('engine exploded mid-turn\n', () => process.exit(42));
+        break;
+      }
+      if (text.startsWith('PERMISSION ')) {
+        const request = JSON.parse(text.slice('PERMISSION '.length));
+        const results = [];
+        for (let i = 0; i < (request.repeat ?? 1); i += 1) {
+          const { repeat, ...permission } = request;
+          results.push(await clientRequest('session/request_permission', { sessionId, ...permission }));
+        }
+        write(chunk(`permission:${JSON.stringify(results)}`));
+        respond('end_turn');
+        break;
+      }
+      if (text.startsWith('UPDATES ')) {
+        for (const update of JSON.parse(text.slice('UPDATES '.length))) {
+          write({ jsonrpc: '2.0', method: 'session/update', params: { sessionId, update } });
+        }
+        respond('end_turn');
         break;
       }
       if (process.env.FAKE_ACP_MCP === '1' && text.includes('MCPINFO')) {

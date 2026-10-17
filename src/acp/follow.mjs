@@ -20,12 +20,14 @@ function readFileTail(runRoot, fileName, offset) {
 function sleep(ms, signal) {
   if (signal?.aborted) return Promise.resolve();
   return new Promise((resolve) => {
-    const t = setTimeout(resolve, ms);
-    t.unref();
-    signal?.addEventListener('abort', () => {
+    const finish = () => {
       clearTimeout(t);
+      signal?.removeEventListener('abort', finish);
       resolve();
-    }, { once: true });
+    };
+    const t = setTimeout(finish, ms);
+    t.unref();
+    signal?.addEventListener('abort', finish, { once: true });
   });
 }
 

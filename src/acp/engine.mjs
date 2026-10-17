@@ -233,6 +233,8 @@ export async function startEngine({
     exitStatus = { code, signal };
     terminationError = new Error(`child exited ${signal ? `with signal ${signal}` : `with code ${code}`}`);
     onDead(terminationError);
+    // A crashed engine can leave an MCP holding its pipes open while the hub stays alive.
+    kill().catch(() => {});
   });
   child.on('error', (error) => {
     terminationError = error;
@@ -289,10 +291,21 @@ export async function startEngine({
       while (groupAlive() && Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      if (groupAlive()) signal('SIGKILL');
+      if (groupAlive()) {
+        signal('SIGKILL');
+        const reapDeadline = Date.now() + 1000;
+        while (groupAlive() && Date.now() < reapDeadline) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      }
     })();
     return killPromise;
   };
+
+  const exited = closed.then(async (status) => {
+    await kill();
+    return status;
+  });
 
   let stage = 'initialize';
   let timer;
@@ -328,8 +341,8 @@ export async function startEngine({
         return initialCommands;
       },
       kill,
-      /** Resolves with `{code, signal}` once the process exited and its pipes closed. */
-      exited: closed,
+      /** Resolves with `{code, signal}` once the whole process group has been cleaned up. */
+      exited,
       stderrTail: (lines) => stderr.trim().split('\n').slice(-lines).join('\n'),
       get dead() {
         return dead;

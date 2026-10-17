@@ -87,6 +87,7 @@ export function createWorkerUpdateSink({ notify, sessionId, repo, agentId, title
   let terminalSourceEmittedLen = 0;
   let sawInProgress = false;
   let lastWorkerStatus = 'starting';
+  let disposed = false;
 
   const sessionUpdate = (update) => notify({ sessionId, update });
 
@@ -122,6 +123,7 @@ export function createWorkerUpdateSink({ notify, sessionId, repo, agentId, title
   };
 
   const emitProgress = (status, { force = false } = {}) => {
+    if (disposed) return;
     const now = Date.now();
     const acpStatus = resolveAcpStatus(status);
     if (!force && now - lastEmit < THROTTLE_MS) {
@@ -173,6 +175,7 @@ export function createWorkerUpdateSink({ notify, sessionId, repo, agentId, title
   };
 
   const onFollowEvent = (event) => {
+    if (disposed) return;
     if (event.type === 'activity' && event.line) activityLines.push(event.line);
     if (event.type === 'output' && event.text) stdoutChunks.push(event.text);
 
@@ -249,7 +252,14 @@ export function createWorkerUpdateSink({ notify, sessionId, repo, agentId, title
     return { sawInProgress, terminal, acpStatus };
   };
 
-  return { emitStart, onFollowEvent, finish };
+  return {
+    emitStart, onFollowEvent, finish,
+    dispose() {
+      disposed = true;
+      clearTimeout(pendingTimer);
+      pendingTimer = null;
+    },
+  };
 }
 
 /** @internal test helper */

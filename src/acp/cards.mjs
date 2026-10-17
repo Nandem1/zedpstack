@@ -42,6 +42,7 @@ export function createWorkerCards({ repo, sessionId, notify, pollMs = 300, strea
       }),
       streamMode,
     });
+    controller.signal.addEventListener('abort', () => sink.dispose(), { once: true });
     sink.emitStart();
     finished.set(spec.id, followAgent(repo, spec.id, (event) => sink.onFollowEvent(event), { signal: controller.signal, intervalMs: pollMs })
       .then(() => (controller.signal.aborted ? null : sink.finish()))
@@ -87,6 +88,11 @@ export function createWorkerCards({ repo, sessionId, notify, pollMs = 300, strea
       clearInterval(timer);
       timer = null;
       for (const controller of attached.values()) controller.abort();
+      return Promise.all(finished.values()).then(() => {
+        attached.clear();
+        finished.clear();
+        foreign.clear();
+      });
     },
   };
 }

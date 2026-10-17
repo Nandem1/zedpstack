@@ -12,6 +12,7 @@ import { createWorkerCards } from './cards.mjs';
 import { isBoardCommand, isChildCommand, parseEditsCommand } from './commands.mjs';
 import { engineMcpServers, startEngine } from './engine.mjs';
 import { inspectEngines } from './diagnostics.mjs';
+import { createEditGuard, editsStatus } from './editGuard.mjs';
 import {
   childOptionState,
   isOptionValueValid,
@@ -21,7 +22,7 @@ import {
   parseRuntimeSwitch,
   optionValues,
   runtimeOption,
-  savePrefs,
+  updatePrefs,
   ZP_RUNTIME_ID,
 } from './options.mjs';
 import { acpStreamMode } from './updates.mjs';
@@ -33,10 +34,6 @@ const CANCELLED_PERMISSION = { outcome: { outcome: 'cancelled' } };
 const ENGINE_LOST_TEXT = 'El engine anterior terminó y la conversación anterior se perdió. Se inicia un engine nuevo.';
 const EDIT_REFUSED_TEXT = 'el orquestador no edita archivos: delega con spawn_agent (o /edits on)';
 const EDIT_REFUSED_RPC = -32000;
-const EDITS_TEXT = {
-  on: 'Ediciones directas del orquestador permitidas en este hilo. `/edits off` las bloquea de nuevo.',
-  off: 'Ediciones directas del orquestador bloqueadas en este hilo: delega con spawn_agent. `/edits on` las permite.',
-};
 
 const PERMISSION_OPTIONS = [
   { optionId: 'allow_once', name: 'Permitir', kind: 'allow_once' },
@@ -64,9 +61,17 @@ function editProbe(method, params, repo) {
   return null;
 }
 
-const delay = (ms) => new Promise((resolve) => {
-  setTimeout(resolve, ms).unref();
-});
+async function within(promise, ms, fallback) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise((resolve) => {
+      timer = setTimeout(() => resolve(fallback), ms);
+      timer.unref();
+    })]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function maxEngines(env) {
   const n = Number.parseInt(env.ZEDPSTACK_ACP_MAX_ENGINES ?? '', 10);
@@ -101,6 +106,7 @@ export function createHub({
   const engineCap = maxEngines(env);
   let clientCapabilities = {};
   let shutdownPromise = null;
+  let engineStarts = Promise.resolve();
   let permissionSeq = 0;
 
   const notifyZed = (params) => zed.notify?.(params);
@@ -109,7 +115,8 @@ export function createHub({
   bridge.ready.catch((e) => log(`permission bridge unavailable, zedpstack actions will be refused: ${e.message}`));
 
   function getHubSession(outerSessionId) {
-    return sessions.get(outerSessionId) ?? null;
+    const session = sessions.get(outerSessionId);
+    return session && !session.closed ? session : null;
   }
 
   function mergedConfigFor(session) {
@@ -119,7 +126,7 @@ export function createHub({
   }
 
   function announceCommands(session) {
-    if (!session.commandsAnnounced) return;
+    if (!session.commandsAnnounced || session.closed) return;
     notifyZed({
       sessionId: session.sessionId,
       update: {
@@ -136,7 +143,7 @@ export function createHub({
     if (route) params[route.valueKey] = value;
     else Object.assign(params, { configId, value });
     const result = await engine.peer.request(route?.method ?? 'session/set_config_option', params);
-    if (session.engine !== engine || session.closed) return;
+    if (session.engine !== engine || session.closed) throw new Error('engine changed while setting option');
     if (result.configOptions != null) {
       session.childOptions = childOptionState(result);
     } else {
@@ -154,10 +161,11 @@ export function createHub({
       if (session.engine !== engine || session.closed) return;
       const option = session.childOptions.configOptions.find((option) => option.id === configId);
       if (!isOptionValueValid(option, value)) {
-        const prefs = loadPrefs(env);
-        if (JSON.stringify(prefs.perRuntime[runtime]?.[configId]) === JSON.stringify(value)) {
+        const removed = await updatePrefs((prefs) => {
+          if (JSON.stringify(prefs.perRuntime[runtime]?.[configId]) !== JSON.stringify(value)) return false;
           delete prefs.perRuntime[runtime][configId];
-          savePrefs(prefs, env);
+        }, env);
+        if (removed) {
           log(`${runtime}: dropped stale preference ${configId}=${JSON.stringify(value)}`);
         }
         continue;
@@ -180,21 +188,27 @@ export function createHub({
 
   const engineAlive = (session) => Boolean(session.engine && !session.engine.dead);
 
-  function evictIdleEngines() {
+  async function evictIdleEngines() {
     const alive = [...sessions.values()].filter(engineAlive);
     const excess = alive.length - engineCap + 1;
     if (excess <= 0) return;
-    const idle = alive.filter((s) => !s.turn).sort((a, b) => a.lastUsed - b.lastUsed);
+    const idle = alive.filter((s) => !s.turn && !s.configDraining).sort((a, b) => a.lastUsed - b.lastUsed);
+    if (idle.length < excess) throw new Error(`engine cap ${engineCap}: all engines have active turns or configuration changes`);
     for (const victim of idle.slice(0, excess)) {
       log(`engine cap ${engineCap}: stopping the idle engine of ${victim.sessionId}`);
       victim.engineLost = true;
-      stopEngine(victim);
+      cancelPendingPermissions(victim, 'el engine se detuvo por el límite de engines');
+      await stopEngine(victim);
     }
   }
 
   // Serialized per session: two overlapping starts would orphan the first engine.
   function startSessionEngine(session, runtime) {
-    session.starting = (session.starting ?? Promise.resolve()).then(() => startEngineNow(session, runtime));
+    session.starting = (session.starting ?? Promise.resolve()).catch(() => {}).then(() => {
+      const starting = engineStarts.then(() => startEngineNow(session, runtime));
+      engineStarts = starting.catch(() => {});
+      return starting;
+    });
     return session.starting;
   }
 
@@ -206,9 +220,10 @@ export function createHub({
     session.engineLost = false;
     session.childCommands = [];
     session.primed = false;
-    evictIdleEngines();
-    await bridge.ready.catch(() => {});
     try {
+      await evictIdleEngines();
+      await bridge.ready.catch(() => {});
+      if (session.closed) return;
       const engine = await spawnEngine({
         runtime,
         cwd: session.repo,
@@ -269,11 +284,19 @@ export function createHub({
     const engine = session.engine;
     const peer = engine?.peer;
     if (!peer) return;
+    const edits = createEditGuard({
+      repo: session.repo,
+      report: ({ tool, path: target, text }) => {
+        auditEdit(session, tool, target);
+        notifyZed({ sessionId: session.sessionId, update: agentMessageChunk(text) });
+      },
+    });
 
     peer.onNotification((method, params) => {
       if (session.engine !== engine || session.closed) return;
       if (method !== 'session/update') return;
       const update = params.update ?? params;
+      edits.observe(update, session.editsAllowed);
       let outUpdate = update;
       if (update.sessionUpdate === 'usage_update') {
         warnOnModelMismatch(session, update);
@@ -292,7 +315,7 @@ export function createHub({
         };
       } else if (update.sessionUpdate === 'current_mode_update' || update.sessionUpdate === 'current_model_update') {
         const configId = update.sessionUpdate === 'current_mode_update' ? 'mode' : 'model';
-        if (session.childOptions.legacyRoutes[configId]) {
+        if (session.childOptions.configOptions.some((option) => option.id === configId)) {
           const value = configId === 'mode' ? update.currentModeId : update.currentModelId;
           session.childOptions.configOptions = session.childOptions.configOptions.map((option) =>
             option.id === configId ? { ...option, currentValue: value } : option);
@@ -309,13 +332,21 @@ export function createHub({
     });
 
     peer.onRequest(async (method, params) => {
+      if (session.closed || session.engine !== engine) {
+        if (method === 'session/request_permission') return CANCELLED_PERMISSION;
+        throw Object.assign(new Error('engine session closed'), { rpc: -32000 });
+      }
+      if (method === 'session/request_permission') {
+        if (session.turn?.cancelling) return CANCELLED_PERMISSION;
+        const denied = edits.permission(params, session.editsAllowed);
+        if (denied) return denied;
+      }
       const refusal = editRefusal(session, method, params);
       if (refusal) throw Object.assign(new Error(refusal), { rpc: EDIT_REFUSED_RPC });
       const forwarded = zed.request(method, { ...params, sessionId: session.sessionId }).catch((e) => {
         throw Object.assign(new Error(e.message ?? 'Zed client error'), { rpc: e.rpc ?? -32603 });
       });
       if (method !== 'session/request_permission') return forwarded;
-      if (session.turn?.cancelling) return CANCELLED_PERMISSION;
       let cancel;
       const cancelled = new Promise((resolve) => {
         cancel = () => resolve(CANCELLED_PERMISSION);
@@ -329,6 +360,14 @@ export function createHub({
     });
   }
 
+  function auditEdit(session, tool, target) {
+    try {
+      ensureStateDirIgnored(session.repo);
+      appendDenialAudit(session.repo, { tool, path: target });
+    } catch {}
+    log(`${session.sessionId}: orchestrator edit ${tool} (${target})`);
+  }
+
   /** Null to pass the request through, or the refusal message. */
   function editRefusal(session, method, params) {
     if (session.editsAllowed) return null;
@@ -336,13 +375,7 @@ export function createHub({
     if (!probe) return null;
     const verdict = editVerdict({ ...probe, repoRoot: session.repo });
     if (!verdict.deny) return null;
-    try {
-      ensureStateDirIgnored(session.repo);
-      appendDenialAudit(session.repo, { tool: method, path: verdict.auditPath });
-    } catch {
-      /* the audit is evidence, not the guard */
-    }
-    log(`${session.sessionId}: refused ${method} (${verdict.auditPath})`);
+    auditEdit(session, method, verdict.auditPath);
     return `${EDIT_REFUSED_TEXT}. Destino: ${verdict.auditPath}`;
   }
 
@@ -358,6 +391,7 @@ export function createHub({
   async function askZed(req, signal) {
     const session = getHubSession(req.sessionId);
     if (!session) return { allowed: false, reason: `sesión desconocida: ${req.sessionId}` };
+    if (signal?.aborted) return { allowed: false, reason: 'el MCP dejó de esperar la respuesta' };
     if (session.turn?.cancelling) return { allowed: false, reason: 'el turno se canceló' };
     if (session.alwaysAllowed.has(req.action)) return { allowed: true, reason: 'permitido siempre en este hilo' };
 
@@ -423,18 +457,18 @@ export function createHub({
     const stopping = [stopTurnWorkers()];
     cancelPendingPermissions(session, 'el turno se canceló');
     if (turn.promptPromise) {
-      await Promise.race([turn.promptPromise.catch(() => {}), delay(CANCEL_PROMPT_WAIT_MS)]);
+      await within(turn.promptPromise.catch(() => {}), CANCEL_PROMPT_WAIT_MS);
     }
     // A spawn_agent the engine was serving when the cancel arrived lands after the first pass.
     stopping.push(stopTurnWorkers());
     const ids = (await Promise.all(stopping)).flat();
     if (ids.length) {
-      await Promise.race([session.cards.whenFinished(ids), delay(CANCEL_WORKERS_WAIT_MS)]);
+      await within(session.cards.whenFinished(ids), CANCEL_WORKERS_WAIT_MS);
     }
   }
 
   async function reportEngineDeath(session, engine) {
-    const { code, signal } = await Promise.race([engine.exited, delay(2000).then(() => ({}))]);
+    const { code, signal } = await engine.exited;
     if (session.engine === engine) {
       session.engine = null;
       session.engineLost = true;
@@ -460,6 +494,7 @@ export function createHub({
       }
       await startSessionEngine(session, session.runtime);
     }
+    if (session.closed) return { stopReason: 'cancelled' };
     if (turn.cancelling) {
       await turn.cancelling;
       return { stopReason: 'cancelled' };
@@ -482,13 +517,20 @@ export function createHub({
 
     const { engine } = session;
     turn.promptPromise = engine.peer.request('session/prompt', { sessionId: engine.childSessionId, prompt });
-    const aborted = new Promise((resolve) => {
-      turn.controller.signal.addEventListener('abort', () => resolve({ aborted: true }), { once: true });
-    });
-    const outcome = await Promise.race([
-      turn.promptPromise.then((result) => ({ result }), (error) => ({ error })),
-      aborted,
-    ]);
+    let onAbort;
+    let outcome;
+    try {
+      const aborted = new Promise((resolve) => {
+        onAbort = () => resolve({ aborted: true });
+        turn.controller.signal.addEventListener('abort', onAbort, { once: true });
+      });
+      outcome = await Promise.race([
+        turn.promptPromise.then((result) => ({ result }), (error) => ({ error })),
+        aborted,
+      ]);
+    } finally {
+      turn.controller.signal.removeEventListener('abort', onAbort);
+    }
     if (turn.cancelling) {
       await turn.cancelling;
       return { stopReason: 'cancelled' };
@@ -496,7 +538,7 @@ export function createHub({
     if (session.closed) return { stopReason: 'cancelled' };
     if (outcome.error) {
       // The closed stream can reject the prompt before the process reports its exit.
-      if (!engine.dead && outcome.error.rpc === -32000) await Promise.race([engine.exited, delay(2000)]);
+      if (!engine.dead && outcome.error.rpc === -32000) await within(engine.exited, 2000);
       if (engine.dead) return reportEngineDeath(session, engine);
       throw outcome.error;
     }
@@ -504,9 +546,7 @@ export function createHub({
   }
 
   async function switchRuntime(session, runtime) {
-    const prefs = loadPrefs(env);
-    prefs.lastRuntime = runtime;
-    savePrefs(prefs, env);
+    await updatePrefs((prefs) => { prefs.lastRuntime = runtime; }, env);
     await startSessionEngine(session, runtime);
     if (session.engineError) {
       notifyZed({
@@ -538,14 +578,16 @@ export function createHub({
       ), { rpc: -32602 });
     }
     if (configId === ZP_RUNTIME_ID) {
+      if (session.turn) throw Object.assign(new Error('turn in progress'), { rpc: -32602 });
       await switchRuntime(session, value);
     } else {
       const runtime = session.runtime;
       if (engineAlive(session)) await setChildOption(session, configId, value);
-      const prefs = loadPrefs(env);
-      prefs.perRuntime[runtime] ??= {};
-      prefs.perRuntime[runtime][configId] = value;
-      savePrefs(prefs, env);
+      if (session.closed) throw Object.assign(new Error('session closed'), { rpc: -32602 });
+      await updatePrefs((prefs) => {
+        prefs.perRuntime[runtime] ??= {};
+        prefs.perRuntime[runtime][configId] = value;
+      }, env);
     }
     return { configOptions: mergedConfigFor(session) };
   }
@@ -554,15 +596,21 @@ export function createHub({
     const result = new Promise((resolve, reject) => session.configQueue.push({ ...params, resolve, reject }));
     if (!session.configDraining) {
       session.configDraining = true;
+      let drained;
+      session.configDone = new Promise((resolve) => { drained = resolve; });
       // Zed sends defaults back to back; wait for the batch before choosing its runtime first.
       setImmediate(async () => {
-        while (session.configQueue.length) {
-          const runtimeIndex = session.configQueue.findIndex((change) => change.configId === ZP_RUNTIME_ID);
-          const [change] = session.configQueue.splice(Math.max(0, runtimeIndex), 1);
-          try { change.resolve(await applyConfig(session, change)); }
-          catch (error) { change.reject(error); }
+        try {
+          while (session.configQueue.length) {
+            const runtimeIndex = session.configQueue.findIndex((change) => change.configId === ZP_RUNTIME_ID);
+            const [change] = session.configQueue.splice(Math.max(0, runtimeIndex), 1);
+            try { change.resolve(await applyConfig(session, change)); }
+            catch (error) { change.reject(error); }
+          }
+        } finally {
+          session.configDraining = false;
+          drained();
         }
-        session.configDraining = false;
       });
     }
     return result;
@@ -585,6 +633,7 @@ export function createHub({
     },
 
     async 'session/new'(params) {
+      if (shutdownPromise) throw Object.assign(new Error('hub shutting down'), { rpc: -32602 });
       const cwd = params.cwd ?? process.cwd();
       const repo = path.resolve(cwd);
       const sessionId = `sess-${randomBytes(8).toString('hex')}`;
@@ -613,6 +662,7 @@ export function createHub({
         editsAllowed: false,
         configQueue: [],
         configDraining: false,
+        configDone: null,
         cards: createWorkerCards({ repo, sessionId, notify: notifyZed, streamMode: acpStreamMode(env) }),
       };
       sessions.set(sessionId, session);
@@ -665,6 +715,9 @@ export function createHub({
       const session = getHubSession(params.sessionId);
       if (!session) throw Object.assign(new Error(`unknown session: ${params.sessionId}`), { rpc: -32602 });
 
+      while (session.configDraining) await session.configDone;
+      if (session.closed) return { stopReason: 'cancelled' };
+
       if (session.turn) {
         throw Object.assign(new Error('turn in progress'), { rpc: -32602 });
       }
@@ -691,7 +744,11 @@ export function createHub({
         if (edits !== 'status') session.editsAllowed = edits === 'on';
         notifyZed({
           sessionId: params.sessionId,
-          update: agentMessageChunk(EDITS_TEXT[session.editsAllowed ? 'on' : 'off']),
+          update: agentMessageChunk(editsStatus({
+            editsAllowed: session.editsAllowed,
+            runtime: session.runtime,
+            mode: session.childOptions.configOptions.find((option) => option.id === 'mode')?.currentValue,
+          })),
         });
         return { stopReason: 'end_turn' };
       }
@@ -709,18 +766,24 @@ export function createHub({
 
     // ACP unstable: Zed may close a thread without telling us, so sessions also end at shutdown.
     async 'session/close'(params) {
-      const session = getHubSession(params.sessionId);
+      const session = sessions.get(params.sessionId);
       if (session) await closeSession(session);
       return {};
     },
   };
 
-  async function closeSession(session, reason = 'el hilo se cerró') {
-    sessions.delete(session.sessionId);
+  function closeSession(session, reason = 'el hilo se cerró') {
+    if (session.closing) return session.closing;
     session.closed = true;
-    session.cards.dispose();
     cancelPendingPermissions(session, reason);
-    await stopEngine(session);
+    session.turn?.controller.abort();
+    session.closing = Promise.all([
+      session.cards.dispose(),
+      stopEngine(session),
+      session.starting,
+      session.configDone,
+    ]).then(() => {}).finally(() => sessions.delete(session.sessionId));
+    return session.closing;
   }
 
   const notify = (msg) => {

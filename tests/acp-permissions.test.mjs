@@ -365,15 +365,13 @@ describe('acp hub: orchestrator edit guard', () => {
     assert.deepEqual(forwarded('terminal/create'), ['ls -la']);
 
     const other = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
-    assert.deepEqual(await say(sessionId, '/edits on'), [
-      'Ediciones directas del orquestador permitidas en este hilo. `/edits off` las bloquea de nuevo.',
-    ]);
+    assert.match((await say(sessionId, '/edits on'))[0], /editsAllowed=true.*permitidas/);
     assert.deepEqual(await say(sessionId, `WRITE=${inside}`), ['fs:ok']);
     assert.deepEqual(await say(sessionId, `TERM=echo hi > ${path.join(sb.repo, 'out.txt')}`), ['term:ok']);
     assert.match((await say(other.sessionId, `WRITE=${inside}`))[0], refused, 'the switch is per session');
 
     assert.match((await say(sessionId, '/edits'))[0], /permitidas/);
-    assert.match((await say(sessionId, '/edits off'))[0], /bloqueadas/);
+    assert.match((await say(sessionId, '/edits off'))[0], /editsAllowed=false/);
     assert.match((await say(sessionId, `WRITE=${inside}`))[0], refused);
 
     const linked = path.join(shortHome('zp-link-'), 'repo');

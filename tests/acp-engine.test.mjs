@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { resolveEngineCommand, startEngine } from '../src/acp/engine.mjs';
+import { isProcessAlive } from '../src/agents/store.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const FAKE = path.join(ROOT, 'tests', 'fixtures', 'bin', 'fake-acp-agent.cjs');
@@ -87,6 +88,22 @@ describe('resolveEngineCommand', () => {
 });
 
 describe('engine lifecycle', () => {
+  it('an unexpected exit waits for cleanup of a stubborn child in the same group', { timeout: 6000 }, async (t) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-crash-group-'));
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const trace = path.join(dir, 'trace.jsonl');
+    const tracked = trackEngine(t, { FAKE_ACP_STUBBORN_CHILD: '1', FAKE_ACP_TRACE: trace });
+    const engine = await tracked.start();
+    const stubborn = JSON.parse(fs.readFileSync(trace, 'utf8').split('\n').find((line) => line.includes('stubborn-child'))).params.pid;
+    t.after(() => { try { process.kill(stubborn, 'SIGKILL'); } catch {} });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await assert.rejects(engine.peer.request('session/prompt', {
+      sessionId: engine.childSessionId, prompt: [{ type: 'text', text: 'CRASH' }],
+    }));
+    assert.deepEqual(await engine.exited, { code: 42, signal: null });
+    assert.equal(isProcessAlive(stubborn), false, 'exited includes group cleanup before the hub drops its engine');
+  });
+
   for (const method of ['initialize', 'session/new']) {
     it(`failed ACP handshake at ${method} kills the child`, async (t) => {
       const tracked = trackEngine(t, { FAKE_ACP_FAIL_METHOD: method });
