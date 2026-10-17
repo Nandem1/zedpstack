@@ -40,11 +40,14 @@ describe('setup wizard', () => {
     assert.ok(plan.questions.roleGroups.every((q) => q.options.length <= 4 && q.multiSelect));
     assert.deepEqual(plan.questions.effort.options.map((o) => o.label), ['default', 'medium', 'high']);
     assert.ok(!plan.questions.models.claude.options.some((o) => o.label === 'fable'), 'unusable models are not offered');
+    assert.ok(plan.questions.panel.options.length <= 4, 'panel fits a 4-option question');
   });
 
   it('rejects a model that does not run and writes valid answers, keeping other rows', async () => {
     await assert.rejects(writeSetup({ roles: { 'bug-fix': ['fable'] } }), /does not run/);
     await assert.rejects(writeSetup({ roles: { 'bug-fix': ['gpt-6.1-sol', 'opus'] } }), /takes one model/);
+    const typed = await writeSetup({ roles: { 'strongest judgment': ['claude-opus-5-5'] }, dryRun: true });
+    assert.match(typed.sheet, /^strongest judgment: claude-opus-5-5$/m, 'full ids typed via Other are probed, not rejected');
     const res = await writeSetup({
       defaultEffort: 'default',
       roles: { 'bug-fix': ['gpt-6.1-sol'], arena: ['opus', 'composer-2.5'] },

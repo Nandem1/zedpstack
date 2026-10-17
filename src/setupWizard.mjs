@@ -148,11 +148,11 @@ function cursorCatalog() {
  * Available worker models per provider. Claude aliases are probed (cached a
  * day) because the account, not the CLI, decides whether they run.
  */
-export async function detectModels({ refresh = false } = {}) {
+export async function detectModels({ refresh = false, extraClaude = [] } = {}) {
   const cache = refresh ? {} : readProbeCache();
   const fresh = (entry) => entry && Date.now() - Date.parse(entry.at) < PROBE_TTL_MS;
   const claudeInstalled = spawnSync('claude', ['--version'], { encoding: 'utf8' }).status === 0;
-  const aliases = claudeInstalled ? claudeAliases() : [];
+  const aliases = claudeInstalled ? [...new Set([...claudeAliases(), ...extraClaude])] : [];
   const probes = await Promise.all(
     aliases.map(async (alias) => {
       const key = `claude:${alias}`;
@@ -205,8 +205,12 @@ function modelOption(provider, m, current) {
 
 /** Everything the orchestrator needs to ask the questions. */
 export async function buildSetupPlan({ refresh = false } = {}) {
-  const models = await detectModels({ refresh });
   const sheet = loadWorkerModels();
+  const extraClaude = Object.values(sheet.roles)
+    .flatMap((r) => r.entries)
+    .filter((e) => !e.inherit && e.runtime === 'claude')
+    .map((e) => e.model);
+  const models = await detectModels({ refresh, extraClaude });
   const roles = ROLE_ROWS.map((row) => {
     const current = sheet.roles[row.role];
     const entries = current?.entries ?? [];
@@ -282,7 +286,9 @@ export async function buildSetupPlan({ refresh = false } = {}) {
         header: 'Panel',
         multiSelect: true,
         note: 'Una entrada por worker: el orden y la cantidad definen el panel. Mezcla proveedores para tener diversidad.',
-        options: Object.keys(PROVIDERS).flatMap((p) => usable[p].slice(0, 2).map((m) => modelOption(p, m))),
+        options: Object.keys(PROVIDERS)
+          .flatMap((p, i) => usable[p].slice(0, i === 1 ? 2 : 1).map((m) => modelOption(p, m)))
+          .slice(0, 4),
       },
     },
   };
@@ -313,9 +319,15 @@ export async function writeSetup({ defaultEffort, roles = {}, force = false, dry
   if (effort && !['session', 'low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) {
     throw new Error(`invalid default effort "${defaultEffort}"`);
   }
-  const models = await detectModels();
   const sheet = loadWorkerModels();
   const known = new Set(ROLE_ROWS.map((r) => r.role));
+  // Full Claude ids typed through "Other" (claude-opus-5-5) are probed on demand.
+  const extraClaude = Object.values(roles)
+    .flat()
+    .map((raw) => classifyModelSlug(parseModelValue(String(raw)).model))
+    .filter((r) => r.runtime === 'claude')
+    .map((r) => r.model);
+  const models = await detectModels({ extraClaude });
   const expanded = {};
   for (const [role, values] of Object.entries(roles)) {
     const targets = role === ARENA_CHOICE || role === 'arena' ? ['arena runners', 'arena cross-judge pool'] : [role];
