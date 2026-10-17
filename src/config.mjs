@@ -49,6 +49,7 @@ const ROLE_BINDING_ALIASES = {
   'reflect-synthesize': 'synthesizer',
   'architect-runner-a': 'architect-runner',
   'architect-runner-b': 'architect-runner',
+  'architect-runner-c': 'architect-runner',
 };
 
 export function resolveRoleBindingKey(roles, role) {

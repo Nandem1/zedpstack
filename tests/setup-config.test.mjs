@@ -17,7 +17,7 @@ describe('setupConfig', () => {
 
     fs.writeFileSync(
       sheetPath,
-      `architect runners: opus, fable, sonnet
+      `architect runners: opus, fable, sonnet, haiku
 line without colon is dropped
 how explorer: haiku
 `,
@@ -28,13 +28,36 @@ how explorer: haiku
 
     assert.deepEqual(result.droppedLines, ['line without colon is dropped']);
     assert.equal(result.overflows.length, 1);
-    assert.equal(result.overflows[0].model, 'sonnet');
+    assert.equal(result.overflows[0].model, 'haiku');
     assert.equal(result.overflowWarnings.length, 1);
     assert.equal(result.rolesUpdated.includes('architect-runner-a'), true);
     assert.equal(result.rolesUpdated.includes('architect-runner-b'), true);
 
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     assert.equal(config.roles['architect-runner-b'].model, 'fable');
+  });
+
+  it('applies a third architect model and removes it when the panel shrinks', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zedpstack-setup-'));
+    const sheetPath = path.join(tmp, 'pstack-models.md');
+    const configPath = path.join(tmp, 'zedpstack.config.json');
+    fs.writeFileSync(sheetPath, 'architect runners: gpt-6.1-sol, opus, cursor:grok-4.7-high\ndefault effort: high\n');
+
+    const result = applyModelSheetToConfig({ sheetPath, configPath });
+    assert.deepEqual(result.overflows, []);
+    let config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.deepEqual(config.roles['architect-runner-c'], {
+      runtime: 'cursor', model: 'grok-4.7-high', permissionProfile: 'read-only', effort: 'high',
+    });
+    assert.equal(config.roles['architect-runner-a'].effort, 'high');
+    assert.equal(config.roles['architect-runner-b'].effort, 'high');
+
+    fs.writeFileSync(sheetPath, 'architect runners: gpt-6.1-sol, opus\n');
+    const shortened = applyModelSheetToConfig({ sheetPath, configPath });
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    assert.ok(shortened.rolesRemoved.includes('architect-runner-c'));
+    assert.equal(config.roles['architect-runner-c'], undefined);
+    assert.equal(config.roles['architect-runner-b'].model, 'opus');
   });
 
   it('inherit-parent clears prior bindings for affected sheet roles', () => {

@@ -13,7 +13,7 @@ export const SHEET_TO_ZEDPSTACK_ROLES = {
   'how explainer': ['how-explainer', 'synthesizer'],
   'why investigators': ['why-investigator'],
   'why synthesizer': ['why-synthesizer'],
-  'architect runners': ['architect-runner-a', 'architect-runner-b'],
+  'architect runners': ['architect-runner-a', 'architect-runner-b', 'architect-runner-c'],
   'interrogate reviewers': [
     'interrogate-reviewer-a',
     'interrogate-reviewer-b',

@@ -95,13 +95,18 @@ architect runners: haiku, auto
     assert.equal(managed.includes('explorer'), true);
   });
 
-  it('architect runners overflow reports extra models without overwriting slot b', () => {
-    const parsed = parseModelSheet('architect runners: opus, fable, sonnet\n');
+  it('architect runners map three models and report overflow without overwriting slot c', () => {
+    const parsed = parseModelSheet('architect runners: opus, fable, cursor:grok-4.7-high, sonnet\n');
     const { bindings, overflows } = bindingsFromSheet(parsed);
     assert.equal(bindings['architect-runner-a'].model, 'opus');
     assert.equal(bindings['architect-runner-b'].model, 'fable');
+    assert.deepEqual(bindings['architect-runner-c'], {
+      runtime: 'cursor',
+      model: 'grok-4.7-high',
+      permissionProfile: 'read-only',
+    });
     assert.deepEqual(overflows, [
-      { sheetRole: 'architect runners', model: 'sonnet', index: 2 },
+      { sheetRole: 'architect runners', model: 'sonnet', index: 3 },
     ]);
     const warnings = sheetBindingOverflowWarnings(overflows);
     assert.equal(warnings.length, 1);

@@ -14,6 +14,7 @@ const EXPLORER_PROFILE = new Set([
   'reflect-reviewer-divergent',
   'architect-runner-a',
   'architect-runner-b',
+  'architect-runner-c',
 ]);
 
 const SYNTHESIZER_PROFILE = new Set([

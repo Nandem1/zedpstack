@@ -4,12 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { computeReadyStepIds } from '../src/run.mjs';
+import { resolveRunPlaybook } from '../src/playbook.mjs';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
-function loadPlaybookDef(playbookId) {
+function loadPlaybookDef(playbookId, roles = {}) {
   const p = path.join(repoRoot, 'playbooks', playbookId, 'playbook.json');
-  return JSON.parse(fs.readFileSync(p, 'utf8'));
+  return resolveRunPlaybook(JSON.parse(fs.readFileSync(p, 'utf8')), { config: { data: { roles } } });
 }
 
 function pendingManifest(stepIds) {
@@ -52,6 +53,41 @@ describe('run wave grouping (computeReadyStepIds)', () => {
     const manifest = pendingManifest(def.steps.map((s) => s.id));
     const waves = simulateWaves(def, manifest);
     assert.deepEqual(waves, [['ground'], ['sketch-a', 'sketch-b'], ['synthesize']]);
+  });
+
+  it('architect-sketch runs three candidates together and waits for c before synthesis', () => {
+    const def = loadPlaybookDef('architect-sketch', { 'architect-runner-c': {} });
+    const manifest = pendingManifest(def.steps.map((s) => s.id));
+    assert.deepEqual(simulateWaves(def, manifest), [
+      ['ground'], ['sketch-a', 'sketch-b', 'sketch-c'], ['synthesize'],
+    ]);
+    for (const step of manifest.steps) {
+      if (['ground', 'sketch-a', 'sketch-b'].includes(step.stepId)) step.status = 'completed';
+    }
+    assert.deepEqual(computeReadyStepIds(manifest, def), ['sketch-c']);
+  });
+
+  it('architect-sketch retains two runners for generic-only and single-slot configurations', () => {
+    for (const roles of [{ explorer: {} }, { 'architect-runner': {} }, { 'architect-runner-a': {} }]) {
+      const def = loadPlaybookDef('architect-sketch', roles);
+      assert.deepEqual(def.steps.map((step) => step.id), ['ground', 'sketch-a', 'sketch-b', 'synthesize']);
+      assert.deepEqual(def.steps.at(-1).inputFrom, ['sketch-a', 'sketch-b', 'ground']);
+    }
+  });
+
+  it('optional selection ignores inherited bindings and preserves unknown dependencies', () => {
+    const def = {
+      steps: [
+        { id: 'optional', role: 'own-role', requiresExplicitBinding: true },
+        { id: 'required', inputFrom: ['optional', 'unknown'] },
+      ],
+    };
+    const roles = Object.create({ 'own-role': {} });
+    const selected = resolveRunPlaybook(def, { config: { data: { roles } } });
+    assert.deepEqual(selected.steps.map((step) => step.id), ['required']);
+    assert.deepEqual(selected.steps[0].inputFrom, ['unknown']);
+    assert.deepEqual(def.steps[1].inputFrom, ['optional', 'unknown']);
+    assert.deepEqual(computeReadyStepIds(pendingManifest(['required']), selected), []);
   });
 
   it('sin pasos pending no devuelve ready', () => {

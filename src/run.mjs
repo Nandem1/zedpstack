@@ -26,6 +26,7 @@ import {
   loadPlaybook,
   loadPrompt,
   loadStepPrompt,
+  resolveRunPlaybook,
 } from './playbook.mjs';
 import { resolvePstackInstall } from './pstack.mjs';
 import { validationProfileForRole } from './roles.mjs';
@@ -412,8 +413,7 @@ export async function runPlaybook({
 }) {
   const config = loadConfig();
   const playbook = loadPlaybook(playbookId);
-  const playbookDef = attachPstackUpstreamMeta(playbook.def);
-  if (playbookDef.upstream?.pstackSkill) {
+  if (playbook.def.upstream?.pstackSkill) {
     resolvePstackInstall();
   }
 
@@ -429,10 +429,12 @@ export async function runPlaybook({
     persistWorkerStream: persistStreamEvents,
     humanProgress: 'auto',
   });
-  let manifest;
+  let manifest = existingRunId && fs.existsSync(path.join(runRoot, 'manifest.json'))
+    ? readManifest(runRoot)
+    : null;
+  const playbookDef = resolveRunPlaybook(attachPstackUpstreamMeta(playbook.def), { config, manifest });
 
-  if (existingRunId && fs.existsSync(path.join(runRoot, 'manifest.json'))) {
-    manifest = readManifest(runRoot);
+  if (manifest) {
     if (manifest.status === 'completed') {
       eventSink.emit('run.started', { runId, resumed: true, skipped: 'already_completed' });
       return { runId, runRoot, manifest, eventSink };

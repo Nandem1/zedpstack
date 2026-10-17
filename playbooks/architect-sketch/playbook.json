@@ -1,7 +1,7 @@
 {
   "id": "architect-sketch",
   "version": 1,
-  "description": "pstack architect Phase A+B read-only: ground (how) + 2 runners + synthesize",
+  "description": "pstack architect Phase A+B read-only: ground (how) + 2 or 3 runners + synthesize",
   "upstream": { "pstackSkill": "architect" },
   "steps": [
     {
@@ -27,10 +27,19 @@
       "outputContract": "markdown-report"
     },
     {
+      "id": "sketch-c",
+      "role": "architect-runner-c",
+      "requiresExplicitBinding": true,
+      "promptSource": "pstack-architect-runner",
+      "promptMeta": { "candidateLabel": "C" },
+      "inputFrom": ["ground"],
+      "outputContract": "markdown-report"
+    },
+    {
       "id": "synthesize",
       "role": "architect-synthesize",
       "promptSource": "pstack-architect-synthesize",
-      "inputFrom": ["sketch-a", "sketch-b", "ground"],
+      "inputFrom": ["sketch-a", "sketch-b", "sketch-c", "ground"],
       "outputContract": "markdown-report"
     }
   ],

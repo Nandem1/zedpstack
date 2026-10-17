@@ -43,6 +43,26 @@ export function loadPlaybook(playbookId, _visited = new Set()) {
   return { root, def, requestedId: playbookId };
 }
 
+/** Optional steps require their own binding; resumed runs keep their original step set. */
+export function resolveRunPlaybook(def, { config, manifest }) {
+  const existingIds = manifest ? new Set(manifest.steps.map((step) => step.stepId)) : null;
+  const roles = config.data.roles ?? {};
+  const excludedIds = new Set(
+    def.steps
+      .filter((step) => {
+        if (!step.requiresExplicitBinding) return false;
+        return existingIds ? !existingIds.has(step.id) : !Object.hasOwn(roles, step.role);
+      })
+      .map((step) => step.id),
+  );
+  return {
+    ...def,
+    steps: def.steps.filter((step) => !excludedIds.has(step.id)).map((step) => step.inputFrom
+      ? { ...step, inputFrom: step.inputFrom.filter((id) => !excludedIds.has(id)) }
+      : step),
+  };
+}
+
 export function renderTemplate(templatePath, vars) {
   let text = fs.readFileSync(templatePath, 'utf8');
   for (const [key, value] of Object.entries(vars)) {
