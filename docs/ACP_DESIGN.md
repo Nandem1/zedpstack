@@ -90,13 +90,15 @@ Una ruta relativa dentro de un archivo descargable del registro de Cursor no ide
 - Cursor: comprobado el 2026-10-17 que `cursor-agent acp` acepta el `mcpServers` inyectado en `session/new` y llama a `spawn_agent` y `wait_agent` (también `claude-agent-acp@0.93.0`). Ambos piden `session/request_permission` por cada herramienta MCP.
 - Codex y Cursor deben demostrar una fuente de evidencia del modelo efectivo; sin ella el estado es `unverified`, nunca `ok`.
 - Cambiar de runtime reinicia la conversación; se acepta a cambio de no inventar continuidad propia.
+- `session/close` es inestable en ACP. El hub lo anuncia (`sessionCapabilities.close`) y lo atiende, pero si Zed cierra un hilo sin avisar, la sesión vive hasta el cierre del hub. El tope de engines limita el coste.
+- Un engine de terceros que no vigila `ZEDPSTACK_PARENT_PID` depende de terminar con el EOF de stdin cuando el hub muere por SIGKILL. `claude-agent-acp@0.93.0` lo cumple: el grupo desapareció 3 s después del SIGKILL (2026-10-17).
 
 ## Estado de implementación
 
 - [x] Corte 1: `/claude` + desplegables + conversación en streaming vía engine hijo ACP (`rpc.mjs`, `engine.mjs`, `hub.mjs`, `options.mjs`, agente falso, pruebas).
 - [x] Corte 2: almacén dividido y `origin` (`store.mjs` con un escritor por archivo, `deriveStatus`, adaptador v1, `origin` por frontend; pruebas de carrera stop/runner en proceso y entre procesos).
 - [x] Corte 3: MCP, skill en primer prompt, tarjetas por almacén (`engineMcpServers`, `orchestratorPrompt.mjs`, `cards.mjs`; `/spawn` y `server.mjs` eliminados; verificado con engines reales Claude y Cursor).
-- [ ] Corte 4: cancelación y supervisión.
+- [x] Corte 4: cancelación y supervisión (turno con `cancelling` compartido, workers del turno detenidos antes de responder `cancelled`, permisos pendientes cancelados, caída del engine con `refusal` y reinicio perezoso, `session/close`, tope `ZEDPSTACK_ACP_MAX_ENGINES`, vigilancia de `ZEDPSTACK_PARENT_PID` en el engine y el MCP; verificado con el engine real de Claude). Ver «Cancelación y supervisión» en docs/ARCHITECTURE.md.
 - [ ] Corte 5: verificación de modelo.
 - [ ] Corte 6: permisos y guarda de ediciones.
 - [ ] Corte 7: `/codex` y `/cursor` con preferencias.

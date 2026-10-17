@@ -17,8 +17,11 @@ export function engineEnv(extra = {}) {
   };
 }
 
-/** A hub wired to a simulated Zed client over in-memory JSON-RPC streams. */
-export function connectHub(t, env) {
+/**
+ * A hub wired to a simulated Zed client over in-memory JSON-RPC streams.
+ * `clientRequest` may answer a client request first; returning undefined falls back to the defaults.
+ */
+export function connectHub(t, env, { clientRequest, log } = {}) {
   const zedToHub = new PassThrough();
   const hubToZed = new PassThrough();
   const zedSim = createPeer({ input: hubToZed, output: zedToHub, label: 'zed-sim' });
@@ -34,6 +37,8 @@ export function connectHub(t, env) {
 
   zedSim.onRequest(async (method, params) => {
     clientRequests.push({ method, params });
+    const custom = clientRequest?.(method, params);
+    if (custom !== undefined) return custom;
     if (method === 'session/request_permission') {
       return { outcome: { outcome: 'selected', optionId: 'ok' } };
     }
@@ -45,6 +50,7 @@ export function connectHub(t, env) {
 
   const hub = createHub({
     env,
+    ...(log ? { log } : {}),
     spawnEngine: async (opts) => {
       const engine = await startEngine({ ...opts, env });
       engines.push(engine);

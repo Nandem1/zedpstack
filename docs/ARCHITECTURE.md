@@ -103,6 +103,29 @@ El spec guarda `origin {frontend, sessionId, pid}`: `acp` cuando el proceso tien
 
 Un `agent.json` cuya versión difiere de 2 se lee con el adaptador v1. Los registros v1 guardaban `status` y podían no declarar versión. El adaptador produce el mismo AgentView sin reescribir el archivo. En versión 2, `loadAgent` ignora los campos heredados `status`, `error`, `finishedAt` y `updatedAt` que un proceso antiguo haya añadido a `agent.json`.
 
+## Cancelación y supervisión (hub ACP)
+
+El hub ACP (`scripts/acp.mjs`, `src/acp/hub.mjs`) lanza un engine por hilo y debe dejarlo todo limpio cuando el usuario cancela, el engine cae, el hilo se cierra o Zed muere. Los workers son la excepción: siguen desacoplados (D-03).
+
+**Turno.** Mientras hay un `session/prompt` abierto, la sesión guarda `turn = {startedAt, controller, promptPromise, cancelling}`. Un `session/cancel` sin turno no hace nada. Con turno, el primero crea `cancelling` y los siguientes esperan esa misma promesa. La cancelación sigue este orden:
+
+1. Reenvía `session/cancel` al engine y aborta el controlador del turno.
+2. Detiene los workers de la sesión creados desde `startedAt` que no hayan terminado (`stopSessionAgents` en `lifecycle.mjs`, que usa `stopAgent`). Los de turnos anteriores siguen vivos.
+3. Responde `cancelled` al engine en cada `session/request_permission` que Zed aún no contestó.
+4. Espera la respuesta del engine al prompt, como mucho 10 s, y repite el paso 2 para un `spawn_agent` que el engine estuviera atendiendo cuando llegó la cancelación.
+5. Espera a que los procesos de esos workers mueran y a que sus tarjetas se cierren en `failed` (`cards.whenFinished`), como mucho 10 s. Solo entonces responde `stopReason: 'cancelled'`.
+
+**Caída del engine.** Si el engine sale con un prompt abierto, el hub envía un mensaje con el código o la señal y las últimas líneas de stderr, y responde `refusal`. La sesión conserva `zp.runtime`, `engine` pasa a `null`, y los workers y sus tarjetas siguen. El siguiente prompt arranca un engine nuevo, avisa de que la conversación anterior se perdió y vuelve a anteponer la skill. Los arranques de una sesión van en serie y un segundo prompt durante el reinicio recibe «turn in progress», así que nunca se arrancan dos engines.
+
+**Cierre y tope.** `session/close` mata el engine del hilo y descarta sus tarjetas. Si Zed no lo envía, la sesión dura hasta el cierre del hub. Antes de arrancar un engine, si ya hay `ZEDPSTACK_ACP_MAX_ENGINES` vivos (8 por defecto), el hub detiene el engine inactivo usado hace más tiempo. Esa sesión lo vuelve a arrancar en su siguiente prompt, con el mismo aviso de conversación perdida.
+
+**Procesos.** Cada engine corre en su propio grupo. `kill` cierra su stdin, envía SIGTERM al grupo y espera hasta 3 s a que el grupo entero desaparezca. Pasado ese plazo envía SIGKILL. Hace falta esperar al grupo y no solo al líder porque `npx` termina antes que el agente que lanzó. `hub.shutdown` (EOF de stdin, SIGTERM, SIGINT, `uncaughtException`, `unhandledRejection`) cierra las tarjetas y aplica `kill` a todos los engines. Después escribe en stderr una línea por sesión con los workers que deja vivos, y el proceso sale. Un SIGKILL al hub no permite ese cierre, así que el hub pasa `ZEDPSTACK_PARENT_PID` con su pid al entorno del engine y al del MCP inyectado. `scripts/mcp.mjs` termina cuando ese pid desaparece (sondeo cada 2 s) o cuando su stdin llega a EOF y ya respondió lo recibido. De un engine de terceros se espera que termine con el EOF de su stdin.
+
+| Variable | Quién la lee | Efecto |
+|---|---|---|
+| `ZEDPSTACK_PARENT_PID` | `scripts/mcp.mjs`, el engine falso de las pruebas | Sale cuando ese pid muere |
+| `ZEDPSTACK_ACP_MAX_ENGINES` | hub ACP | Engines vivos como máximo, 8 por defecto |
+
 ## Límites conocidos
 
 - Un CLI separado no puede heredar el modelo del orquestador (`inherit-parent`), así que corre el default de pstack y lo deja anotado.

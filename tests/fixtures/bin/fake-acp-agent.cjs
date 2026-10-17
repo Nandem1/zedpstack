@@ -10,10 +10,22 @@ let modeValue = 'agent';
 let authenticated = process.env.FAKE_ACP_AUTH !== '1';
 let authResolve;
 const authReady = new Promise((resolve) => { authResolve = resolve; });
-let sleepTimer = null;
-let sleepPromptId = null;
-let sleepResolve = null;
+/** The open prompt: `cancelled` once session/cancel arrived, `wake` ends a SLEEP early. */
+let currentTurn = null;
 let nextClientReqId = 1000;
+const heldMcps = [];
+
+// Same watchdog the injected MCP runs: the hub may be SIGKILLed while this process keeps its pipes.
+const parentPid = Number(process.env.ZEDPSTACK_PARENT_PID);
+if (parentPid > 0) {
+  setInterval(() => {
+    try {
+      process.kill(parentPid, 0);
+    } catch (e) {
+      if (e.code === 'ESRCH') process.exit(0);
+    }
+  }, 2000).unref();
+}
 
 const write = (...messages) => process.stdout.write(messages.map((obj) => `${JSON.stringify(obj)}\n`).join(''));
 const err = (code, message, data) => ({ code, message, ...(data ? { data } : {}) });
@@ -66,13 +78,22 @@ function chunk(text) {
   };
 }
 
-/** Calls spawn_agent on the zedpstack MCP server exactly as the hub injected it. */
-function spawnThroughInjectedMcp(task) {
+function startInjectedMcp() {
   const server = receivedMcpServers.find((s) => s.name === 'zedpstack');
-  if (!server) return Promise.reject(new Error('no zedpstack MCP server injected'));
+  if (!server) throw new Error('no zedpstack MCP server injected');
   const env = { ...process.env };
   for (const { name, value } of server.env ?? []) env[name] = value;
-  const mcp = spawn(server.command, server.args, { env, stdio: ['pipe', 'pipe', 'inherit'] });
+  return spawn(server.command, server.args, { env, stdio: ['pipe', 'pipe', 'inherit'] });
+}
+
+/** Calls spawn_agent on the zedpstack MCP server exactly as the hub injected it. */
+function spawnThroughInjectedMcp(task) {
+  let mcp;
+  try {
+    mcp = startInjectedMcp();
+  } catch (e) {
+    return Promise.reject(e);
+  }
   const send = (id, method, params) => mcp.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
   return new Promise((resolve, reject) => {
     readline.createInterface({ input: mcp.stdout }).on('line', (line) => {
@@ -125,17 +146,12 @@ rl.on('line', (line) => {
   }
 
   if (msg.method === 'session/cancel') {
-    if (sleepTimer) {
-      clearTimeout(sleepTimer);
-      sleepTimer = null;
+    if (process.env.FAKE_ACP_TRACE) {
+      fs.appendFileSync(process.env.FAKE_ACP_TRACE, `${JSON.stringify({ pid: process.pid, method: msg.method, params: msg.params })}\n`);
     }
-    if (sleepPromptId != null) {
-      write({ jsonrpc: '2.0', id: sleepPromptId, result: { stopReason: 'cancelled' } });
-      sleepPromptId = null;
-    }
-    if (sleepResolve) {
-      sleepResolve();
-      sleepResolve = null;
+    if (currentTurn) {
+      currentTurn.cancelled = true;
+      currentTurn.wake();
     }
     return;
   }
@@ -248,26 +264,44 @@ async function handleRequest(msg) {
     case 'session/prompt': {
       if (process.env.FAKE_ACP_COMMANDS_TIMING === 'prompt') write(commandNotification());
       const text = promptText(params.prompt);
-      if (text.includes('SLEEP')) {
-        sleepPromptId = id;
-        await new Promise((resolve) => {
-          sleepResolve = resolve;
-          sleepTimer = setTimeout(() => {
-            sleepTimer = null;
-            sleepPromptId = null;
-            sleepResolve = null;
-            resolve();
-          }, 60_000);
-        });
+      const turn = { cancelled: false, wake: () => {} };
+      currentTurn = turn;
+      const respond = (stopReason) => write({ jsonrpc: '2.0', id, result: { stopReason } });
+      // A word of its own: FAKE_SLEEP is the worker's marker, not this engine's.
+      const sleeps = /\bSLEEP\b/.test(text);
+      if (text.includes('CRASH')) {
+        process.stderr.write('engine exploded mid-turn\n', () => process.exit(42));
         break;
       }
       if (process.env.FAKE_ACP_MCP === '1' && text.includes('MCPINFO')) {
-        write(chunk(JSON.stringify(receivedMcpServers)), { jsonrpc: '2.0', id, result: { stopReason: 'end_turn' } });
+        write(chunk(JSON.stringify(receivedMcpServers)));
+        respond('end_turn');
         break;
+      }
+      if (process.env.FAKE_ACP_MCP === '1' && text.includes('MCPHOLD')) {
+        const mcp = startInjectedMcp();
+        heldMcps.push(mcp);
+        write(chunk(`mcp:${mcp.pid}`));
       }
       if (process.env.FAKE_ACP_MCP === '1' && text.includes('SPAWN')) {
         const agent = await spawnThroughInjectedMcp(text);
-        write(chunk(`spawned:${agent.agent_id}`), { jsonrpc: '2.0', id, result: { stopReason: 'end_turn' } });
+        write(chunk(`spawned:${agent.agent_id}`));
+        if (!sleeps) {
+          respond(turn.cancelled ? 'cancelled' : 'end_turn');
+          break;
+        }
+      }
+      if (sleeps) {
+        if (!turn.cancelled) {
+          await new Promise((resolve) => {
+            const timer = setTimeout(resolve, 60_000);
+            turn.wake = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+          });
+        }
+        respond(turn.cancelled ? 'cancelled' : 'end_turn');
         break;
       }
       write({
@@ -322,4 +356,14 @@ async function handleRequest(msg) {
   }
 }
 
-process.stdin.on('close', () => process.exit(0));
+// Like npx's agent: outlives the engine's own exit and shrugs off SIGTERM, so only a group SIGKILL ends it.
+if (process.env.FAKE_ACP_STUBBORN_CHILD === '1') {
+  const stubborn = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setTimeout(() => {}, 20000);"], { stdio: 'ignore' });
+  if (process.env.FAKE_ACP_TRACE) {
+    fs.appendFileSync(process.env.FAKE_ACP_TRACE, `${JSON.stringify({ pid: process.pid, method: 'stubborn-child', params: { pid: stubborn.pid } })}\n`);
+  }
+}
+
+// FAKE_ACP_IGNORE_EOF stands in for an engine that does not exit on stdin EOF.
+if (process.env.FAKE_ACP_IGNORE_EOF === '1') setInterval(() => {}, 1 << 30);
+else process.stdin.on('close', () => process.exit(0));

@@ -75,6 +75,7 @@ describe('engineMcpServers', () => {
         env: [
           { name: 'ZEDPSTACK_ACP_SESSION', value: 'sess-1' },
           { name: 'ZEDPSTACK_REPO', value: '/r' },
+          { name: 'ZEDPSTACK_PARENT_PID', value: String(process.pid) },
         ],
       },
     ]);
