@@ -4,7 +4,7 @@
     "type": "git",
     "url": "https://github.com/Nandem1/zedpstack.git"
   },
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Portable Agent tool for pstack: poteto-mode on any host (Zed ACP, Claude Code, Codex, Cursor) with Claude/Codex/Cursor CLI workers over MCP",
   "type": "module",
   "license": "MIT",

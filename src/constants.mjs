@@ -1,5 +1,5 @@
 export const MANIFEST_SCHEMA_VERSION = 1;
-export const ZEDPSTACK_VERSION = '0.6.0';
+export const ZEDPSTACK_VERSION = '0.7.0';
 export const RUNS_DIR = '.zedpstack/runs';
 export const AGENTS_DIR = '.zedpstack/agents';
 export const DEFAULT_TIMEOUT_MS = 600_000;
