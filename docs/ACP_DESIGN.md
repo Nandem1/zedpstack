@@ -1,7 +1,5 @@
 # Decisión de diseño: zedpstack ACP como anfitrión del orquestador
 
-(Contenido que debe copiarse a docs/ACP_DESIGN.md, en español, sin cambios de fondo.)
-
 ## Estado
 Aceptada el 2026-10-17 tras tres candidatos independientes (Codex gpt-6.1-sol, Claude opus-5-5, Cursor grok-4.7-high), síntesis del orquestador y verificación local.
 
@@ -19,9 +17,9 @@ Zed debe ser el único sitio de trabajo: el hilo "zedpstack" es el orquestador. 
    2. Primer prompt de cada sesión de engine: antepone el cuerpo de la skill orquestadora (`orchestratorPrompt()`).
    3. Opciones y comandos: mezcla la opción `zp.runtime` y los comandos (`/claude`, `/codex`, `/cursor`, `/board`) con los `configOptions` y `available_commands_update` del hijo. Las opciones del hijo (modelo, esfuerzo, modo) se muestran tal cual, porque son la lista real de ese CLI. No se mantiene catálogo propio de modelos del orquestador.
    4. Tarjetas de workers: se superponen para todo agente cuyo `origin.sessionId` coincide con la sesión, reutilizando `createWorkerUpdateSink`.
-   5. Política de cliente: peticiones `fs/write_text_file` y `terminal/create` del hijo pasan por la guarda de ediciones existente cuando el orquestador intentaría editar el repo. `/edits on|off` la levanta o la restablece por hilo.
+   5. Política de ediciones: peticiones `fs/write_text_file`, `terminal/create` y permisos internos de edición pasan por la guarda. Las ediciones internas notificadas sin permiso generan un aviso y un audit por llamada. `/edits on|off` cambia esta política por hilo, sin modificar el modo del engine.
 3. **El almacén es la única fuente de verdad de la actividad.** El MCP del hijo llama a `spawnAgent`; el hub descubre el agente observando el directorio de agentes (fs.watch + sondeo) y lo sigue con el mismo `followAgent`. No hay canal push de actividad.
-4. **Sin cerrojos entre procesos: un escritor por archivo** (separar antes de serializar). `agent.json` pasa a ser inmutable (spec). El runner escribe `run.json`, `stopAgent` crea `stop.json` con `wx`, `closeAgent` escribe `cleanup.json`. El estado se deriva al leer (`deriveStatus`); los lectores nunca escriben. Los registros v1 se leen con un adaptador heredado. Esto elimina las carreras de `updateAgent` y del reconcile.
+4. **Registros de agentes sin cerrojos entre procesos, con un escritor por archivo** (separar antes de serializar). `agent.json` pasa a ser inmutable (spec). El runner escribe `run.json`, `stopAgent` crea `stop.json` con `wx`, `closeAgent` escribe `cleanup.json`. El estado se deriva al leer (`deriveStatus`); los lectores nunca escriben. Los registros v1 se leen con un adaptador heredado. Esto elimina las carreras de `updateAgent` y del reconcile. El archivo compartido de preferencias usa una transacción con exclusión, descrita más abajo.
 5. **Verificación de modelo como contrato**, no como adorno: `expectedModel` en el spec, `effectiveModel` en `run.json`, `modelCheck` derivado (`ok`, `unverified`, `mismatch`). El alias `opus` no se ofrece como identidad: al escribir la hoja se fija el id concreto sondeado. Un `mismatch` queda visible en tarjeta, tablero y resultado, y el dictamen no se atribuye al modelo pedido. Cierra PROBLEMAS_ACTUALES.md.
 6. **Cancelación y supervisión**: cada engine corre en su propio grupo de procesos (`detached`), `shutdown` envía SIGTERM y luego SIGKILL a los 3 s, y el hijo y el MCP vigilan el pid del padre. `session/cancel` se reenvía al hijo, aborta el turno y detiene solo los workers del turno (`origin.sessionId` y `createdAt` posterior al inicio del turno). Los workers de turnos anteriores siguen vivos, y los workers siguen desacoplados (D-03).
 7. **Permisos de acciones de zedpstack** (`apply_agent_changes`, escritor con `isolation:none`, `close_agent` que descarta trabajo no aplicado, `setup_write`): el MCP pregunta por un puente local y el hub emite `session/request_permission`. Fuera de ACP la pregunta se concede de inmediato (hosts MCP sin cambios). Timeout o cancelación equivalen a rechazo.
@@ -47,6 +45,7 @@ Zed debe ser el único sitio de trabajo: el hilo "zedpstack" es el orquestador. 
 | `src/acp/cards.mjs` | Observador del almacén (sondeo), filtro por origen, un sink por agente; `follow.mjs` queda como primitiva de seguimiento de un agente y solo la usa `cards.mjs` |
 | `src/orchestratorPrompt.mjs` | Cuerpo de SKILL.md compartido por el prompt MCP `/zedpstack` y el prefijo del primer prompt del hub |
 | `src/acp/bridge.mjs` | Socket Unix para permisos de acciones de zedpstack |
+| `src/acp/editGuard.mjs` | Permisos de herramientas internas, unión de updates por id, avisos y estado de `/edits` |
 | `src/acp/updates.mjs`, `commands.mjs` | Se reutilizan; `/spawn` y el turno del spike (`server.mjs`) ya no existen: los workers los lanza el engine por MCP |
 | `src/mcp/*` | Sin cambio de protocolo; lee `origin` del entorno y usa `askHuman` |
 
@@ -68,6 +67,26 @@ El estado interno de opciones contiene `{configOptions, legacyRoutes}`. Las ruta
 Cada sesión tiene una cola de cambios de configuración. El hub espera hasta `setImmediate` para agrupar las peticiones consecutivas de Zed y selecciona primero los cambios `zp.runtime` pendientes. Mantiene el orden de llegada entre cambios de runtime y entre las demás opciones. Una petición ya enviada al engine termina antes de ejecutar la siguiente.
 
 Antes de enviar o guardar un valor, el hub lo valida contra las opciones vivas. Admite listas planas, grupos de opciones y opciones booleanas. Un valor inválido o un id desconocido devuelve error JSON-RPC `-32602` con los valores disponibles y no modifica opciones ni preferencias. Las preferencias se guardan en `perRuntime.<runtime>`. Al reaplicarlas, los valores obsoletos se eliminan del archivo y se registran una vez en stderr, sin mensaje en el hilo. Un fallo RPC transitorio conserva una preferencia válida. La validación se repite después de cada respuesta, porque cambiar de modelo puede cambiar otras opciones.
+
+Las escrituras de preferencias son transacciones por clave. `updatePrefs` serializa procesos mediante un directorio exclusivo con marcador de PID, lee el documento vigente y publica un temporal con rename. Retira marcadores de propietarios muertos y limita la espera a 5 s. La eliminación de un valor obsoleto compara dentro de la transacción el valor que leyó el engine. Dos sesiones o hubs no sobrescriben las elecciones de otro runtime.
+
+## Ediciones internas y modo del engine
+
+Con `/edits off`, el hub rechaza localmente `session/request_permission` de tipo `edit`, `delete` o `move`. Para `execute` reutiliza la heurística `editVerdict` de shell. Elige `reject_once`, después `reject_always`, por el `kind` anunciado, o responde `cancelled`. No presenta esa pregunta en Zed. Escribe una sola vez por llamada el mensaje de delegación y una línea en `.zedpstack/orchestrator-audit.jsonl`. Con `/edits on`, las solicitudes pasan intactas a Zed.
+
+Un registro por engine une `tool_call` y `tool_call_update` parciales por id. Cuando una edición interna apunta al cwd, fuera de `.zedpstack/`, emite un aviso y un audit por llamada. Excluye ids `zp-` de workers y permisos propios, y llamadas que ya rechazó. El aviso se basa en la notificación del engine y no revierte archivos. Un engine que omita ubicaciones y diffs puede editar sin que el hub lo detecte.
+
+`/edits` muestra `editsAllowed`, el modo actual y la aplicación con el interruptor apagado. Ninguna capa cambia el modo elegido por el usuario.
+
+| Runtime | Modo | Nivel con `/edits off` |
+|---|---|---|
+| Claude | `default`, `plan` | bloquea permisos de edición |
+| Claude | `acceptEdits`, `bypassPermissions`, otros | solo avisa |
+| Cursor | `ask`, `plan` | bloquea permisos de edición |
+| Cursor | `agent`, otros | solo avisa |
+| Cualquiera | Desconocido | solo avisa y rechaza permisos de edición si llegan |
+
+El estado menciona `dispatch install` para instalar el hook PreToolUse de Claude Code. Ese hook usa el marcador del repo y es independiente de `/edits`. Las acciones MCP de zedpstack siempre mantienen sus propias preguntas.
 
 ### Orquestador Cursor y workers por rol
 
@@ -123,7 +142,7 @@ Una ruta relativa dentro de un archivo descargable del registro de Cursor no ide
 
 ## Riesgos y preguntas abiertas
 - ¿Zed renderiza `tool_call` / `tool_call_update` emitidos por el hub fuera de un `session/prompt` abierto? Si no, `cards.resync()` al inicio de cada turno lo cubre.
-- ¿Los engines mandan ediciones y shell por `fs/write_text_file` y `terminal/create` del cliente, o las ejecutan internamente? Comprobado el 2026-10-17 con un cliente que anunciaba `fs.writeTextFile` y `terminal`: `claude-agent-acp@0.93.0` (Write) y `cursor-agent acp` (Edit File) escriben internamente y nunca llaman al cliente. La guarda de protocolo no ve esas ediciones. Con Claude queda el hook PreToolUse (`dispatch install`), que el engine ejecuta y que bloqueó la escritura con el marcador de sesión activo. Con Cursor no queda defensa. La guarda sigue en el hub para engines que sí usen el cliente.
+- Los engines reales de Claude y Cursor escriben internamente, comprobado el 2026-10-17. El corte 8 bloquea sus permisos de edición y avisa por notificaciones. Un modo que omite permisos permite escribir antes del aviso. Sin ubicaciones ni diffs, el hub tampoco puede detectarlo. Claude mantiene además el hook PreToolUse con `dispatch install`; no hay hook equivalente de Cursor.
 - Los engines son dependencias externas que pueden cambiar: versiones fijadas, `doctor` informa del binario y la versión resueltos, y un incumplimiento marca el runtime como no disponible en vez de degradar en silencio.
 - Cursor: comprobado el 2026-10-17 que `cursor-agent acp` acepta el `mcpServers` inyectado en `session/new` y llama a `spawn_agent` y `wait_agent` (también `claude-agent-acp@0.93.0`). Ambos piden `session/request_permission` por cada herramienta MCP.
 - Codex y Cursor deben demostrar una fuente de evidencia del modelo efectivo; sin ella el estado es `unverified`, nunca `ok`. Para los workers la evidencia existe: el `init` de Cursor y la cabecera `model:` de Codex. Para el orquestador, el 2026-10-17 se capturaron todas las notificaciones de un turno trivial. `claude-agent-acp@0.93.0` envía `usage_update` con `_meta["_claude/model"]: "claude-sonnet-5-5"` (modelo `default`), y el hub lo usa. `cursor-agent acp` envía `session_info_update`, `agent_thought_chunk`, `agent_message_chunk` y `available_commands_update`, ninguno con el modelo, así que su orquestador queda `unverified`. `codex-acp@2.2.2` ya pasó `authenticate` y `session/new` con el login existente en el corte 7; no se ejecutó un turno para verificar su modelo efectivo y sigue sin adaptador.
@@ -141,4 +160,15 @@ Una ruta relativa dentro de un archivo descargable del registro de Cursor no ide
 - [x] Corte 5: verificación de modelo (`modelCheck.mjs` con `normalizeModelId`, `expectedModelFor` y `checkModel`; `expectedModel` en el spec, `modelCheck` derivado al leer y `model_check` en todas las salidas; aviso en tablero, tarjeta y resultado; error de CLI antiguo con la versión instalada; `setup_plan` recomienda fijar ids y `setup_write` avisa al escribir un alias; aviso del orquestador Claude por `usage_update`). Verificado con workers reales de Cursor y Claude y con los engines reales de Claude y Cursor. Ver «Verificación de modelo» en docs/ARCHITECTURE.md.
 - [x] Corte 6: permisos y guarda de ediciones (`bridge.mjs` con socket Unix 0600 por hub, `askHuman` que concede sin puente y falla cerrado con él; `session/request_permission` con `allow_once`, `allow_always` por hilo y acción y `reject_once`; rechazo de preguntas pendientes al cancelar, cerrar, reiniciar o perder el engine y apagar el hub; `apply_agent_changes`, `spawn_agent` en el checkout, `close_agent` que descarta trabajo y `setup_write` preguntan; guarda `fs/write_text_file` y `terminal/create` con `editVerdict` y `/edits on|off`). Verificado con el engine real de Cursor (rechazo y permiso de `apply_agent_changes`) y con los de Claude y Cursor para las ediciones directas. Ver «Permisos y guarda de ediciones» en docs/ARCHITECTURE.md.
 - [x] Corte 7: autenticación explícita por runtime, login existente de Codex, entorno MCP por prefijos, validación y cola de opciones con prioridad de runtime, preferencias independientes y limpieza de valores obsoletos, diagnóstico ACP local compartido y flujo Cursor `grok-4.6` con workers por rol. Codex real verificado hasta `session/new`; Cursor real solo hasta `initialize` por rechazo de autenticación en este entorno. La prueba del MCP sin entorno heredado usa el engine falso.
-- [ ] Corte 8: endurecimiento multihilo.
+- [x] Corte 8: permisos de herramientas internas, avisos por llamada y estado honesto de `/edits`; preferencias atómicas con transacción por clave; admisión de engines serializada, cierre que espera arranques, limpieza de hijos tras caída y retiro de timers. Pruebas con cuatro hilos sobre uno y dos repos, dos procesos de hub y 50 ciclos de apertura y cierre. La verificación del puente y de engines reales depende de los permisos del entorno.
+
+Los ocho cortes están implementados. Permanecen abiertos estos límites:
+
+- Los modos que omiten preguntas permiten ediciones internas. El aviso depende de las ubicaciones o diffs publicados y la detección de shell es heurística.
+- Cursor y Codex no tienen evidencia adaptada del modelo efectivo del orquestador. Quedan `unverified`.
+- Cambiar de runtime pierde la conversación. No hay `session/load`.
+- Sin `session/close` de Zed, la sesión dura hasta la evicción o shutdown. Un SIGKILL del hub depende del EOF o la supervisión del engine externo.
+- El renderizado de tarjetas fuera de un turno depende de Zed; `cards.resync()` al inicio de cada prompt recupera su estado.
+- Las pruebas que requieren sockets Unix y credenciales o red no pueden darse por verificadas en un sandbox que los prohíbe. El corte 8 conserva esas pruebas para ejecutarlas fuera de ese entorno.
+
+La verificación final del corte 8 en este sandbox aprobó 316 pruebas sin las suites que requieren el puente de permisos, tanto sin variables de origen como con las tres heredadas. Con HOME vacío aprobó 309 y omitió 7 pruebas que requieren una instalación local de pstack. Los intentos completos de `npm test` encontraron `listen EPERM` y una regresión de limpieza corregida después, cuya prueba ya pasa con el engine falso. Las suites completas y el puente entre hubs quedan pendientes de validación fuera del sandbox. Cursor real anunció `cursor_login` y rechazó `authenticate` con "Login failed or timed out". No se ejecutó el prompt de escritura en `agent`, `ask` ni `plan`.
