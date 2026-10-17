@@ -41,7 +41,7 @@ Zed debe ser el único sitio de trabajo: el hilo "zedpstack" es el orquestador. 
 | `src/agents/lifecycle.mjs` | API actual sin romper; añade `origin` y `expectedModel`; lecturas vía `loadAgent` |
 | `src/modelCheck.mjs` | `expectedModelFor`, `checkModel` |
 | `src/acp/rpc.mjs` | Par JSON-RPC bidireccional por líneas (peticiones en ambos sentidos, correlación de respuestas). El spike descarta las respuestas del cliente |
-| `src/acp/engine.mjs` | Resolución del comando del hijo, arranque en grupo propio, `initialize` + `session/new`, vigilancia del padre, kill |
+| `src/acp/engine.mjs` | Resolución del comando del hijo, arranque en grupo propio, `initialize`, autenticación, `session/new`, timeout y diagnóstico del arranque, kill |
 | `src/acp/hub.mjs` | Tabla de sesiones, los cinco puntos de intervención, turno/cancel, shutdown |
 | `src/acp/options.mjs` | Mezcla de `zp.runtime` con las opciones del hijo, enrutado por id, comandos, preferencias en `~/.zedpstack/acp-prefs.json` |
 | `src/acp/cards.mjs` | Observador del almacén, filtro por origen, un sink por agente (sustituye a `follow.mjs`) |
@@ -58,6 +58,18 @@ Zed debe ser el único sitio de trabajo: el hilo "zedpstack" es el orquestador. 
 
 ## Opciones de configuración (ACP v1)
 `configOptions` en la respuesta de `session/new`, `session/set_config_option` y `config_option_update` con la lista completa. `/claude` equivale a elegir el runtime en el desplegable: si cambia, se mata el engine, se arranca el nuevo, se reaplican las elecciones guardadas de ese runtime y se emite `config_option_update`. Cambiar de runtime reinicia la conversación (se avisa en el hilo). Al abrir el hilo se arranca el engine del último runtime usado.
+
+Si el hijo no devuelve `configOptions`, el hub deriva `model` desde `models` y `mode` desde `modes`. Conserva los ids completos del hijo, incluidos parámetros como `[effort=high,fast=true]`, y devuelve los campos legacy sin modificarlos en `session/new`. `zp.runtime` precede a las opciones del hijo. Una lista nativa de `configOptions`, incluso vacía, tiene prioridad sobre los campos legacy.
+
+El estado interno de opciones contiene `{configOptions, legacyRoutes}`. Las rutas existen solo para opciones derivadas. `model` usa `session/set_model` con `modelId` y `mode` usa `session/set_mode` con `modeId`. Las opciones nativas usan `session/set_config_option`. El cambio directo y la reaplicación de preferencias comparten esta selección de método. Las actualizaciones legacy `current_mode_update` y `current_model_update` modifican la opción derivada y generan un `config_option_update` con la lista completa.
+
+## Arranque y errores del engine
+
+El handshake completo tiene un límite de 30 segundos. `initialize` incluye nombre y versión del cliente. Si el hijo anuncia métodos de autenticación, el engine espera `authenticate` antes de enviar `session/new`. Prefiere `cursor_login`. Para otros métodos, elige el primer id que no indique interacción, navegador, OAuth, dispositivo o login.
+
+Un error o timeout termina el grupo del hijo y espera el cierre de sus pipes. El diagnóstico identifica la etapa, conserva el motivo RPC o el código o señal de salida y añade las últimas diez líneas de stderr, con un máximo de 8192 caracteres retenidos. Los errores de Cursor incluyen el hint «ejecuta `agent login`». El cierre explícito del peer acepta el motivo de terminación para que una petición pendiente no pierda ese dato bajo el mensaje genérico `closed`.
+
+Una ruta relativa dentro de un archivo descargable del registro de Cursor no identifica un ejecutable instalado. Si el registro no incluye un directorio de instalación, el resolver usa `cursor-agent acp` desde `PATH`.
 
 ## Plan de cortes (cada uno termina en una comprobación)
 1. `/claude` + desplegables + turno de conversación en streaming (rpc, engine, hub passthrough, fixture de agente ACP falso).

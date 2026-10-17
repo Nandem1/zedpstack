@@ -5,6 +5,7 @@ import { ZEDPSTACK_VERSION } from '../constants.mjs';
 import { parsePromptCommand } from './commands.mjs';
 import { startEngine } from './engine.mjs';
 import {
+  childOptionState,
   loadPrefs,
   mergeCommands,
   mergeOptions,
@@ -49,7 +50,7 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
   function mergedConfigFor(session) {
     const zp = runtimeOption(session.runtime, ['claude', 'codex', 'cursor']);
     zp.currentValue = session.runtime;
-    return mergeOptions(zp, session.childConfigOptions ?? []);
+    return mergeOptions(zp, session.childOptions.configOptions);
   }
 
   function announceCommands(session) {
@@ -63,6 +64,20 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
     });
   }
 
+  async function setChildOption(session, configId, value) {
+    const route = session.childOptions.legacyRoutes[configId];
+    const params = { sessionId: session.engine.childSessionId };
+    if (route) params[route.valueKey] = value;
+    else Object.assign(params, { configId, value });
+    const result = await session.engine.peer.request(route?.method ?? 'session/set_config_option', params);
+    if (result.configOptions != null) {
+      session.childOptions = childOptionState(result);
+    } else if (route) {
+      session.childOptions.configOptions = session.childOptions.configOptions.map((option) =>
+        option.id === configId ? { ...option, currentValue: value } : option);
+    }
+  }
+
   async function applySavedPrefsToChild(session) {
     if (!session.engine?.peer || session.engine.dead) return;
     const prefs = loadPrefs(env);
@@ -70,12 +85,7 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
     for (const [configId, value] of Object.entries(saved)) {
       if (configId === ZP_RUNTIME_ID) continue;
       try {
-        const res = await session.engine.peer.request('session/set_config_option', {
-          sessionId: session.engine.childSessionId,
-          configId,
-          value,
-        });
-        session.childConfigOptions = res.configOptions ?? session.childConfigOptions;
+        await setChildOption(session, configId, value);
       } catch {
         /* */
       }
@@ -102,14 +112,14 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
         env,
       });
       session.engine = engine;
-      session.childConfigOptions = engine.newSessionResult.configOptions ?? [];
+      session.childOptions = childOptionState(engine.newSessionResult);
       session.childCommands = engine.initialCommands ?? [];
       wireEnginePeer(session);
       await applySavedPrefsToChild(session);
       session.engineError = null;
     } catch (e) {
       session.engine = null;
-      session.childConfigOptions = [];
+      session.childOptions = childOptionState();
       session.engineError = e.message ?? String(e);
     }
     announceCommands(session);
@@ -131,13 +141,22 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
           availableCommands: mergeCommands(session.childCommands),
         };
       } else if (update.sessionUpdate === 'config_option_update') {
-        const zp = runtimeOption(session.runtime);
-        zp.currentValue = session.runtime;
+        session.childOptions = childOptionState(update);
         outUpdate = {
           ...update,
-          configOptions: mergeOptions(zp, update.configOptions ?? []),
+          configOptions: mergedConfigFor(session),
         };
-        session.childConfigOptions = update.configOptions ?? session.childConfigOptions;
+      } else if (update.sessionUpdate === 'current_mode_update' || update.sessionUpdate === 'current_model_update') {
+        const configId = update.sessionUpdate === 'current_mode_update' ? 'mode' : 'model';
+        if (session.childOptions.legacyRoutes[configId]) {
+          const value = configId === 'mode' ? update.currentModeId : update.currentModelId;
+          session.childOptions.configOptions = session.childOptions.configOptions.map((option) =>
+            option.id === configId ? { ...option, currentValue: value } : option);
+          notifyZed({
+            sessionId: session.sessionId,
+            update: { sessionUpdate: 'config_option_update', configOptions: mergedConfigFor(session) },
+          });
+        }
       }
       notifyZed({
         sessionId: session.sessionId,
@@ -209,7 +228,7 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
         repo,
         runtime,
         engine: null,
-        childConfigOptions: [],
+        childOptions: childOptionState(),
         engineError: null,
         childCommands: [],
         commandsAnnounced: false,
@@ -229,6 +248,10 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
       }
 
       const result = { sessionId, configOptions };
+      for (const field of ['models', 'modes']) {
+        const value = session.engine?.newSessionResult[field];
+        if (value !== undefined) result[field] = value;
+      }
       setImmediate(() => {
         session.commandsAnnounced = true;
         announceCommands(session);
@@ -245,19 +268,14 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
         return { configOptions: mergedConfigFor(session) };
       }
 
+      if (routeOption(params.configId) === 'child' && session.engine?.peer && !session.engine.dead) {
+        await setChildOption(session, params.configId, params.value);
+      }
+
       const prefs = loadPrefs(env);
       if (!prefs.perRuntime[session.runtime]) prefs.perRuntime[session.runtime] = {};
       prefs.perRuntime[session.runtime][params.configId] = params.value;
       savePrefs(prefs, env);
-
-      if (routeOption(params.configId) === 'child' && session.engine?.peer && !session.engine.dead) {
-        const res = await session.engine.peer.request('session/set_config_option', {
-          sessionId: session.engine.childSessionId,
-          configId: params.configId,
-          value: params.value,
-        });
-        session.childConfigOptions = res.configOptions ?? session.childConfigOptions;
-      }
 
       return { configOptions: mergedConfigFor(session) };
     },

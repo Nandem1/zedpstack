@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 const readline = require('node:readline');
+const fs = require('node:fs');
 
 let sessionId = null;
 let modelValue = 'alpha';
+let modeValue = 'agent';
+let authenticated = process.env.FAKE_ACP_AUTH !== '1';
+let authResolve;
+const authReady = new Promise((resolve) => { authResolve = resolve; });
 let sleepTimer = null;
 let sleepPromptId = null;
 let sleepResolve = null;
 let nextClientReqId = 1000;
 
 const write = (...messages) => process.stdout.write(messages.map((obj) => `${JSON.stringify(obj)}\n`).join(''));
-const err = (code, message) => ({ code, message });
+const err = (code, message, data) => ({ code, message, ...(data ? { data } : {}) });
 
 const pendingClient = new Map();
 const availableCommands = process.env.FAKE_ACP_COMMANDS
@@ -108,8 +113,21 @@ rl.on('line', (line) => {
 
 async function handleRequest(msg) {
   const { method, params = {}, id } = msg;
+  if (process.env.FAKE_ACP_TRACE) {
+    fs.appendFileSync(process.env.FAKE_ACP_TRACE, `${JSON.stringify({ pid: process.pid, method, params })}\n`);
+  }
+  if (process.env.FAKE_ACP_EXIT_METHOD === method) {
+    process.stderr.write('credentials unavailable\n', () => process.exit(23));
+    return;
+  }
+  if (process.env.FAKE_ACP_HANG_METHOD === method) {
+    process.stderr.write(`${method} is waiting for credentials\n`);
+    return;
+  }
   if (process.env.FAKE_ACP_FAIL_METHOD === method) {
-    write({ jsonrpc: '2.0', id, error: err(-32603, `${method} failed`) });
+    process.stderr.write(`${method}: credentials rejected\n`);
+    const data = process.env.FAKE_ACP_ERROR_DETAIL ? { message: process.env.FAKE_ACP_ERROR_DETAIL } : undefined;
+    write({ jsonrpc: '2.0', id, error: err(-32603, `${method} failed`, data) });
     return;
   }
   switch (method) {
@@ -121,21 +139,49 @@ async function handleRequest(msg) {
           protocolVersion: 1,
           agentCapabilities: { loadSession: false },
           agentInfo: { name: 'fake-acp-agent' },
+          authMethods: process.env.FAKE_ACP_AUTH === '1'
+            ? JSON.parse(process.env.FAKE_ACP_AUTH_METHODS ?? '[{"id":"cursor_login","name":"Cursor Login"}]')
+            : [],
         },
       });
       break;
+    case 'authenticate':
+      if (process.env.FAKE_ACP_EXPECT_AUTH && params.methodId !== process.env.FAKE_ACP_EXPECT_AUTH) {
+        throw new Error(`unexpected auth method ${params.methodId}`);
+      }
+      authenticated = true;
+      authResolve();
+      write({ jsonrpc: '2.0', id, result: {} });
+      break;
     case 'session/new': {
+      if (!authenticated) await authReady;
       sessionId = `child-${Date.now()}`;
       const response = {
         jsonrpc: '2.0',
         id,
-        result: { sessionId, configOptions: configOptions() },
+        result: {
+          sessionId,
+          ...(process.env.FAKE_ACP_LEGACY === '1' ? {
+            models: {
+              currentModelId: modelValue,
+              availableModels: [{ modelId: 'alpha', name: 'Alpha' }, { modelId: 'beta', name: 'Beta' }],
+            },
+            modes: {
+              currentModeId: modeValue,
+              availableModes: [
+                { id: 'agent', name: 'Agent', description: 'Make changes' },
+                { id: 'plan', name: 'Plan', description: 'Plan changes' },
+              ],
+            },
+          } : { configOptions: configOptions() }),
+        },
       };
       if (process.env.FAKE_ACP_COMMANDS_TIMING === 'prompt') write(response);
       else write(response, commandNotification());
       break;
     }
     case 'session/set_config_option':
+      if (process.env.FAKE_ACP_LEGACY === '1') throw new Error('legacy agent has no set_config_option');
       if (params.configId === 'model') modelValue = params.value;
       write(commandNotification(), { jsonrpc: '2.0', id, result: { configOptions: configOptions() } }, {
         jsonrpc: '2.0',
@@ -146,6 +192,22 @@ async function handleRequest(msg) {
         },
       });
       break;
+    case 'session/set_model':
+    case 'session/set_mode': {
+      const isModel = method === 'session/set_model';
+      if (isModel) modelValue = params.modelId;
+      else modeValue = params.modeId;
+      write({
+        jsonrpc: '2.0', method: 'session/update',
+        params: {
+          sessionId,
+          update: isModel
+            ? { sessionUpdate: 'current_model_update', currentModelId: modelValue }
+            : { sessionUpdate: 'current_mode_update', currentModeId: modeValue },
+        },
+      }, { jsonrpc: '2.0', id, result: {} });
+      break;
+    }
     case 'session/prompt': {
       if (process.env.FAKE_ACP_COMMANDS_TIMING === 'prompt') write(commandNotification());
       const text = promptText(params.prompt);

@@ -39,6 +39,20 @@ describe('acp rpc', () => {
     }
   });
 
+  it('preserves the termination reason when closing a pending request', async () => {
+    const { a, b } = linkPeers();
+    b.onRequest(() => new Promise(() => {}));
+    try {
+      const reason = new Error('child exited with code 23');
+      const rejected = assert.rejects(a.request('slow'), (error) => error === reason);
+      a.close(reason);
+      await rejected;
+    } finally {
+      a.close();
+      b.close();
+    }
+  });
+
   it('invalid JSON yields -32700', async () => {
     const input = new PassThrough();
     const output = new PassThrough();

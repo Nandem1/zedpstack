@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { ZEDPSTACK_VERSION } from '../constants.mjs';
 import { createPeer } from './rpc.mjs';
 
 const PINNED = {
@@ -60,6 +61,7 @@ function resolveFromRegistry(runtime, registry, registryDir, platformArch) {
     if (!spec?.cmd) return null;
     const versionDir = entry.distribution.path ?? entry.versionPath ?? entry.path;
     let cmd = spec.cmd;
+    if (!path.isAbsolute(cmd) && !versionDir) return null;
     if (registryDir && versionDir && !path.isAbsolute(cmd)) {
       cmd = path.join(registryDir, '..', 'cursor', versionDir, cmd);
     }
@@ -124,12 +126,6 @@ function loadZedRegistry(registryDir) {
   }
 }
 
-function prefixStderr(child, label) {
-  child.stderr?.on('data', (chunk) => {
-    process.stderr.write(`[${label}] ${chunk}`);
-  });
-}
-
 /**
  * @param {object} opts
  */
@@ -142,6 +138,7 @@ export async function startEngine({
   spawnFn = spawn,
   registryDir = null,
   userConfig = null,
+  handshakeTimeoutMs = 30_000,
 }) {
   const rt = String(runtime).toLowerCase();
   const { registry, registryDir: regDir } = registryDir
@@ -172,7 +169,11 @@ export async function startEngine({
     stdio: ['pipe', 'pipe', 'pipe'],
     detached: true,
   });
-  prefixStderr(child, `acp-engine:${rt}`);
+  let stderr = '';
+  child.stderr?.on('data', (chunk) => {
+    stderr = (stderr + chunk).slice(-8192);
+    process.stderr.write(`[acp-engine:${rt}] ${chunk}`);
+  });
 
   let dead = false;
   const peer = createPeer({
@@ -188,23 +189,36 @@ export async function startEngine({
     }
   });
 
-  const onDead = () => {
+  const onDead = (reason) => {
     if (dead) return;
     dead = true;
-    peer.close();
-    for (const stream of child.stdio) stream?.destroy();
+    peer.close(reason);
   };
-  child.on('exit', onDead);
-  child.on('error', onDead);
+  let terminationError;
+  child.on('exit', (code, signal) => {
+    terminationError = new Error(`child exited ${signal ? `with signal ${signal}` : `with code ${code}`}`);
+    onDead(terminationError);
+  });
+  child.on('error', (error) => {
+    terminationError = error;
+    onDead(error);
+  });
+  child.stdin.on('error', onDead);
+  let childClosed = false;
+  const closed = new Promise((resolve) => child.once('close', () => {
+    childClosed = true;
+    for (const stream of child.stdio) stream?.destroy();
+    resolve();
+  }));
 
   let killPromise;
   const kill = () => {
     if (killPromise) return killPromise;
     onDead();
-    killPromise = new Promise((resolve) => {
+    killPromise = (async () => {
       const pid = child.pid;
       if (!pid) {
-        resolve();
+        for (const stream of child.stdio) stream?.destroy();
         return;
       }
 
@@ -220,30 +234,33 @@ export async function startEngine({
         }
       };
 
-      if (child.exitCode !== null || child.signalCode !== null) {
-        signal('SIGTERM');
-        resolve();
-        return;
-      }
-
-      const timer = setTimeout(() => signal('SIGKILL'), 3000);
-      timer.unref();
-      child.once('exit', () => {
-        clearTimeout(timer);
-        resolve();
-      });
+      const timer = childClosed ? null : setTimeout(() => signal('SIGKILL'), 3000);
       signal('SIGTERM');
-    });
+      await closed;
+      clearTimeout(timer);
+    })();
     return killPromise;
   };
 
-  try {
+  let stage = 'initialize';
+  let timer;
+  const handshake = async () => {
     const initializeResult = await peer.request('initialize', {
       protocolVersion: 1,
       clientCapabilities: clientCapabilities ?? {},
-      clientInfo: { name: 'zedpstack' },
+      clientInfo: { name: 'zedpstack', version: ZEDPSTACK_VERSION },
     });
 
+    const methods = initializeResult.authMethods ?? [];
+    if (methods.length) {
+      stage = 'authenticate';
+      const method = methods.find((method) => method.id === 'cursor_login')
+        ?? methods.find((method) => !/interactive|oauth|browser|device|login/i.test(method.id));
+      if (!method) throw new Error('no non-interactive authentication method available');
+      await peer.request('authenticate', { methodId: method.id });
+    }
+
+    stage = 'session/new';
     const newSessionResult = await peer.request('session/new', {
       cwd,
       mcpServers,
@@ -264,8 +281,29 @@ export async function startEngine({
         return dead;
       },
     };
+  };
+
+  try {
+    return await Promise.race([
+      handshake(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`handshake timed out after ${handshakeTimeoutMs} ms`)), handshakeTimeoutMs);
+      }),
+    ]);
   } catch (error) {
     await kill();
-    throw error;
+    let reason = /(?:stream )?closed$/.test(error.message) && terminationError
+      ? terminationError.message
+      : error.message;
+    if (typeof error.data?.message === 'string') reason += `: ${error.data.message}`;
+    const tail = stderr.trim().split('\n').slice(-10).join('\n');
+    throw new Error(
+      `engine:${rt}: ${stage} failed: ${reason}`
+        + (tail ? `\nstderr:\n${tail}` : '')
+        + (rt === 'cursor' ? '\nejecuta `agent login`' : ''),
+      { cause: error },
+    );
+  } finally {
+    clearTimeout(timer);
   }
 }

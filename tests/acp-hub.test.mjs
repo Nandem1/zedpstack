@@ -273,6 +273,51 @@ describe('acp hub', () => {
     assert.equal(prefs.perRuntime.claude.model, 'beta');
   });
 
+  it('derives legacy options, routes changes and updates, and replays runtime preferences', async () => {
+    env.FAKE_ACP_LEGACY = '1';
+    env.FAKE_ACP_TRACE = path.join(env.ZEDPSTACK_HOME, 'calls.jsonl');
+    const readCalls = () => fs.readFileSync(env.FAKE_ACP_TRACE, 'utf8').trim().split('\n').map(JSON.parse);
+    const session = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
+    assert.deepEqual(session.configOptions.map((option) => option.id), [ZP_RUNTIME_ID, 'model', 'mode']);
+    assert.deepEqual(session.models, {
+      currentModelId: 'alpha',
+      availableModels: [{ modelId: 'alpha', name: 'Alpha' }, { modelId: 'beta', name: 'Beta' }],
+    });
+    assert.deepEqual(session.modes, {
+      currentModeId: 'agent',
+      availableModes: [
+        { id: 'agent', name: 'Agent', description: 'Make changes' },
+        { id: 'plan', name: 'Plan', description: 'Plan changes' },
+      ],
+    });
+    const { sessionId } = session;
+    for (const [configId, value, method, valueKey] of [
+      ['model', 'beta', 'session/set_model', 'modelId'],
+      ['mode', 'plan', 'session/set_mode', 'modeId'],
+    ]) {
+      const result = await ctx.rpc('session/set_config_option', { sessionId, configId, value });
+      assert.equal(result.configOptions.find((option) => option.id === configId).currentValue, value);
+      assert.deepEqual(result.configOptions.map((option) => option.id), [ZP_RUNTIME_ID, 'model', 'mode']);
+      const call = readCalls().findLast((call) => call.method === method);
+      assert.deepEqual(call.params, { sessionId: ctx.engines[0].childSessionId, [valueKey]: value });
+      assert.ok(!readCalls().some((call) => call.method === 'session/set_config_option'));
+      const update = ctx.updates.findLast((entry) => entry.update.sessionUpdate === 'config_option_update');
+      assert.equal(update.sessionId, sessionId);
+      assert.equal(update.update.configOptions.find((option) => option.id === configId).currentValue, value);
+      assert.deepEqual(update.update.configOptions.map((option) => option.id), [ZP_RUNTIME_ID, 'model', 'mode']);
+    }
+    const prefs = JSON.parse(fs.readFileSync(path.join(env.ZEDPSTACK_HOME, 'acp-prefs.json'), 'utf8'));
+    assert.deepEqual(prefs.perRuntime.claude, { model: 'beta', mode: 'plan' });
+    await ctx.rpc('session/set_config_option', { sessionId, configId: ZP_RUNTIME_ID, value: 'cursor' });
+    const restored = await ctx.rpc('session/set_config_option', { sessionId, configId: ZP_RUNTIME_ID, value: 'claude' });
+    assert.equal(restored.configOptions.find((option) => option.id === 'model').currentValue, 'beta');
+    assert.equal(restored.configOptions.find((option) => option.id === 'mode').currentValue, 'plan');
+    const replay = readCalls().filter((call) => call.pid === ctx.engines[2].pid);
+    assert.deepEqual(replay.slice(2).map((call) => call.method), ['session/set_model', 'session/set_mode']);
+    assert.deepEqual(replay[2].params, { sessionId: ctx.engines[2].childSessionId, modelId: 'beta' });
+    assert.deepEqual(replay[3].params, { sessionId: ctx.engines[2].childSessionId, modeId: 'plan' });
+  });
+
   it('prompt streams child chunks with outer sessionId', async () => {
     const session = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
     const sessionId = session.sessionId;

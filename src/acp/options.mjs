@@ -31,6 +31,29 @@ export function mergeOptions(zpOption, childOptions = []) {
   return [zpOption, ...rest];
 }
 
+export function childOptionState(result = {}) {
+  if (result.configOptions != null) return { configOptions: result.configOptions, legacyRoutes: {} };
+  const configOptions = [];
+  const legacyRoutes = {};
+  if (result.models) {
+    configOptions.push({
+      id: 'model', name: 'Model', category: 'model', type: 'select',
+      currentValue: result.models.currentModelId,
+      options: result.models.availableModels.map(({ modelId, name }) => ({ value: modelId, name })),
+    });
+    legacyRoutes.model = { method: 'session/set_model', valueKey: 'modelId' };
+  }
+  if (result.modes) {
+    configOptions.push({
+      id: 'mode', name: 'Mode', category: 'mode', type: 'select',
+      currentValue: result.modes.currentModeId,
+      options: result.modes.availableModes.map(({ id, ...option }) => ({ value: id, ...option })),
+    });
+    legacyRoutes.mode = { method: 'session/set_mode', valueKey: 'modeId' };
+  }
+  return { configOptions, legacyRoutes };
+}
+
 export function routeOption(configId) {
   if (configId === ZP_RUNTIME_ID) return 'hub';
   return 'child';

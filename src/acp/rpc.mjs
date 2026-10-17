@@ -44,7 +44,10 @@ export function createPeer({ input, output, label = 'peer' }) {
       if (!entry) return;
       pending.delete(msg.id);
       if (msg.error) {
-        const e = Object.assign(new Error(msg.error.message ?? 'RPC error'), { rpc: msg.error.code });
+        const e = Object.assign(new Error(msg.error.message ?? 'RPC error'), {
+          rpc: msg.error.code,
+          data: msg.error.data,
+        });
         entry.reject(e);
       } else {
         entry.resolve(msg.result);
@@ -113,11 +116,11 @@ export function createPeer({ input, output, label = 'peer' }) {
     onNotification(handler) {
       notificationHandler = handler;
     },
-    close() {
+    close(reason = Object.assign(new Error(`${label}: closed`), { rpc: -32000 })) {
       if (closed) return;
       closed = true;
       rl.close();
-      rejectAllPending(Object.assign(new Error(`${label}: closed`), { rpc: -32000 }));
+      rejectAllPending(reason);
     },
   };
 }

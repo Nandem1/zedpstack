@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  childOptionState,
   loadPrefs,
   mergeCommands,
   mergeOptions,
@@ -25,6 +26,39 @@ describe('acp options', () => {
   it('routeOption', () => {
     assert.equal(routeOption(ZP_RUNTIME_ID), 'hub');
     assert.equal(routeOption('model'), 'child');
+  });
+
+  it('derives each legacy option and preserves parameterized model IDs and descriptions', () => {
+    const modelId = 'grok-4.6[effort=high,fast=true]';
+    const models = { currentModelId: modelId, availableModels: [{ modelId, name: 'Grok' }] };
+    const modes = {
+      currentModeId: 'agent',
+      availableModes: [{ id: 'agent', name: 'Agent', description: 'Make changes' }],
+    };
+    assert.deepEqual(childOptionState({ models }), {
+      configOptions: [{
+        id: 'model', name: 'Model', category: 'model', type: 'select', currentValue: modelId,
+        options: [{ value: modelId, name: 'Grok' }],
+      }],
+      legacyRoutes: { model: { method: 'session/set_model', valueKey: 'modelId' } },
+    });
+    assert.deepEqual(childOptionState({ modes }), {
+      configOptions: [{
+        id: 'mode', name: 'Mode', category: 'mode', type: 'select', currentValue: 'agent',
+        options: [{ value: 'agent', name: 'Agent', description: 'Make changes' }],
+      }],
+      legacyRoutes: { mode: { method: 'session/set_mode', valueKey: 'modeId' } },
+    });
+  });
+
+  it('keeps native options authoritative even when empty and legacy fields are present', () => {
+    for (const configOptions of [[], [{ id: 'model', currentValue: 'native' }]]) {
+      assert.deepEqual(childOptionState({
+        configOptions,
+        models: { currentModelId: 'legacy', availableModels: [] },
+        modes: { currentModeId: 'legacy', availableModes: [] },
+      }), { configOptions, legacyRoutes: {} });
+    }
   });
 
   it('mergeCommands adds hub commands', () => {
