@@ -1,4 +1,4 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,14 +17,24 @@ const FAKE_AGENT = path.join(ROOT, 'tests', 'fixtures', 'bin', 'fake-acp-agent.c
 function engineEnv(extra = {}) {
   const cmd = JSON.stringify([process.execPath, FAKE_AGENT]);
   return {
-    ...extra,
     ZEDPSTACK_ACP_ENGINE_CLAUDE: cmd,
     ZEDPSTACK_ACP_ENGINE_CODEX: cmd,
     ZEDPSTACK_ACP_ENGINE_CURSOR: cmd,
+    ...extra,
   };
 }
 
-function connectHub(env) {
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error.code === 'ESRCH') return false;
+    throw error;
+  }
+}
+
+function connectHub(t, env) {
   const zedToHub = new PassThrough();
   const hubToZed = new PassThrough();
   const zedSim = createPeer({ input: hubToZed, output: zedToHub, label: 'zed-sim' });
@@ -32,6 +42,7 @@ function connectHub(env) {
 
   const updates = [];
   const clientRequests = [];
+  const engines = [];
 
   zedSim.onRequest(async (method, params) => {
     clientRequests.push({ method, params });
@@ -46,7 +57,11 @@ function connectHub(env) {
 
   const hub = createHub({
     env,
-    spawnEngine: (opts) => startEngine({ ...opts, env }),
+    spawnEngine: async (opts) => {
+      const engine = await startEngine({ ...opts, env });
+      engines.push(engine);
+      return engine;
+    },
     zed: {
       request: (method, params) => hubWire.request(method, params),
       notify: (params) => {
@@ -54,6 +69,21 @@ function connectHub(env) {
         hubWire.notify('session/update', params);
       },
     },
+  });
+
+  t.after(async () => {
+    try {
+      await hub.shutdown();
+    } finally {
+      try {
+        await Promise.all(engines.map((engine) => engine.kill()));
+      } finally {
+        zedSim.close();
+        hubWire.close();
+        zedToHub.destroy();
+        hubToZed.destroy();
+      }
+    }
   });
 
   hubWire.onRequest(async (method, params) => {
@@ -66,7 +96,7 @@ function connectHub(env) {
   const rpc = (method, params = {}) => zedSim.request(method, params);
   const notify = (method, params = {}) => zedSim.notify(method, params);
 
-  return { hub, zedSim, hubWire, rpc, notify, updates, clientRequests, shutdown: () => hub.shutdown() };
+  return { hub, rpc, notify, updates, clientRequests, engines };
 }
 
 describe('acp hub', () => {
@@ -76,15 +106,12 @@ describe('acp hub', () => {
 
   before(() => {
     sb = makeSandbox();
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-hub-home-'));
-    env = engineEnv({ ZEDPSTACK_HOME: home });
-    ctx = connectHub(env);
   });
 
-  after(async () => {
-    await ctx.shutdown();
-    ctx.zedSim.close();
-    ctx.hubWire.close();
+  beforeEach((t) => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-hub-home-'));
+    env = engineEnv({ ZEDPSTACK_HOME: home });
+    ctx = connectHub(t, env);
   });
 
   it('initialize and session/new merged configOptions', async () => {
@@ -121,6 +148,57 @@ describe('acp hub', () => {
     assert.ok(cfg);
     assert.ok(cfg.update.configOptions.some((o) => o.id === ZP_RUNTIME_ID));
   });
+
+  for (const method of ['slash command', 'set_config_option']) {
+    it(`runtime switch via ${method} routes prompts and shuts down replacement`, async () => {
+      const { sessionId } = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
+      const original = ctx.engines[0];
+      if (method === 'slash command') {
+        await ctx.rpc('session/prompt', {
+          sessionId,
+          prompt: [{ type: 'text', text: '/codex' }],
+        });
+      } else {
+        await ctx.rpc('session/set_config_option', {
+          sessionId,
+          configId: ZP_RUNTIME_ID,
+          value: 'codex',
+        });
+      }
+      const replacement = ctx.engines[1];
+      assert.ok(replacement);
+      assert.notEqual(replacement.pid, original.pid);
+      const config = ctx.updates.findLast(
+        (u) => u.sessionId === sessionId && u.update?.sessionUpdate === 'config_option_update',
+      );
+      const before = ctx.updates.length;
+      const result = await ctx.rpc('session/prompt', {
+        sessionId,
+        prompt: [{ type: 'text', text: 'hello after switch' }],
+      });
+      const chunks = ctx.updates
+        .slice(before)
+        .filter((u) => u.sessionId === sessionId && u.update?.sessionUpdate === 'agent_message_chunk')
+        .map((u) => u.update.content.text);
+      await ctx.hub.shutdown();
+      assert.deepEqual(
+        {
+          runtime: config.update.configOptions.find((o) => o.id === ZP_RUNTIME_ID).currentValue,
+          stopReason: result.stopReason,
+          chunks,
+          originalAlive: processAlive(original.pid),
+          replacementAlive: processAlive(replacement.pid),
+        },
+        {
+          runtime: 'codex',
+          stopReason: 'end_turn',
+          chunks: ['chunk-1', 'chunk-2'],
+          originalAlive: false,
+          replacementAlive: false,
+        },
+      );
+    });
+  }
 
   it('set_config_option model forwarded and saved', async () => {
     const session = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
@@ -206,14 +284,17 @@ describe('acp hub', () => {
     await slow;
   });
 
-  it('engine start failure still yields session', async () => {
-    const badEnv = engineEnv({ ZEDPSTACK_ACP_ENGINE_CLAUDE: JSON.stringify(['/no/such/binary']) });
-    const local = connectHub(badEnv);
+  it('engine start failure still yields session', async (t) => {
+    const badEnv = engineEnv({
+      ZEDPSTACK_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'zp-hub-failure-home-')),
+      ZEDPSTACK_ACP_ENGINE_CLAUDE: JSON.stringify(['/no/such/binary']),
+    });
+    const local = connectHub(t, badEnv);
     const res = await local.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
     assert.ok(res.configOptions.some((o) => o.id === ZP_RUNTIME_ID));
-    await local.shutdown();
-    local.zedSim.close();
-    local.hubWire.close();
+    assert.deepEqual(res.configOptions.map((o) => o.id), [ZP_RUNTIME_ID]);
+    await new Promise((r) => setImmediate(r));
+    assert.ok(local.updates.some((u) => u.update?.content?.text.includes('No se pudo iniciar el engine')));
   });
 
   it('spawn and board still work', async () => {

@@ -88,6 +88,10 @@ rl.on('line', (line) => {
 
 async function handleRequest(msg) {
   const { method, params = {}, id } = msg;
+  if (process.env.FAKE_ACP_FAIL_METHOD === method) {
+    write({ jsonrpc: '2.0', id, error: err(-32603, `${method} failed`) });
+    return;
+  }
   switch (method) {
     case 'initialize':
       write({

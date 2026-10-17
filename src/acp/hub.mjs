@@ -43,7 +43,7 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
     const base = sessions.get(outerSessionId);
     if (!base) return null;
     const extra = engines.get(outerSessionId);
-    return extra ? { ...base, ...extra } : null;
+    return extra ?? null;
   }
 
   function mergedConfigFor(session) {

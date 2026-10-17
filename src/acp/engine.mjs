@@ -185,74 +185,77 @@ export async function startEngine({
     if (dead) return;
     dead = true;
     peer.close();
+    for (const stream of child.stdio) stream?.destroy();
   };
   child.on('exit', onDead);
   child.on('error', onDead);
 
-  const initializeResult = await peer.request('initialize', {
-    protocolVersion: 1,
-    clientCapabilities: clientCapabilities ?? {},
-    clientInfo: { name: 'zedpstack' },
-  });
-
-  const newSessionResult = await peer.request('session/new', {
-    cwd,
-    mcpServers,
-  });
-
-  const childSessionId = newSessionResult.sessionId;
-
-  let killed = false;
-  const kill = () =>
-    new Promise((resolve) => {
-      if (killed) {
-        resolve();
-        return;
-      }
-      killed = true;
-      onDead();
+  let killPromise;
+  const kill = () => {
+    if (killPromise) return killPromise;
+    onDead();
+    killPromise = new Promise((resolve) => {
       const pid = child.pid;
       if (!pid) {
         resolve();
         return;
       }
-      try {
-        process.kill(-pid, 'SIGTERM');
-      } catch {
+
+      const signal = (name) => {
         try {
-          child.kill('SIGTERM');
-        } catch {
-          /* */
-        }
-      }
-      const timer = setTimeout(() => {
-        try {
-          process.kill(-pid, 'SIGKILL');
+          process.kill(-pid, name);
         } catch {
           try {
-            child.kill('SIGKILL');
+            child.kill(name);
           } catch {
             /* */
           }
         }
+      };
+
+      if (child.exitCode !== null || child.signalCode !== null) {
+        signal('SIGTERM');
         resolve();
-      }, 3000);
+        return;
+      }
+
+      const timer = setTimeout(() => signal('SIGKILL'), 3000);
+      timer.unref();
       child.once('exit', () => {
         clearTimeout(timer);
         resolve();
       });
+      signal('SIGTERM');
+    });
+    return killPromise;
+  };
+
+  try {
+    const initializeResult = await peer.request('initialize', {
+      protocolVersion: 1,
+      clientCapabilities: clientCapabilities ?? {},
+      clientInfo: { name: 'zedpstack' },
     });
 
-  return {
-    runtime: rt,
-    childSessionId,
-    peer,
-    pid: child.pid,
-    initializeResult,
-    newSessionResult,
-    kill,
-    get dead() {
-      return dead;
-    },
-  };
+    const newSessionResult = await peer.request('session/new', {
+      cwd,
+      mcpServers,
+    });
+
+    return {
+      runtime: rt,
+      childSessionId: newSessionResult.sessionId,
+      peer,
+      pid: child.pid,
+      initializeResult,
+      newSessionResult,
+      kill,
+      get dead() {
+        return dead;
+      },
+    };
+  } catch (error) {
+    await kill();
+    throw error;
+  }
 }

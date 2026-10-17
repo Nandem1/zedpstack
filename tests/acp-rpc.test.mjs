@@ -27,10 +27,16 @@ describe('acp rpc', () => {
 
   it('rejects pending on close', async () => {
     const { a, b } = linkPeers();
-    const p = a.request('slow', {});
-    b.close();
-    await assert.rejects(p, /closed/);
-    a.close();
+    b.onRequest(() => new Promise(() => {}));
+    try {
+      const p = a.request('slow', {});
+      const rejected = assert.rejects(p, /closed/);
+      a.close();
+      await rejected;
+    } finally {
+      a.close();
+      b.close();
+    }
   });
 
   it('invalid JSON yields -32700', async () => {
