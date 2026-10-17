@@ -1,46 +1,21 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePromptCommand } from '../src/acp/commands.mjs';
+import { isBoardCommand, isChildCommand } from '../src/acp/commands.mjs';
 
 describe('acp commands', () => {
-  it('parses single spawn', () => {
-    const c = parsePromptCommand('/spawn how explorer :: Where is x?');
-    assert.deepEqual(c, { type: 'spawn', count: 1, role: 'how explorer', prompt: 'Where is x?' });
+  it('recognizes board with or without slash, on the first line only', () => {
+    assert.equal(isBoardCommand('/board'), true);
+    assert.equal(isBoardCommand('board  \nmore'), true);
+    assert.equal(isBoardCommand('show the board'), false);
+    assert.equal(isBoardCommand('hello\n/board'), false);
   });
 
-  it('parses parallel spawn', () => {
-    const c = parsePromptCommand('/spawn x10 architect runners :: load test');
-    assert.equal(c.type, 'spawn');
-    assert.equal(c.count, 10);
-    assert.equal(c.role, 'architect runners');
-  });
-
-  it('caps spawn count at 50', () => {
-    const c = parsePromptCommand('/spawn x99 how explorer :: x');
-    assert.equal(c.count, 50);
-  });
-
-  it('recognizes board', () => {
-    assert.deepEqual(parsePromptCommand('/board'), { type: 'board' });
-  });
-
-  it('recognizes board and spawn without leading slash', () => {
-    assert.deepEqual(parsePromptCommand('board'), { type: 'board' });
-    const c = parsePromptCommand('spawn x2 how explorer :: trace y');
-    assert.equal(c.type, 'spawn');
-    assert.equal(c.count, 2);
-    assert.equal(c.role, 'how explorer');
-    assert.equal(c.prompt, 'trace y');
-  });
-
-  it('keeps multi-line prompt after :: on first line', () => {
-    const text = 'spawn how explorer :: line one\nline two\n/board ignored';
-    const c = parsePromptCommand(text);
-    assert.equal(c.type, 'spawn');
-    assert.equal(c.prompt, 'line one\nline two\n/board ignored');
-  });
-
-  it('returns usage for unknown input', () => {
-    assert.equal(parsePromptCommand('hello').type, 'usage');
+  it('matches only slash commands the engine announced', () => {
+    const child = [{ name: 'compact' }, { name: 'review' }];
+    assert.equal(isChildCommand('/compact', child), true);
+    assert.equal(isChildCommand('/review src/x.mjs\nmore', child), true);
+    assert.equal(isChildCommand('compact', child), false);
+    assert.equal(isChildCommand('/spawn how explorer :: hi', child), false);
+    assert.equal(isChildCommand('/compact', []), false);
   });
 });

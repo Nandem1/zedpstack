@@ -62,9 +62,7 @@ describe('acp options', () => {
   });
 
   it('mergeCommands adds hub commands', () => {
-    const cmds = mergeCommands([]);
-    assert.ok(cmds.some((c) => c.name === 'claude'));
-    assert.ok(cmds.some((c) => c.name === 'spawn'));
+    assert.deepEqual(mergeCommands([]).map((c) => c.name), ['claude', 'codex', 'cursor', 'board']);
   });
 
   it('mergeCommands keeps hub commands first and authoritative, with unique names', () => {
@@ -78,7 +76,7 @@ describe('acp options', () => {
       compact,
     ]);
     assert.deepEqual(merged, [...hubCommands, help, compact]);
-    assert.deepEqual(merged.map((c) => c.name), ['claude', 'codex', 'cursor', 'board', 'spawn', 'help', 'compact']);
+    assert.deepEqual(merged.map((c) => c.name), ['claude', 'codex', 'cursor', 'board', 'help', 'compact']);
   });
 
   it('loadPrefs and savePrefs use ZEDPSTACK_HOME', () => {

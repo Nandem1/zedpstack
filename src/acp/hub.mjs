@@ -1,9 +1,12 @@
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { formatBoardText } from '../agents/board.mjs';
 import { agentBoard } from '../agents/lifecycle.mjs';
 import { ZEDPSTACK_VERSION } from '../constants.mjs';
-import { parsePromptCommand } from './commands.mjs';
-import { startEngine } from './engine.mjs';
+import { orchestratorPrompt } from '../orchestratorPrompt.mjs';
+import { createWorkerCards } from './cards.mjs';
+import { isBoardCommand, isChildCommand } from './commands.mjs';
+import { engineMcpServers, startEngine } from './engine.mjs';
 import {
   childOptionState,
   loadPrefs,
@@ -15,7 +18,6 @@ import {
   savePrefs,
   ZP_RUNTIME_ID,
 } from './options.mjs';
-import { cancelSpawnTurn, createSessionStore, runSpawnTurn } from './server.mjs';
 import { acpStreamMode } from './updates.mjs';
 
 function agentMessageChunk(text) {
@@ -33,18 +35,14 @@ function promptTextFromBlocks(prompt) {
  * @param {{ zed: { request: Function, notify?: Function }, env?: object, spawnEngine?: typeof startEngine }} opts
  */
 export function createHub({ zed, env = process.env, spawnEngine = startEngine }) {
-  const sessions = createSessionStore();
-  const engines = new Map();
+  const sessions = new Map();
   let clientCapabilities = {};
   let shuttingDown = false;
 
   const notifyZed = (params) => zed.notify?.(params);
 
   function getHubSession(outerSessionId) {
-    const base = sessions.get(outerSessionId);
-    if (!base) return null;
-    const extra = engines.get(outerSessionId);
-    return extra ?? null;
+    return sessions.get(outerSessionId) ?? null;
   }
 
   function mergedConfigFor(session) {
@@ -103,12 +101,17 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
     session.runtime = runtime;
     await stopEngine(session);
     session.childCommands = [];
+    session.primed = false;
     try {
       const engine = await spawnEngine({
         runtime,
         cwd: session.repo,
         clientCapabilities,
-        mcpServers: [],
+        mcpServers: engineMcpServers({
+          clientServers: session.clientMcpServers,
+          sessionId: session.sessionId,
+          repo: session.repo,
+        }),
         env,
       });
       session.engine = engine;
@@ -218,7 +221,7 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
     async 'session/new'(params) {
       const cwd = params.cwd ?? process.cwd();
       const repo = path.resolve(cwd);
-      const sessionId = sessions.create(repo);
+      const sessionId = `sess-${randomBytes(8).toString('hex')}`;
 
       const prefs = loadPrefs(env);
       const runtime = prefs.lastRuntime ?? 'claude';
@@ -227,13 +230,18 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
         sessionId,
         repo,
         runtime,
+        clientMcpServers: params.mcpServers ?? [],
         engine: null,
         childOptions: childOptionState(),
         engineError: null,
         childCommands: [],
         commandsAnnounced: false,
+        primed: false,
+        turnActive: false,
+        cards: createWorkerCards({ repo, sessionId, notify: notifyZed, streamMode: acpStreamMode(env) }),
       };
-      engines.set(sessionId, session);
+      sessions.set(sessionId, session);
+      session.cards.start();
 
       await startSessionEngine(session, runtime);
 
@@ -296,10 +304,10 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
       const session = getHubSession(params.sessionId);
       if (!session) throw Object.assign(new Error(`unknown session: ${params.sessionId}`), { rpc: -32602 });
 
-      const storeEntry = sessions.get(params.sessionId);
-      if (storeEntry?.activeTurn) {
+      if (session.turnActive) {
         throw Object.assign(new Error('turn in progress'), { rpc: -32602 });
       }
+      session.cards.resync();
 
       const text = promptTextFromBlocks(params.prompt);
       const runtimeSwitch = parseRuntimeSwitch(text);
@@ -308,44 +316,16 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
         return { stopReason: 'end_turn' };
       }
 
-      const command = parsePromptCommand(text);
-      const streamMode = acpStreamMode(env);
-      const turnController = new AbortController();
-      sessions.setActiveTurn(params.sessionId, { agentIds: [], controller: turnController });
-
-      if (command.type === 'board') {
+      if (isBoardCommand(text)) {
         const rows = agentBoard({ repo: session.repo, recentMinutes: 30 });
         notifyZed({
           sessionId: params.sessionId,
           update: agentMessageChunk(formatBoardText(rows)),
         });
-        sessions.setActiveTurn(params.sessionId, null);
         return { stopReason: 'end_turn' };
       }
 
-      if (command.type === 'spawn') {
-        try {
-          await runSpawnTurn({
-            sessions,
-            sessionId: params.sessionId,
-            repo: session.repo,
-            command,
-            notify: (p) => notifyZed(p),
-            signal: turnController.signal,
-            streamMode,
-          });
-          sessions.setActiveTurn(params.sessionId, null);
-          if (turnController.signal.aborted) return { stopReason: 'cancelled' };
-          return { stopReason: 'end_turn' };
-        } catch (e) {
-          sessions.setActiveTurn(params.sessionId, null);
-          if (turnController.signal.aborted) return { stopReason: 'cancelled' };
-          throw e;
-        }
-      }
-
       if (!session.engine?.peer || session.engine.dead) {
-        sessions.setActiveTurn(params.sessionId, null);
         notifyZed({
           sessionId: params.sessionId,
           update: agentMessageChunk(
@@ -355,17 +335,20 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
         return { stopReason: 'end_turn' };
       }
 
-      sessions.setActiveTurn(params.sessionId, { child: true });
+      let prompt = params.prompt;
+      if (!session.primed && !isChildCommand(text, session.childCommands)) {
+        prompt = [{ type: 'text', text: orchestratorPrompt() }, ...(params.prompt ?? [])];
+        session.primed = true;
+      }
+
+      session.turnActive = true;
       try {
-        const result = await session.engine.peer.request('session/prompt', {
+        return await session.engine.peer.request('session/prompt', {
           sessionId: session.engine.childSessionId,
-          prompt: params.prompt,
+          prompt,
         });
-        sessions.setActiveTurn(params.sessionId, null);
-        return result;
-      } catch (e) {
-        sessions.setActiveTurn(params.sessionId, null);
-        throw e;
+      } finally {
+        session.turnActive = false;
       }
     },
   };
@@ -373,12 +356,6 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
   const notify = async (msg) => {
     if (msg.method !== 'session/cancel') return;
     const session = getHubSession(msg.params?.sessionId);
-    const storeEntry = sessions.get(msg.params?.sessionId);
-    const turn = storeEntry?.activeTurn;
-    if (turn?.controller) {
-      await cancelSpawnTurn({ repo: session.repo, turn });
-      return;
-    }
     if (session?.engine?.peer && !session.engine.dead) {
       session.engine.peer.notify('session/cancel', {
         sessionId: session.engine.childSessionId,
@@ -389,10 +366,11 @@ export function createHub({ zed, env = process.env, spawnEngine = startEngine })
   async function shutdown() {
     if (shuttingDown) return;
     shuttingDown = true;
-    for (const session of engines.values()) {
+    for (const session of sessions.values()) {
+      session.cards.dispose();
       await stopEngine(session);
     }
-    engines.clear();
+    sessions.clear();
   }
 
   return { handle, notify, shutdown };

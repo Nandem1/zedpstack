@@ -127,6 +127,7 @@ export function createWorkerUpdateSink({ notify, sessionId, repo, agentId, title
           pendingTimer = null;
           emitProgress(status, { force: true });
         }, THROTTLE_MS - (now - lastEmit));
+        pendingTimer.unref();
       }
       return;
     }
@@ -159,8 +160,10 @@ export function createWorkerUpdateSink({ notify, sessionId, repo, agentId, title
     if (acpStatus === 'in_progress') sawInProgress = true;
   };
 
+  // A worker already finished when first seen still streams its log as in_progress;
+  // only finish() may report the terminal status, so the card closes exactly once.
   const progressStatusForEmit = () => {
-    if (sawInProgress || resolveAcpStatus(lastWorkerStatus) === 'in_progress') {
+    if (sawInProgress || ['in_progress', 'completed', 'failed'].includes(resolveAcpStatus(lastWorkerStatus))) {
       return 'running';
     }
     return lastWorkerStatus;

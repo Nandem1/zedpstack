@@ -44,9 +44,10 @@ Zed debe ser el único sitio de trabajo: el hilo "zedpstack" es el orquestador. 
 | `src/acp/engine.mjs` | Resolución del comando del hijo, arranque en grupo propio, `initialize`, autenticación, `session/new`, timeout y diagnóstico del arranque, kill |
 | `src/acp/hub.mjs` | Tabla de sesiones, los cinco puntos de intervención, turno/cancel, shutdown |
 | `src/acp/options.mjs` | Mezcla de `zp.runtime` con las opciones del hijo, enrutado por id, comandos, preferencias en `~/.zedpstack/acp-prefs.json` |
-| `src/acp/cards.mjs` | Observador del almacén, filtro por origen, un sink por agente (sustituye a `follow.mjs`) |
+| `src/acp/cards.mjs` | Observador del almacén (sondeo), filtro por origen, un sink por agente; `follow.mjs` queda como primitiva de seguimiento de un agente y solo la usa `cards.mjs` |
+| `src/orchestratorPrompt.mjs` | Cuerpo de SKILL.md compartido por el prompt MCP `/zedpstack` y el prefijo del primer prompt del hub |
 | `src/acp/bridge.mjs` | Socket Unix para permisos de acciones de zedpstack |
-| `src/acp/updates.mjs`, `commands.mjs` | Se reutilizan; `/spawn` se elimina cuando el orquestador real lo sustituya |
+| `src/acp/updates.mjs`, `commands.mjs` | Se reutilizan; `/spawn` y el turno del spike (`server.mjs`) ya no existen: los workers los lanza el engine por MCP |
 | `src/mcp/*` | Sin cambio de protocolo; lee `origin` del entorno y usa `askHuman` |
 
 ## Datos
@@ -86,7 +87,7 @@ Una ruta relativa dentro de un archivo descargable del registro de Cursor no ide
 - ¿Zed renderiza `tool_call` / `tool_call_update` emitidos por el hub fuera de un `session/prompt` abierto? Si no, `cards.resync()` al inicio de cada turno lo cubre.
 - ¿Los engines mandan ediciones y shell por `fs/write_text_file` y `terminal/create` del cliente, o las ejecutan internamente? Si es lo segundo, la guarda de protocolo no las ve y solo queda el hook PreToolUse existente.
 - Los engines son dependencias externas que pueden cambiar: versiones fijadas, `doctor` informa del binario y la versión resueltos, y un incumplimiento marca el runtime como no disponible en vez de degradar en silencio.
-- Cursor: no está probado que `mcpServers` en `session/new` funcione con `cursor-agent acp`. Si no, el runtime Cursor se marca no disponible como orquestador.
+- Cursor: comprobado el 2026-10-17 que `cursor-agent acp` acepta el `mcpServers` inyectado en `session/new` y llama a `spawn_agent` y `wait_agent` (también `claude-agent-acp@0.93.0`). Ambos piden `session/request_permission` por cada herramienta MCP.
 - Codex y Cursor deben demostrar una fuente de evidencia del modelo efectivo; sin ella el estado es `unverified`, nunca `ok`.
 - Cambiar de runtime reinicia la conversación; se acepta a cambio de no inventar continuidad propia.
 
@@ -94,7 +95,7 @@ Una ruta relativa dentro de un archivo descargable del registro de Cursor no ide
 
 - [x] Corte 1: `/claude` + desplegables + conversación en streaming vía engine hijo ACP (`rpc.mjs`, `engine.mjs`, `hub.mjs`, `options.mjs`, agente falso, pruebas).
 - [x] Corte 2: almacén dividido y `origin` (`store.mjs` con un escritor por archivo, `deriveStatus`, adaptador v1, `origin` por frontend; pruebas de carrera stop/runner en proceso y entre procesos).
-- [ ] Corte 3: MCP, skill en primer prompt, tarjetas por almacén.
+- [x] Corte 3: MCP, skill en primer prompt, tarjetas por almacén (`engineMcpServers`, `orchestratorPrompt.mjs`, `cards.mjs`; `/spawn` y `server.mjs` eliminados; verificado con engines reales Claude y Cursor).
 - [ ] Corte 4: cancelación y supervisión.
 - [ ] Corte 5: verificación de modelo.
 - [ ] Corte 6: permisos y guarda de ediciones.

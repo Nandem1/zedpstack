@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ZEDPSTACK_VERSION } from '../constants.mjs';
+import { mcpScriptPath } from '../paths.mjs';
 import { createPeer } from './rpc.mjs';
 
 const PINNED = {
@@ -69,6 +70,26 @@ function resolveFromRegistry(runtime, registry, registryDir, platformArch) {
     return [cmd, ...args];
   }
   return null;
+}
+
+/**
+ * The client's MCP servers plus zedpstack's own, scoped to the outer session so
+ * every agent the engine spawns records that session as its origin. The outer id
+ * survives runtime switches, the child session id does not.
+ */
+export function engineMcpServers({ clientServers = [], sessionId, repo }) {
+  return [
+    ...(clientServers ?? []).filter((server) => server?.name !== 'zedpstack'),
+    {
+      name: 'zedpstack',
+      command: process.execPath,
+      args: [mcpScriptPath()],
+      env: [
+        { name: 'ZEDPSTACK_ACP_SESSION', value: sessionId },
+        { name: 'ZEDPSTACK_REPO', value: repo },
+      ],
+    },
+  ];
 }
 
 /**

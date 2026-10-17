@@ -21,6 +21,7 @@ function sleep(ms, signal) {
   if (signal?.aborted) return Promise.resolve();
   return new Promise((resolve) => {
     const t = setTimeout(resolve, ms);
+    t.unref();
     signal?.addEventListener('abort', () => {
       clearTimeout(t);
       resolve();

@@ -64,11 +64,6 @@ const HUB_COMMANDS = [
   { name: 'codex', description: 'Orquestador con Codex ACP' },
   { name: 'cursor', description: 'Orquestador con Cursor ACP' },
   { name: 'board', description: 'Tablero de agentes recientes' },
-  {
-    name: 'spawn',
-    description: 'Lanza un worker: /spawn <rol> :: <prompt>  o  /spawn xN <rol> :: <prompt>',
-    input: { hint: '<rol> :: <prompt>' },
-  },
 ];
 
 export function mergeCommands(childCommands = []) {

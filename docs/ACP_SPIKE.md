@@ -1,8 +1,18 @@
-# Spike ACP (Agent Client Protocol v1)
+# zedpstack en Zed (Agent Client Protocol v1)
 
 Adaptador que expone zedpstack como agente ACP por stdio (JSON-RPC 2.0, una línea por mensaje). La arquitectura objetivo y los cortes de implementación están en [ACP_DESIGN.md](./ACP_DESIGN.md).
 
-El hub ACP (`src/acp/hub.mjs`) reenvía la conversación a un engine hijo ACP (Claude/Codex/Cursor) y sigue manejando `/spawn` y `/board` localmente. Escribe `/claude`, `/codex` o `/cursor` (o elige **Orchestrator** en el pie del hilo) para cambiar de runtime; eso reinicia la conversación del engine hijo.
+## Cómo funciona el hilo orquestador
+
+Cada hilo de Zed abierto con el agente `zedpstack` es un orquestador. El hub (`src/acp/hub.mjs`) arranca un engine hijo ACP con el runtime elegido (Claude, Codex o Cursor) y le reenvía la conversación. Escribe `/claude`, `/codex` o `/cursor`, o elige **Orchestrator** en el pie del hilo, para cambiar de runtime. El cambio reinicia la conversación del engine.
+
+El hub interviene en tres puntos de cada hilo:
+
+1. **MCP inyectado.** En `session/new` del engine, el hub pasa los servidores MCP que envió Zed más el servidor `zedpstack` (`scripts/mcp.mjs`). Si Zed ya enviaba uno llamado `zedpstack`, se sustituye. El servidor recibe `ZEDPSTACK_ACP_SESSION` con el id de sesión del hilo y `ZEDPSTACK_REPO` con su `cwd`. El id del hilo no cambia al cambiar de runtime.
+2. **Skill en el primer prompt.** El primer prompt de cada sesión de engine lleva delante, como bloque de texto aparte, el cuerpo de `SKILL.md` (el mismo texto que el prompt MCP `/zedpstack`). Después de cambiar de runtime se vuelve a anteponer. No se antepone a `/board` ni a los comandos con barra que anunció el propio engine.
+3. **Tarjetas de workers.** El engine lanza workers con la herramienta MCP `spawn_agent`. Cada agente guarda en `agent.json` su `origin` (`{frontend: 'acp', sessionId}`). El hub sondea `.zedpstack/agents/` del repo y abre una tarjeta expandible (`tool_call` con `kind: other`, id `zp-<agentId>`) por cada agente cuyo origen es el hilo. La tarjeta se sigue actualizando cuando el turno que lo lanzó ya terminó. Al inicio de cada prompt el hub vuelve a sincronizar; un worker que ya había terminado aparece una sola vez, ya cerrado.
+
+Los permisos de las herramientas MCP (`spawn_agent`, `wait_agent`, …) los pide el propio engine con `session/request_permission`, y Zed los muestra como cualquier otra herramienta.
 
 ## Registro en Zed (settings.json)
 
@@ -26,51 +36,36 @@ Variables útiles en `env`:
 - `ZEDPSTACK_ACP_STREAM=content` (por defecto) o `terminal` (extensión de terminal de Zed).
 - Las mismas que usa el CLI (`ZEDPSTACK_MODEL_SHEET`, `PSTACK_ROOT`, etc.).
 
-## Comandos de prompt
-
-Zed 1.24+ registra `spawn` y `board` como comandos ACP (`available_commands_update` tras cada `session/new`). En el cuadro de texto puedes usar la forma con barra (`/spawn …`) o sin ella (`spawn …`).
+## Comandos del hub
 
 | Comando | Efecto |
 |--------|--------|
-| `spawn <rol> :: <prompt>` (o `/spawn …`) | Un worker con el rol de la hoja de modelos |
-| `spawn xN <rol> :: <prompt>` | N workers en paralelo (N ≤ 50) |
-| `board` (o `/board`) | Tablero de agentes recientes |
+| `/claude`, `/codex`, `/cursor` | Cambia el runtime del orquestador (reinicia la conversación) |
+| `board` (o `/board`) | Tablero de agentes recientes del repo |
 
-Solo la **primera línea** es la cabecera hasta `::`; el prompt puede continuar en líneas siguientes (incluidas líneas que empiecen por `/`).
-
-Cualquier otro texto se reenvía al engine ACP hijo activo (respuesta en streaming vía `agent_message_chunk`).
+Los comandos del engine (por ejemplo `/compact`) se anuncian junto a estos y pasan sin cambios. Cualquier otro texto va al engine, que decide cuándo lanzar workers.
 
 ## Checklist manual (Zed 1.24.2)
 
-1. Conectar el servidor `zedpstack` y abrir una sesión nueva apuntando al repo del proyecto (`cwd` absoluto).
-2. Probar `/spawn how explorer :: pregunta de prueba` y confirmar que aparece una tarjeta de herramienta (`kind: other`); **expandir la tarjeta** para ver la salida en vivo (sin control de expansión no se muestra el texto).
-3. Repetir con `x3` y `x10` y verificar diez `toolCallId` distintos (`zp-<agentId>`).
-4. Con `ZEDPSTACK_ACP_STREAM=content` (por defecto), expandir la tarjeta y comprobar que arranca con «Iniciando worker…», luego texto acumulado de `progress.log` y stdout no JSON (últimas ~200 líneas) en `tool_call_update` con `kind: other` en el `tool_call` inicial.
-5. Con `ZEDPSTACK_ACP_STREAM=terminal`, comprobar `tool_call` con `kind: execute`, contenido `terminal`, `terminal_info.cwd` del repo, salida incremental vía `_meta.terminal_output` (CRLF) sin campo `content` en updates, y cierre con `terminal_exit`.
-6. En modo content, confirmar que hay que expandir manualmente la tarjeta para ver updates (Zed 1.24.2 no muestra texto en tarjetas `other` colapsadas).
-7. Hacer scroll en una ejecución larga y verificar que el contenido sigue actualizándose.
-8. Lanzar `/spawn … :: FAKE_SLEEP` (o un worker lento) y usar cancelar en Zed; la respuesta del turno debe ser `stopReason: cancelled`.
+1. Conectar el servidor `zedpstack` y abrir un hilo nuevo sobre el repo del proyecto.
+2. Pedir algo que lance un worker, por ejemplo «Usa spawn_agent con role 'how explorer' y prompt 'Responde solo hola', espera con wait_agent y responde OK». Aprobar los permisos de las herramientas MCP.
+3. Confirmar que aparece una tarjeta `zp-<agentId>`; **expandirla** para ver la salida en vivo (Zed 1.24.2 no muestra texto en tarjetas `other` colapsadas).
+4. Con `ZEDPSTACK_ACP_STREAM=content`, la tarjeta arranca con «Iniciando worker…», sigue con el texto acumulado de `progress.log` y stdout no JSON (últimas ~200 líneas) y termina con el resultado.
+5. Con `ZEDPSTACK_ACP_STREAM=terminal`, comprobar `kind: execute`, contenido `terminal`, salida incremental vía `_meta.terminal_output` y cierre con `terminal_exit`.
+6. Pedir un worker largo, dejar que el turno termine y comprobar que la tarjeta sigue actualizándose.
+7. Repetir con `/cursor` y `/codex`.
 
-## Fuera de alcance (intencional)
+## Fuera de alcance por ahora
 
-- Sin orquestador LLM en el adaptador (solo parser de comandos).
-- Sin autenticación ACP (`authMethods` vacío).
-- Sin `session/load`, persistencia de sesión ni balanceo entre procesos.
-- Sin métodos de cliente `fs/*` ni `terminal/*` (solo notificaciones agente → cliente).
-- `mcpServers` en `session/new` se acepta y se ignora.
-- Sin candado entre procesos en `agent.json` (lectura/escritura como el resto del proyecto).
-- Las notificaciones `notifications/progress` del camino MCP no llegan a Zed porque Zed no envía `progressToken`.
-
-## Riesgos conocidos
-
-- **agent.json sin lock**: varios lectores pueden ver estados intermedios; un runner tardío no debería pisar `stopped` (lógica existente en `updateAgent`).
-- **Progreso MCP vs ACP**: este spike hace polling de `progress.log` y `stdout.log`, no el stream MCP en tiempo real.
-- **Cancelación**: depende de `closeAgent` / señales al runner; workers que ignoren SIGTERM pueden tardar hasta SIGKILL.
+- La cancelación del turno se reenvía al engine, pero todavía no detiene los workers del turno (corte 4).
+- Sin `session/load` ni persistencia de sesión.
+- Las notificaciones `notifications/progress` del camino MCP no llegan a Zed porque Zed no envía `progressToken`; las tarjetas salen del almacén.
 
 ## Arquitectura mínima
 
 ```
 Zed (stdio) → scripts/acp.mjs → src/acp/hub.mjs → engine ACP hijo (stdio)
-                    ↓ /spawn, /board
-              spawnAgent / followAgent → workers CLI (.zedpstack/agents/<id>/)
+                    │                                   ↓ MCP zedpstack (ZEDPSTACK_ACP_SESSION)
+                    │                             spawnAgent → workers CLI (.zedpstack/agents/<id>/)
+                    └── cards.mjs sondea .zedpstack/agents/ y emite tool_call por origin.sessionId
 ```

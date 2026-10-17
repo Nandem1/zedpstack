@@ -1,8 +1,10 @@
 #!/usr/bin/env node
+const { spawn } = require('node:child_process');
 const readline = require('node:readline');
 const fs = require('node:fs');
 
 let sessionId = null;
+let receivedMcpServers = [];
 let modelValue = 'alpha';
 let modeValue = 'agent';
 let authenticated = process.env.FAKE_ACP_AUTH !== '1';
@@ -51,11 +53,45 @@ function configOptions() {
   ];
 }
 
+// Markers are read from the user's block only: the hub prepends the orchestrator skill.
 function promptText(prompt) {
-  return (prompt ?? [])
-    .filter((b) => b?.type === 'text' && b.text != null)
-    .map((b) => b.text)
-    .join('\n');
+  return (prompt ?? []).filter((b) => b?.type === 'text' && b.text != null).at(-1)?.text ?? '';
+}
+
+function chunk(text) {
+  return {
+    jsonrpc: '2.0',
+    method: 'session/update',
+    params: { sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } },
+  };
+}
+
+/** Calls spawn_agent on the zedpstack MCP server exactly as the hub injected it. */
+function spawnThroughInjectedMcp(task) {
+  const server = receivedMcpServers.find((s) => s.name === 'zedpstack');
+  if (!server) return Promise.reject(new Error('no zedpstack MCP server injected'));
+  const env = { ...process.env };
+  for (const { name, value } of server.env ?? []) env[name] = value;
+  const mcp = spawn(server.command, server.args, { env, stdio: ['pipe', 'pipe', 'inherit'] });
+  const send = (id, method, params) => mcp.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+  return new Promise((resolve, reject) => {
+    readline.createInterface({ input: mcp.stdout }).on('line', (line) => {
+      const msg = JSON.parse(line);
+      if (msg.id === 1) {
+        send(2, 'tools/call', {
+          name: 'spawn_agent',
+          arguments: { prompt: task, role: 'how explorer', readonly: true, description: 'fake spawn' },
+        });
+      } else if (msg.id === 2) {
+        mcp.stdin.end();
+        const { content, isError } = msg.result;
+        if (isError) reject(new Error(content[0].text));
+        else resolve(JSON.parse(content.at(-1).text));
+      }
+    });
+    mcp.on('error', reject);
+    send(1, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'fake-acp-agent' } });
+  });
 }
 
 function clientRequest(method, params) {
@@ -156,6 +192,7 @@ async function handleRequest(msg) {
     case 'session/new': {
       if (!authenticated) await authReady;
       sessionId = `child-${Date.now()}`;
+      receivedMcpServers = params.mcpServers ?? [];
       const response = {
         jsonrpc: '2.0',
         id,
@@ -222,6 +259,15 @@ async function handleRequest(msg) {
             resolve();
           }, 60_000);
         });
+        break;
+      }
+      if (process.env.FAKE_ACP_MCP === '1' && text.includes('MCPINFO')) {
+        write(chunk(JSON.stringify(receivedMcpServers)), { jsonrpc: '2.0', id, result: { stopReason: 'end_turn' } });
+        break;
+      }
+      if (process.env.FAKE_ACP_MCP === '1' && text.includes('SPAWN')) {
+        const agent = await spawnThroughInjectedMcp(text);
+        write(chunk(`spawned:${agent.agent_id}`), { jsonrpc: '2.0', id, result: { stopReason: 'end_turn' } });
         break;
       }
       write({

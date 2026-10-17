@@ -3,28 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { PassThrough } from 'node:stream';
-import { fileURLToPath } from 'node:url';
-import { createHub } from '../src/acp/hub.mjs';
-import { startEngine } from '../src/acp/engine.mjs';
 import { ZP_RUNTIME_ID } from '../src/acp/options.mjs';
-import { createPeer } from '../src/acp/rpc.mjs';
+import { orchestratorPrompt } from '../src/orchestratorPrompt.mjs';
+import { connectHub, engineEnv } from './helpers/acpHub.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
-const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const FAKE_AGENT = path.join(ROOT, 'tests', 'fixtures', 'bin', 'fake-acp-agent.cjs');
-const HUB_COMMAND_NAMES = ['claude', 'codex', 'cursor', 'board', 'spawn'];
+const HUB_COMMAND_NAMES = ['claude', 'codex', 'cursor', 'board'];
 const CHILD_COMMAND_NAMES = ['help', 'compact'];
-
-function engineEnv(extra = {}) {
-  const cmd = JSON.stringify([process.execPath, FAKE_AGENT]);
-  return {
-    ZEDPSTACK_ACP_ENGINE_CLAUDE: cmd,
-    ZEDPSTACK_ACP_ENGINE_CODEX: cmd,
-    ZEDPSTACK_ACP_ENGINE_CURSOR: cmd,
-    ...extra,
-  };
-}
 
 function processAlive(pid) {
   try {
@@ -34,74 +19,6 @@ function processAlive(pid) {
     if (error.code === 'ESRCH') return false;
     throw error;
   }
-}
-
-function connectHub(t, env) {
-  const zedToHub = new PassThrough();
-  const hubToZed = new PassThrough();
-  const zedSim = createPeer({ input: hubToZed, output: zedToHub, label: 'zed-sim' });
-  const hubWire = createPeer({ input: zedToHub, output: hubToZed, label: 'hub-wire' });
-
-  const updates = [];
-  const clientRequests = [];
-  const engines = [];
-
-  zedSim.onNotification((method, params) => {
-    if (method === 'session/update') updates.push(params);
-  });
-
-  zedSim.onRequest(async (method, params) => {
-    clientRequests.push({ method, params });
-    if (method === 'session/request_permission') {
-      return { outcome: { outcome: 'selected', optionId: 'ok' } };
-    }
-    if (method === 'fs/read_text_file') {
-      return { content: 'file-body' };
-    }
-    throw Object.assign(new Error(`unexpected zed request ${method}`), { rpc: -32601 });
-  });
-
-  const hub = createHub({
-    env,
-    spawnEngine: async (opts) => {
-      const engine = await startEngine({ ...opts, env });
-      engines.push(engine);
-      return engine;
-    },
-    zed: {
-      request: (method, params) => hubWire.request(method, params),
-      notify: (params) => {
-        hubWire.notify('session/update', params);
-      },
-    },
-  });
-
-  t.after(async () => {
-    try {
-      await hub.shutdown();
-    } finally {
-      try {
-        await Promise.all(engines.map((engine) => engine.kill()));
-      } finally {
-        zedSim.close();
-        hubWire.close();
-        zedToHub.destroy();
-        hubToZed.destroy();
-      }
-    }
-  });
-
-  hubWire.onRequest(async (method, params) => {
-    const handler = hub.handle[method];
-    if (!handler) throw Object.assign(new Error(`no ${method}`), { rpc: -32601 });
-    return handler(params);
-  });
-  hubWire.onNotification((method, params) => hub.notify({ method, params }));
-
-  const rpc = (method, params = {}) => zedSim.request(method, params);
-  const notify = (method, params = {}) => zedSim.notify(method, params);
-
-  return { hub, rpc, notify, updates, clientRequests, engines };
 }
 
 describe('acp hub', () => {
@@ -401,18 +318,39 @@ describe('acp hub', () => {
     assert.ok(local.updates.some((u) => u.update?.content?.text.includes('No se pudo iniciar el engine')));
   });
 
-  it('spawn and board still work', async () => {
-    const session = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
-    const sessionId = session.sessionId;
-    const board = await ctx.rpc('session/prompt', {
-      sessionId,
-      prompt: [{ type: 'text', text: '/board' }],
-    });
+  it('/board answers locally and /spawn is no longer a hub command', async () => {
+    env.FAKE_ACP_TRACE = path.join(env.ZEDPSTACK_HOME, 'calls.jsonl');
+    const { sessionId } = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
+    const board = await ctx.rpc('session/prompt', { sessionId, prompt: [{ type: 'text', text: '/board' }] });
     assert.equal(board.stopReason, 'end_turn');
-    const spawn = await ctx.rpc('session/prompt', {
-      sessionId,
-      prompt: [{ type: 'text', text: '/spawn how explorer :: hi' }],
-    });
-    assert.equal(spawn.stopReason, 'end_turn');
+    await ctx.rpc('session/prompt', { sessionId, prompt: [{ type: 'text', text: '/spawn how explorer :: hi' }] });
+    const forwarded = fs.readFileSync(env.FAKE_ACP_TRACE, 'utf8').trim().split('\n').map(JSON.parse)
+      .filter((call) => call.method === 'session/prompt')
+      .map((call) => call.params.prompt.at(-1).text);
+    assert.deepEqual(forwarded, ['/spawn how explorer :: hi']);
+  });
+
+  it('prefixes the orchestrator skill once per engine session, skipping /board and child commands', async () => {
+    env.FAKE_ACP_TRACE = path.join(env.ZEDPSTACK_HOME, 'calls.jsonl');
+    const { sessionId } = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
+    for (const text of ['/board', '/help', 'first', 'second', '/codex', 'after switch', 'again']) {
+      await ctx.rpc('session/prompt', { sessionId, prompt: [{ type: 'text', text }] });
+    }
+    const skill = orchestratorPrompt();
+    const prompts = fs.readFileSync(env.FAKE_ACP_TRACE, 'utf8').trim().split('\n').map(JSON.parse)
+      .filter((call) => call.method === 'session/prompt')
+      .map((call) => ({
+        user: call.params.prompt.at(-1).text,
+        primed: call.params.prompt.length === 2 && call.params.prompt[0].text === skill,
+        blocks: call.params.prompt.length,
+      }));
+    assert.deepEqual(prompts, [
+      { user: '/help', primed: false, blocks: 1 },
+      { user: 'first', primed: true, blocks: 2 },
+      { user: 'second', primed: false, blocks: 1 },
+      { user: 'after switch', primed: true, blocks: 2 },
+      { user: 'again', primed: false, blocks: 1 },
+    ]);
+    assert.match(skill, /## Task\n/);
   });
 });
