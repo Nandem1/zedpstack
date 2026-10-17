@@ -9,6 +9,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isAlias } from './modelCheck.mjs';
 import { classifyModelSlug } from './modelRouting.mjs';
 import { parseModelValue } from './modelSheet.mjs';
 import { resolvePstackInstall } from './pstack.mjs';
@@ -59,13 +60,14 @@ const EFFORT_CHOICES = [
 
 const PROBE_TTL_MS = 24 * 60 * 60 * 1000;
 
-function probeCachePath() {
-  return path.join(process.env.ZEDPSTACK_HOME ?? path.join(os.homedir(), '.zedpstack'), 'model-probe.json');
+function probeCachePath(env = process.env) {
+  return path.join(env.ZEDPSTACK_HOME ?? path.join(os.homedir(), '.zedpstack'), 'model-probe.json');
 }
 
-export function readProbeCache() {
+/** Reads the last probes; never probes. */
+export function readProbeCache(env = process.env) {
   try {
-    return JSON.parse(fs.readFileSync(probeCachePath(), 'utf8'));
+    return JSON.parse(fs.readFileSync(probeCachePath(env), 'utf8'));
   } catch {
     return {};
   }
@@ -234,9 +236,15 @@ function describeEntry(models, entry) {
   const out = { value: slugFor(entry.runtime, entry.model), runtime: entry.runtime, model: entry.model };
   if (entry.effort) out.effort = entry.effort;
   if (found?.effective && found.effective !== entry.model) out.effective = found.effective;
+  if (out.effective && found.ok && isAlias(entry.model)) out.pin = slugFor(entry.runtime, found.effective);
   if (!found) out.problem = `${entry.model} no aparece entre los modelos de ${PROVIDERS[entry.runtime]?.label ?? entry.runtime}`;
   else if (!found.ok) out.problem = found.error;
   return out;
+}
+
+/** An alias names whatever the CLI ships today, so a verdict cannot say which model gave it. */
+function pinAdvice({ value, effective, pin }) {
+  return `${value} es un alias y hoy corre ${effective}; fija ${pin} (o el id que esperas) para que el rol no cambie de modelo con el CLI`;
 }
 
 function modelOption(provider, m, current) {
@@ -266,6 +274,7 @@ export async function buildSetupPlan({ refresh = false } = {}) {
       source: current?.source ?? 'missing',
       slots,
       problems: slots.filter((s) => s.problem).map((s) => `${s.value}: ${s.problem}`),
+      recommendations: slots.filter((s) => s.pin).map(pinAdvice),
     };
   });
 
@@ -375,6 +384,7 @@ export async function writeSetup({ defaultEffort, roles = {}, force = false, dry
   }
 
   const errors = [];
+  const aliasWarnings = [];
   for (const [role, values] of Object.entries(expanded)) {
     expanded[role] = values.map((raw) => preferCursorWhenOnlyThere(models, String(raw)));
     const row = ROLE_ROWS.find((r) => r.role === role);
@@ -386,6 +396,9 @@ export async function writeSetup({ defaultEffort, roles = {}, force = false, dry
       const found = availability(models, routed.runtime, routed.model);
       if (!found) errors.push(`${role}: ${raw} is not a detected ${PROVIDERS[routed.runtime].label} model`);
       else if (!found.ok) errors.push(`${role}: ${raw} does not run (${found.error})`);
+      else if (isAlias(routed.model) && found.effective && found.effective !== routed.model) {
+        aliasWarnings.push(`${role}: ${raw} is an alias the CLI runs as ${found.effective} today; write ${slugFor(routed.runtime, found.effective)} to pin it`);
+      }
       if (e && !['low', 'medium', 'high', 'xhigh', 'max'].includes(e)) errors.push(`${role}: bad effort @${e}`);
     }
   }
@@ -413,7 +426,7 @@ export async function writeSetup({ defaultEffort, roles = {}, force = false, dry
     sheetPath: target,
     written: !dryRun,
     changed: previous !== text,
-    warnings: errors,
+    warnings: [...errors, ...aliasWarnings],
     sheet: text,
   };
 }

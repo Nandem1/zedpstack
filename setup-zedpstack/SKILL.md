@@ -16,7 +16,7 @@ The MCP tools are `setup_plan` and `setup_write`. Without the MCP server use `no
 
 Call `setup_plan`. It probes each Claude alias against the account (cached a day; pass `refresh: true` after the user buys credits or upgrades the CLI), reads the GPT catalog Codex has for the account, and lists every model `agent --list-models` returns (Composer, Grok, Gemini, Claude and GPT through Cursor). It returns:
 
-- `roles`: every role with its current slots, `effective` (the model the CLI really runs for an alias), `source` (`sheet`, or `pstack-default` when the sheet has no line), `panel` and `problems`.
+- `roles`: every role with its current slots, `effective` (the model the CLI really runs for an alias), `source` (`sheet`, or `pstack-default` when the sheet has no line), `panel`, `problems` and `recommendations`. A slot whose model is an alias with a probed concrete id carries `pin`, that id.
 - `questions`: `effort`, `roleGroups`, `model`, `panel`.
 - `more` and `catalog`: every usable model beyond the four shortlisted ones, and the Cursor models grouped by family.
 
@@ -26,7 +26,7 @@ Ask `questions.effort`: `default`, `medium` or `high`. `default` keeps each CLI'
 
 ## 3. Show the current configuration
 
-Show one table: role, model, what runs, status. Write `opus → claude-opus-4-8` when `effective` differs from the alias, mark `pstack-default` rows as "(default de pstack)", and put every problem under the table verbatim, for example "bug-fix: fable no corre (Fable 5 requires usage credits)".
+Show one table: role, model, what runs, status. Write `opus → claude-opus-4-8` when `effective` differs from the alias, mark `pstack-default` rows as "(default de pstack)", and put every problem under the table verbatim, for example "bug-fix: fable no corre (Fable 5 requires usage credits)". Then list every `recommendations` line: an alias can move to another model when the CLI updates, so offer to pin the concrete id the user expects.
 
 ## 4. Which roles, then which model
 
@@ -45,7 +45,7 @@ Call `setup_write` with `default_effort` from step 2 and `roles` with only the c
 { "default_effort": "medium", "roles": { "bug-fix": ["gpt-6.1-sol"], "arena": ["opus", "gpt-6.1-sol", "composer-2.5"] } }
 ```
 
-Roles you do not send keep their current line. If the call rejects a value, show the reason and ask that role again.
+Roles you do not send keep their current line. If the call rejects a value, show the reason and ask that role again. Show every `warnings` line: writing an alias is allowed, but the warning names the model it runs today.
 
 ## 6. Confirm
 

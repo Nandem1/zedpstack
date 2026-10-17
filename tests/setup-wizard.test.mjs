@@ -38,6 +38,12 @@ describe('setup wizard', () => {
     assert.match(bugFix.problems[0], /credits/);
     assert.ok(plan.problemCount > 0);
 
+    const explorer = plan.roles.find((r) => r.role === 'how explorer');
+    assert.equal(explorer.slots[0].effective, 'claude-haiku-fake');
+    assert.equal(explorer.slots[0].pin, 'claude-haiku-fake', 'an alias carries the probed concrete id');
+    assert.match(explorer.recommendations[0], /^haiku es un alias y hoy corre claude-haiku-fake; fija claude-haiku-fake/);
+    assert.deepEqual(plan.roles.find((r) => r.role === 'bug-fix').recommendations, [], 'an alias that does not run has nothing to pin');
+
     assert.equal(plan.questions.roleGroups.length, 4);
     assert.ok(plan.questions.roleGroups.every((q) => q.options.length <= 4 && q.multiSelect));
     assert.deepEqual(plan.questions.effort.options.map((o) => o.label), ['default', 'medium', 'high']);
@@ -53,6 +59,10 @@ describe('setup wizard', () => {
     await assert.rejects(writeSetup({ roles: { 'bug-fix': ['gpt-6.1-sol', 'opus'] } }), /takes one model/);
     const typed = await writeSetup({ roles: { 'strongest judgment': ['claude-opus-5-5'] }, dryRun: true });
     assert.match(typed.sheet, /^strongest judgment: claude-opus-5-5$/m, 'full ids typed via Other are probed, not rejected');
+    assert.deepEqual(typed.warnings, [], 'a concrete id needs no warning');
+    const alias = await writeSetup({ roles: { 'strongest judgment': ['opus'] }, dryRun: true });
+    assert.match(alias.sheet, /^strongest judgment: opus$/m, 'the alias is written as given');
+    assert.deepEqual(alias.warnings, ['strongest judgment: opus is an alias the CLI runs as claude-opus-fake today; write claude-opus-fake to pin it']);
     const grok = await writeSetup({ roles: { 'swarm workers': ['grok-4.7-high'], 'hillclimb': ['gpt-5.2'] }, dryRun: true });
     assert.match(grok.sheet, /^swarm workers: grok-4\.7-high$/m);
     assert.match(grok.sheet, /^hillclimb: cursor:gpt-5\.2$/m, 'bare ids only Cursor knows get the cursor: prefix');
