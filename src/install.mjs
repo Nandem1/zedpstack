@@ -28,6 +28,57 @@ function mcpCommand() {
   return { command: stableNodePath(), args: [path.join(zedpstackRoot(), 'scripts', 'mcp.mjs')] };
 }
 
+export function guardEditsHookCommand() {
+  return `${stableNodePath()} ${path.join(zedpstackRoot(), 'scripts', 'guard-edits.mjs')}`;
+}
+
+export function expectedGuardEditsHookEntry() {
+  return {
+    matcher: 'Edit|Write|NotebookEdit|MultiEdit|Bash',
+    hooks: [{ type: 'command', command: guardEditsHookCommand() }],
+  };
+}
+
+function readClaudeSettings(home) {
+  const configPath = path.join(home, '.claude', 'settings.json');
+  if (!fs.existsSync(configPath)) return { configPath, data: {} };
+  try {
+    return { configPath, data: JSON.parse(fs.readFileSync(configPath, 'utf8')) };
+  } catch (err) {
+    return { configPath, data: null, parseError: err.message };
+  }
+}
+
+export function guardEditsHookState(home) {
+  const { data, parseError } = readClaudeSettings(home);
+  if (parseError || data === null) return 'unparseable';
+  const expected = expectedGuardEditsHookEntry();
+  const entries = data.hooks?.PreToolUse ?? [];
+  const ok = entries.some(
+    (e) => e.matcher === expected.matcher && JSON.stringify(e.hooks) === JSON.stringify(expected.hooks),
+  );
+  if (ok) return 'ok';
+  const mentioned = entries.some((e) => String(e.matcher ?? '').includes('Edit'));
+  return mentioned ? 'outdated' : 'missing';
+}
+
+function applyGuardEditsHook(home) {
+  const { configPath, data, parseError } = readClaudeSettings(home);
+  if (parseError) return `skipped: ${configPath} is not valid JSON (${parseError})`;
+  const state = guardEditsHookState(home);
+  if (state === 'ok') return 'unchanged';
+  const expected = expectedGuardEditsHookEntry();
+  const next = { ...(data ?? {}) };
+  const list = [...(next.hooks?.PreToolUse ?? [])].filter(
+    (e) => e.matcher !== expected.matcher && !String(e.hooks?.[0]?.command ?? '').includes('guard-edits.mjs'),
+  );
+  list.push(expected);
+  next.hooks = { ...(next.hooks ?? {}), PreToolUse: list };
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+  return state === 'missing' ? 'installed' : 'updated';
+}
+
 function symlinkAction(linkPath, target) {
   let state = 'missing';
   try {
@@ -67,6 +118,13 @@ function claudeCodeActions(home) {
   const current = registered && probe.stdout.includes(`Command: ${command}`);
   return [
     ...skillLinks(path.join(home, '.claude', 'skills')),
+    {
+      kind: 'orchestrator-edit-guard',
+      path: path.join(home, '.claude', 'settings.json'),
+      state: guardEditsHookState(home),
+      command: guardEditsHookCommand(),
+      apply: () => applyGuardEditsHook(home),
+    },
     {
       kind: 'mcp',
       path: 'claude mcp (user scope)',

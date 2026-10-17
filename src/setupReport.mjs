@@ -1,7 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import { ZEDPSTACK_VERSION } from './constants.mjs';
-import { planInstall } from './install.mjs';
+import { findSessionRepoFromCwd, readDenialAudit, readSession } from './guard.mjs';
+import { guardEditsHookState, planInstall } from './install.mjs';
 import { detectOrchestratorHost } from './orchestratorHost.mjs';
 import { RUNTIME_BINARIES } from './permissions.mjs';
 import { resolvePstackInstall } from './pstack.mjs';
@@ -18,8 +20,23 @@ function probeRuntimes() {
   return out;
 }
 
+function orchestratorEditGuardReport(home = os.homedir()) {
+  const hook = guardEditsHookState(home);
+  const sessionRepo = findSessionRepoFromCwd(process.cwd());
+  const session = sessionRepo ? readSession(sessionRepo) : null;
+  const audit = sessionRepo ? readDenialAudit(sessionRepo) : { count: 0, last: null };
+  return {
+    hookRegistered: hook === 'ok',
+    hookState: hook,
+    sessionActive: Boolean(session),
+    sessionRepo,
+    editsAllowed: Boolean(session?.editsAllowed),
+    denials: audit,
+  };
+}
+
 /** One picture of everything that has to line up for spawn_agent to work. */
-export function buildDoctorReport() {
+export function buildDoctorReport({ home = os.homedir() } = {}) {
   const problems = [];
   let pstack = null;
   try {
@@ -48,7 +65,9 @@ export function buildDoctorReport() {
     }
   }
 
-  const hosts = planInstall().map(({ host, actions }) => ({
+  const orchestratorEditGuard = orchestratorEditGuardReport(home);
+
+  const hosts = planInstall({ home }).map(({ host, actions }) => ({
     host,
     ready: actions.every((a) => a.state === 'ok'),
     actions: actions.map(({ apply, ...rest }) => rest),
@@ -63,6 +82,7 @@ export function buildDoctorReport() {
     workerSheet,
     hostSheet: { path: hostSheet, exists: fs.existsSync(hostSheet), note: 'read by the orchestrator host only; never used to spawn workers' },
     hosts,
+    orchestratorEditGuard,
     problems,
   };
 }
@@ -79,6 +99,14 @@ export function formatDoctorReport(r) {
     const shown = slots.map((s) => (s.inherit ? s.value : `${s.runtime}:${s.model}${s.effort ? ` @${s.effort}` : ''}`)).join(', ');
     lines.push(`  ${label}: ${shown}${source === 'sheet' ? '' : '  (pstack default)'}`);
   }
+  const g = r.orchestratorEditGuard;
+  lines.push(
+    '',
+    'Orchestrator edit guard:',
+    `  hook: ${g.hookRegistered ? 'registered' : g.hookState}`,
+    `  session: ${g.sessionActive ? `active (${g.sessionRepo})${g.editsAllowed ? ', edits allowed' : ''}` : 'none'}`,
+    `  denials: ${g.denials.count}${g.denials.last ? ` (last ${g.denials.last.ts} ${g.denials.last.tool} ${g.denials.last.path})` : ''}`,
+  );
   lines.push('', 'Hosts:');
   for (const h of r.hosts) {
     const states = h.actions.map((a) => `${a.kind} ${a.state}`).join(', ');

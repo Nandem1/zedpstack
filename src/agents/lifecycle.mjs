@@ -196,6 +196,7 @@ export async function execAgent({ repo, id }) {
       eventBase: { agentId: id, role: record.role ?? record.subagentType },
       extraReadDirs,
       allowedTools: configData().permissions?.claudeWriteAllowedTools,
+      agentId: id,
       onSpawned: ({ pid }) => updateAgent(repoRoot, id, { workerPid: pid }),
       onMeta: ({ effectiveModel }) => updateAgent(repoRoot, id, { effectiveModel }),
     });

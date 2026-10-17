@@ -63,6 +63,7 @@ function kill(child, signal) {
  *   allowedTools?: string[],
  *   onSpawned?: (info: { pid: number }) => void,
  *   onMeta?: (meta: { effectiveModel: string }) => void,
+ *   agentId?: string,
  * }} opts
  * @returns {Promise<{ exitCode: number, resultPath: string, processExited: true, timedOut: boolean, result: object }>}
  */
@@ -78,6 +79,7 @@ export async function runWorkerProcess({
   allowedTools,
   onSpawned,
   onMeta,
+  agentId,
 }) {
   const adapter = adapterFor(binding.runtime);
   const stdoutLog = path.join(workerRoot, 'stdout.log');
@@ -105,7 +107,10 @@ export async function runWorkerProcess({
 
   const child = spawn(argv[0], argv.slice(1), {
     cwd,
-    env: workerEnv(binding.runtime),
+    env: {
+      ...workerEnv(binding.runtime),
+      ...(agentId ? { ZEDPSTACK_AGENT_ID: agentId } : {}),
+    },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 

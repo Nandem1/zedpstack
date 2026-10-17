@@ -23,6 +23,7 @@ import { listPstackSkills, readPstackSkillFile, resolvePstackInstall } from './p
 import { completeJudgment, runPlaybook } from './run.mjs';
 import { applyModelSheetToConfig, initModelSheet, showSetupStatus } from './setupConfig.mjs';
 import { buildSetupPlan, writeSetup } from './setupWizard.mjs';
+import { allowEdits, endSession } from './guard.mjs';
 import { buildDoctorReport, formatDoctorReport } from './setupReport.mjs';
 import { followProgress, tailProgressOnce } from './tailProgress.mjs';
 import { watchRun } from './watchRun.mjs';
@@ -169,6 +170,7 @@ Orchestrator plumbing:
   mcp                         start the MCP server (stdio)
   install [--host h,..] [--apply]   register MCP + skill (hosts: ${HOSTS.join(', ')})
   doctor [--human]            check CLIs, pstack, worker sheet, host registration
+  session end|allow-edits|block-edits   orchestrator edit-guard session marker
   models                      worker sheet: role -> runtime/model
   skill [name] [--file f]     read a pstack skill file
 
@@ -235,6 +237,24 @@ export async function main(argv) {
   if (command === 'install') {
     print(runInstall({ hosts: list(opts.host) ?? HOSTS, apply: Boolean(opts.apply) }));
     return;
+  }
+
+  if (command === 'session') {
+    const sub = opts._[0];
+    if (sub === 'end') {
+      endSession(repoRoot);
+      print({ ended: true, repo: repoRoot });
+      return;
+    }
+    if (sub === 'allow-edits') {
+      print({ repo: repoRoot, editsAllowed: true, marker: allowEdits(repoRoot, true) });
+      return;
+    }
+    if (sub === 'block-edits') {
+      print({ repo: repoRoot, editsAllowed: false, marker: allowEdits(repoRoot, false) });
+      return;
+    }
+    throw new Error('session subcommands: end | allow-edits | block-edits');
   }
 
   if (command === 'doctor' || (command === 'setup' && ['diagnose', 'doctor'].includes(opts._[0]))) {

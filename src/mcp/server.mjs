@@ -3,8 +3,11 @@
  * Tools: the portable Agent replacement. Prompts: `/zedpstack` entry point.
  */
 
+import path from 'node:path';
 import readline from 'node:readline';
 import { ZEDPSTACK_VERSION } from '../constants.mjs';
+import { startSession } from '../guard.mjs';
+import { defaultZedpstackRepo } from '../repoDefault.mjs';
 import { TOOLS, readOwnDoc } from './tools.mjs';
 
 const SUPPORTED_PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -56,6 +59,10 @@ export async function handleRequest(msg, { notify = () => {} } = {}) {
       const tool = TOOLS.find((t) => t.name === params.name);
       if (!tool) throw Object.assign(new Error(`Unknown tool: ${params.name}`), { rpc: -32602 });
       const args = params.arguments ?? {};
+      if (params.name === 'read_skill' && (args.skill === 'poteto-mode' || args.skill === 'zedpstack')) {
+        const repo = path.resolve(defaultZedpstackRepo(process.env, process.cwd()));
+        startSession(repo);
+      }
       const progressToken = params._meta?.progressToken;
       const ctx = {
         progress:
@@ -87,6 +94,8 @@ export async function handleRequest(msg, { notify = () => {} } = {}) {
       if (params.name !== 'zedpstack') {
         throw Object.assign(new Error(`Unknown prompt: ${params.name}`), { rpc: -32602 });
       }
+      const repo = path.resolve(defaultZedpstackRepo(process.env, process.cwd()));
+      startSession(repo);
       return {
         description: PROMPTS[0].description,
         messages: [{ role: 'user', content: { type: 'text', text: orchestratorPrompt(params.arguments?.task) } }],

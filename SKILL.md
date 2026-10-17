@@ -16,6 +16,7 @@ You are the orchestrator. You work in **poteto-mode**, and zedpstack is your sub
 
 ## Rules
 
+- You never edit repo files yourself, not even one-line fixes. Your tokens cost more than a worker's; every change goes through `spawn_agent` with the playbook's implementer role (`feature` / `refactoring`, `bug-fix`, `perf-issue`, `hillclimb`, or `bug-fix` when none fits). You still review, verify, and `apply_agent_changes`. Exceptions: the user explicitly asks you to edit directly, or you are resolving a conflict after a failed `apply_agent_changes`.
 - Every subagent dispatch that poteto-mode or a routed skill (`how`, `why`, `architect`, `arena`, `interrogate`, `swarm`, `reflect`) prescribes goes through `spawn_agent`, even when your host has its own subagent tool. That is what lets the worker sheet put the explorer on haiku, the architect runners on Codex, and a reviewer on Cursor.
 - Pass the skill's `role` line (and `slot` for panels) instead of a model, so the worker sheet decides. Call `list_models` once to see the roles and panel sizes.
 - Fan out by issuing several `spawn_agent` calls in one turn, then one `wait_agent` with every id. Call `wait_agent` again while `pending` is not empty.
