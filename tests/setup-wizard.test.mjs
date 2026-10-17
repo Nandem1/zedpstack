@@ -29,7 +29,9 @@ describe('setup wizard', () => {
     assert.equal(claude.opus.effective, 'claude-opus-fake');
     assert.equal(claude.fable.ok, false, 'fake CLI rejects fable like an account without credits');
     assert.deepEqual(plan.models.codex.map((m) => m.model), ['gpt-6.1-sol']);
-    assert.deepEqual(plan.models.cursor.map((m) => m.model), ['composer-2.5', 'composer-2.5-fast']);
+    const cursorIds = plan.models.cursor.map((m) => m.model);
+    assert.ok(cursorIds.includes('composer-2.5') && cursorIds.includes('grok-4.7-high'), 'third-party Cursor models are listed');
+    assert.ok(!cursorIds.includes('auto'));
 
     const bugFix = plan.roles.find((r) => r.role === 'bug-fix');
     assert.equal(bugFix.source, 'pstack-default');
@@ -39,8 +41,11 @@ describe('setup wizard', () => {
     assert.equal(plan.questions.roleGroups.length, 4);
     assert.ok(plan.questions.roleGroups.every((q) => q.options.length <= 4 && q.multiSelect));
     assert.deepEqual(plan.questions.effort.options.map((o) => o.label), ['default', 'medium', 'high']);
-    assert.ok(!plan.questions.models.claude.options.some((o) => o.label === 'fable'), 'unusable models are not offered');
-    assert.ok(plan.questions.panel.options.length <= 4, 'panel fits a 4-option question');
+    assert.ok(!plan.questions.model.options.some((o) => o.label === 'fable'), 'unusable models are not offered');
+    assert.ok(plan.questions.model.options.length <= 4 && plan.questions.panel.multiSelect);
+    assert.ok(plan.questions.model.options.some((o) => /grok/.test(o.label)), 'Grok is reachable from the shortlist');
+    assert.ok(!plan.questions.change && !plan.questions.provider, 'no change/provider gates');
+    assert.ok(plan.more.includes('cursor-grok-4.6-high'));
   });
 
   it('rejects a model that does not run and writes valid answers, keeping other rows', async () => {
@@ -48,6 +53,9 @@ describe('setup wizard', () => {
     await assert.rejects(writeSetup({ roles: { 'bug-fix': ['gpt-6.1-sol', 'opus'] } }), /takes one model/);
     const typed = await writeSetup({ roles: { 'strongest judgment': ['claude-opus-5-5'] }, dryRun: true });
     assert.match(typed.sheet, /^strongest judgment: claude-opus-5-5$/m, 'full ids typed via Other are probed, not rejected');
+    const grok = await writeSetup({ roles: { 'swarm workers': ['grok-4.7-high'], 'hillclimb': ['gpt-5.2'] }, dryRun: true });
+    assert.match(grok.sheet, /^swarm workers: grok-4\.7-high$/m);
+    assert.match(grok.sheet, /^hillclimb: cursor:gpt-5\.2$/m, 'bare ids only Cursor knows get the cursor: prefix');
     const res = await writeSetup({
       defaultEffort: 'default',
       roles: { 'bug-fix': ['gpt-6.1-sol'], arena: ['opus', 'composer-2.5'] },

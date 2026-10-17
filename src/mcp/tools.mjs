@@ -171,7 +171,7 @@ export const TOOLS = [
   {
     name: 'setup_plan',
     description:
-      'For /setup-zedpstack: the current worker sheet (every pstack role with its model, the model the CLI really runs, and problems), the usable models per provider (Claude aliases probed against the account, GPT from Codex, Cursor first-party), and ready-made questions (effort, change?, role groups, provider, models, panel) sized for a 4-option question tool.',
+      'For /setup-zedpstack: the current worker sheet (every pstack role with its model, the model the CLI really runs, and problems), the usable models per provider (Claude aliases probed against the account, GPT from Codex, every Cursor model including Grok), and ready-made questions (effort, role groups, model, panel) sized for a 4-option question tool.',
     inputSchema: {
       type: 'object',
       properties: { refresh: { type: 'boolean', description: 'Re-probe Claude aliases instead of using the one-day cache.' } },

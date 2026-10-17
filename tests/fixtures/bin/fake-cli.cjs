@@ -9,7 +9,7 @@ if (args.includes('--version') || args.includes('-v')) {
   process.exit(0);
 }
 if (runtime === 'cursor' && args.includes('--list-models')) {
-  console.log('Available models\n\nauto - Auto (default)\ncomposer-2.5 - Composer 2.5 (current)\ngpt-5.2 - GPT-5.2\ncomposer-2.5-fast - Composer 2.5 Fast');
+  console.log('Available models\n\nauto - Auto (default)\ncomposer-2.5 - Composer 2.5 (current)\ngpt-5.2 - GPT-5.2\ncomposer-2.5-fast - Composer 2.5 Fast\ngrok-4.7-high - Grok 4.7  High\ngrok-4.7-high-fast - Grok 4.7  High Fast\u200b\ncursor-grok-4.6-high - Grok 4.6\nclaude-opus-5-5-high - Claude Opus 5.5 1M High');
   process.exit(0);
 }
 if (args.includes('--help')) {

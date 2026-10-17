@@ -1,6 +1,6 @@
 /**
- * Data behind /setup-zedpstack, shaped like /setup-pstack's question flow:
- * effort → current roles → which roles to change → provider → model.
+ * Data behind /setup-zedpstack: effort → which roles to change → model(s).
+ * A role takes one model, a panel role takes a multi-select.
  * The orchestrator renders the questions with its host's question tool;
  * this module detects models, builds options, validates and writes the sheet.
  */
@@ -133,15 +133,50 @@ function codexCatalog() {
   }
 }
 
-/** Cursor first-party models only (Composer); third-party models run on their own CLIs. */
+const TIER_RE = /-(none|minimal|low|medium|high|xhigh|extra-high|max)$/;
+
+/** `grok-4.7-high-fast` → { family: 'grok-4.7', fast: true, thinking: false } */
+function cursorTraits(id) {
+  let rest = id;
+  const fast = /-fast$/.test(rest);
+  rest = rest.replace(/-fast$/, '');
+  rest = rest.replace(TIER_RE, '');
+  const thinking = /-thinking$/.test(rest) || /-thinking-/.test(id);
+  rest = rest.replace(/-thinking$/, '');
+  return { family: rest, fast, thinking };
+}
+
+/**
+ * Every model `agent --list-models` lists, third-party ones included (Grok,
+ * Gemini, Claude and GPT through Cursor). Filtering to Composer hid them all.
+ */
 function cursorCatalog() {
   const res = spawnSync('agent', ['--list-models'], { encoding: 'utf8', timeout: 30_000 });
   if (res.status !== 0) return [];
   return res.stdout
     .split('\n')
-    .map((l) => /^(\S+)\s+-\s+(.+?)(?:\s+\((?:current|default)\))?$/.exec(l.trim()))
-    .filter((m) => m && /^composer/.test(m[1]))
-    .map((m) => ({ model: m[1], name: m[2], description: 'Modelo propio de Cursor', ok: true }));
+    .map((l) => /^(\S+)\s+-\s+(.+?)(?:\s+\((?:current|default)\))?$/.exec(l.trim().replace(/[\u200b-\u200f]/g, '')))
+    .filter((m) => m && m[1] !== 'auto')
+    .map((m) => ({ model: m[1], name: m[2].trim(), description: m[2].trim(), ok: true, ...cursorTraits(m[1]) }));
+}
+
+/** Cursor models grouped by family for the "pick something else" list. */
+export function cursorFamilies(models) {
+  const byFamily = new Map();
+  for (const m of models) {
+    if (!byFamily.has(m.family)) byFamily.set(m.family, []);
+    byFamily.get(m.family).push(m.model);
+  }
+  return [...byFamily].map(([family, ids]) => ({ family, models: ids }));
+}
+
+/** Best variant of a Cursor family: plain over fast and thinking, high over other tiers. */
+function pickCursor(models, familyRe) {
+  const pool = models.filter((m) => familyRe.test(m.family));
+  const score = (m) => (m.fast ? 4 : 0) + (m.thinking ? 2 : 0) + (/-high$/.test(m.model) || m.model === m.family ? 0 : 1);
+  const families = [...new Set(pool.map((m) => m.family))].sort().reverse();
+  const newest = pool.filter((m) => m.family === families[0]);
+  return newest.sort((a, b) => score(a) - score(b))[0] ?? null;
 }
 
 /**
@@ -182,6 +217,15 @@ function slugFor(runtime, model) {
 
 function availability(models, runtime, model) {
   return models[runtime]?.find((m) => m.model === model) ?? null;
+}
+
+/** `claude-opus-5-5-high` typed bare is a Cursor id when its inferred CLI cannot run it. */
+function preferCursorWhenOnlyThere(models, raw) {
+  const { model, effort } = parseModelValue(raw);
+  const routed = classifyModelSlug(model);
+  if (/^(claude|codex|cursor):/.test(raw) || availability(models, routed.runtime, routed.model)?.ok) return raw;
+  if (!availability(models, 'cursor', routed.model)) return raw;
+  return `cursor:${model}${effort ? ` @${effort}` : ''}`;
 }
 
 function describeEntry(models, entry) {
@@ -228,13 +272,17 @@ export async function buildSetupPlan({ refresh = false } = {}) {
   const usable = Object.fromEntries(
     Object.keys(PROVIDERS).map((p) => [p, models[p].filter((m) => m.ok)]),
   );
-  const providerOptions = Object.entries(PROVIDERS)
-    .filter(([p]) => usable[p].length)
-    .map(([p, { label, cli }]) => ({
-      label,
-      value: p,
-      description: `${usable[p].map((m) => m.model).slice(0, 4).join(', ')}${usable[p].length > 4 ? ', …' : ''} · ${cli}`,
-    }));
+  const first = (p) => usable[p].find((m) => !m.fast) ?? usable[p][0];
+  const picks = [
+    first('claude') && ['claude', first('claude')],
+    first('codex') && ['codex', first('codex')],
+    pickCursor(usable.cursor, /^composer/) && ['cursor', pickCursor(usable.cursor, /^composer/)],
+    pickCursor(usable.cursor, /grok/) && ['cursor', pickCursor(usable.cursor, /grok/)],
+    pickCursor(usable.cursor, /^gemini/) && ['cursor', pickCursor(usable.cursor, /^gemini/)],
+  ].filter(Boolean);
+  const modelOptions = picks.slice(0, 4).map(([p, m]) => modelOption(p, m));
+  const shown = new Set(modelOptions.map((o) => o.value));
+  const more = Object.keys(PROVIDERS).flatMap((p) => usable[p].map((m) => slugFor(p, m.model))).filter((v) => !shown.has(v));
 
   return {
     sheetPath: sheet.sheetPath,
@@ -250,15 +298,6 @@ export async function buildSetupPlan({ refresh = false } = {}) {
         multiSelect: false,
         options: EFFORT_CHOICES,
       },
-      change: {
-        header: 'Cambios',
-        question: '¿Quieres cambiar el modelo de algún rol?',
-        multiSelect: false,
-        options: [
-          { label: 'Mantener', value: 'keep', description: 'Dejar los roles como están' },
-          { label: 'Cambiar roles', value: 'change', description: 'Elegir qué roles cambiar' },
-        ],
-      },
       roleGroups: ROLE_GROUPS.map((g) => ({
         header: g.header,
         question: `¿Qué roles de "${g.header}" quieres cambiar?`,
@@ -270,26 +309,24 @@ export async function buildSetupPlan({ refresh = false } = {}) {
           return { label: role === ARENA_CHOICE ? 'arena' : role, value: role, description: `${current}${problem} · ${rows[0]?.what ?? ''}` };
         }),
       })),
-      provider: { header: 'Proveedor', multiSelect: false, options: providerOptions },
-      models: Object.fromEntries(
-        Object.keys(PROVIDERS).map((p) => [
-          p,
-          {
-            header: 'Modelo',
-            multiSelect: false,
-            options: usable[p].slice(0, 4).map((m) => modelOption(p, m)),
-            more: usable[p].slice(4).map((m) => m.model),
-          },
-        ]),
-      ),
+      model: {
+        header: 'Modelo',
+        multiSelect: false,
+        note: 'Para un rol de un solo modelo. Cualquier otro de `more`/`catalog` entra por "Other".',
+        options: modelOptions,
+      },
       panel: {
         header: 'Panel',
         multiSelect: true,
-        note: 'Una entrada por worker: el orden y la cantidad definen el panel. Mezcla proveedores para tener diversidad.',
-        options: Object.keys(PROVIDERS)
-          .flatMap((p, i) => usable[p].slice(0, i === 1 ? 2 : 1).map((m) => modelOption(p, m)))
-          .slice(0, 4),
+        note: 'Para roles de panel: cada selección es un worker, el orden y la cantidad definen el panel. Mezcla proveedores.',
+        options: modelOptions,
       },
+    },
+    more,
+    catalog: {
+      claude: usable.claude.map((m) => m.model),
+      codex: usable.codex.map((m) => m.model),
+      cursor: cursorFamilies(usable.cursor),
     },
   };
 }
@@ -339,10 +376,11 @@ export async function writeSetup({ defaultEffort, roles = {}, force = false, dry
 
   const errors = [];
   for (const [role, values] of Object.entries(expanded)) {
+    expanded[role] = values.map((raw) => preferCursorWhenOnlyThere(models, String(raw)));
     const row = ROLE_ROWS.find((r) => r.role === role);
     if (!values.length) errors.push(`${role}: needs at least one model`);
     if (!row.panel && values.length > 1) errors.push(`${role}: takes one model, got ${values.length}`);
-    for (const raw of values) {
+    for (const raw of expanded[role]) {
       const { model, effort: e } = parseModelValue(raw);
       const routed = classifyModelSlug(model);
       const found = availability(models, routed.runtime, routed.model);
