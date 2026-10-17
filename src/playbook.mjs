@@ -178,11 +178,3 @@ export function attachPstackUpstreamMeta(def) {
     return def;
   }
 }
-
-export const PLAYBOOK_ROUTING = [
-  { match: /cómo funciona|how does|walkthrough|capas|ownership|where should/i, playbook: 'how-investigation' },
-  { match: /por qué|why does|rationale|motivación|postmortem/i, playbook: 'why-rationale' },
-  { match: /architect|diseña|design this|sketch/i, playbook: 'architect-sketch' },
-  { match: /interrogate|adversarial|stress test|review this/i, playbook: 'interrogate-review' },
-  { match: /reflect|\/reflect/i, playbook: 'reflect-session' },
-];

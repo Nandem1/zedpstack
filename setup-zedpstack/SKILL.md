@@ -51,4 +51,4 @@ Roles you do not send keep their current line. If the call rejects a value, show
 
 Call `setup_plan` again and show the final table. It must report `problemCount: 0`; if not, go back to step 4 for the roles still listed. Tell the user where the sheet lives, that effort reaches Claude (`--effort`) and Codex but Cursor ignores it, and that the agent board shows the model each worker actually ran.
 
-For the batch playbooks (`dispatch run`) also run `dispatch setup apply` so `zedpstack.config.json` follows the sheet.
+Batch playbooks (`dispatch run`) read worker models from the same sheet as `spawn_agent`; run `dispatch setup apply` only when you want those bindings copied into `zedpstack.config.json` for other tools.

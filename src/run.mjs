@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { loadConfig, resolveRoleBinding, resolveTimeout } from './config.mjs';
+import { configForRun } from './setupConfig.mjs';
 import { EventSink } from './events/sink.mjs';
 import { tryGitCommit } from './git.mjs';
 import {
@@ -412,6 +413,7 @@ export async function runPlaybook({
   context = '',
 }) {
   const config = loadConfig();
+  const runConfig = configForRun(config);
   const playbook = loadPlaybook(playbookId);
   if (playbook.def.upstream?.pstackSkill) {
     resolvePstackInstall();
@@ -432,7 +434,10 @@ export async function runPlaybook({
   let manifest = existingRunId && fs.existsSync(path.join(runRoot, 'manifest.json'))
     ? readManifest(runRoot)
     : null;
-  const playbookDef = resolveRunPlaybook(attachPstackUpstreamMeta(playbook.def), { config, manifest });
+  const playbookDef = resolveRunPlaybook(attachPstackUpstreamMeta(playbook.def), {
+    config: runConfig,
+    manifest,
+  });
 
   if (manifest) {
     if (manifest.status === 'completed') {
@@ -448,7 +453,7 @@ export async function runPlaybook({
   } else {
     const bindings = {};
     for (const step of playbookDef.steps) {
-      bindings[step.role] = resolveRoleBinding(config, step.role);
+      bindings[step.role] = resolveRoleBinding(runConfig, step.role);
     }
     manifest = createInitialManifest({
       runId,
@@ -457,7 +462,7 @@ export async function runPlaybook({
       playbook: playbookId,
       goal,
       bindings,
-      steps: initStepRecords(playbookDef, config),
+      steps: initStepRecords(playbookDef, runConfig),
     });
     writeManifestAtomic(runRoot, manifest);
     eventSink.emit('run.started', { runId, playbook: playbookId, goal });
@@ -490,7 +495,7 @@ export async function runPlaybook({
         executeStep({
           playbook,
           playbookDef,
-          config,
+          config: runConfig,
           runRoot,
           repoRoot: path.resolve(repoRoot),
           goal: manifest.goal ?? goal,

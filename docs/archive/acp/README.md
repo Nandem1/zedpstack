@@ -1,7 +1,7 @@
 # Material de apoyo ACP
 
 Archivo del trabajo ACP del 2026-10-17. Los candidatos y los briefs conservan su contenido histórico y su idioma original; no describen por sí solos el comportamiento vigente.
-La [decisión final de diseño](../ACP_DESIGN.md) recoge la implementación y sus límites. La [bitácora](../BITACORA.md) registra los fallos y decisiones pendientes según la [skill zedpstack-bitacora](../../zedpstack-bitacora/SKILL.md).
+La [decisión final de diseño](../../ACP_DESIGN.md) recoge la implementación y sus límites. La [bitácora](../../BITACORA.md) registra los fallos y decisiones pendientes según la [skill zedpstack-bitacora](../../../zedpstack-bitacora/SKILL.md).
 
 - [Rastro de los cortes 2 a 8](./TRAIL.md).
 - [Comparación de candidatos de arquitectura](./architect/README.md).

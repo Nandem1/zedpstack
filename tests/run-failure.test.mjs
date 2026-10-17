@@ -15,9 +15,12 @@ describe('runPlaybook when a worker cannot start', () => {
     const repo = path.join(dir, 'repo');
     fs.mkdirSync(repo);
     const config = path.join(dir, 'config.json');
+    const sheet = path.join(dir, 'pstack-models.md');
+    fs.writeFileSync(sheet, 'default effort: session\n');
     const binding = { runtime: 'codex', model: 'gpt-6.1-sol', permissionProfile: 'read-only' };
     fs.writeFileSync(config, JSON.stringify({ roles: { 'how-explorer': binding, 'how-explainer': binding, explorer: binding, synthesizer: binding } }));
     process.env.ZEDPSTACK_CONFIG = config;
+    process.env.ZEDPSTACK_MODEL_SHEET = sheet;
     process.env.PATH = path.join(dir, 'empty-bin');
 
     const first = await runPlaybook({ playbookId: 'how-investigation', goal: 'How?', repoRoot: repo, runId: 'r1' });

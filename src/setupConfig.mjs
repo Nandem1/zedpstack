@@ -174,6 +174,25 @@ ${body}`,
   return target;
 }
 
+export function roleBindingsFromWorkerSheet(sheetPath = workerModelSheetPath()) {
+  const sheet = readModelSheet(sheetPath);
+  const parsed = parseModelSheet(sheet.text);
+  return bindingsFromSheet(parsed).bindings;
+}
+
+/** Sheet bindings override config roles; timeouts and other config fields stay on the base config. */
+export function configForRun(config, { sheetPath } = {}) {
+  const bindings = roleBindingsFromWorkerSheet(sheetPath);
+  const configRoles = config.data.roles ?? {};
+  return {
+    ...config,
+    data: {
+      ...config.data,
+      roles: { ...configRoles, ...bindings },
+    },
+  };
+}
+
 export function showSetupStatus() {
   const sheet = readModelSheet(defaultModelSheetPath());
   const { path: cfgPath, data } = loadConfig();

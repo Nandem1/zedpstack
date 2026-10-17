@@ -175,4 +175,4 @@ La verificación final del corte 8 en este sandbox aprobó 316 pruebas sin las s
 
 ## Material de apoyo
 
-El [índice ACP](./acp/README.md) reúne el rastro de implementación, los briefs originales y los tres candidatos de arquitectura. Conserva el contexto histórico; las decisiones vigentes y los límites están en este documento.
+El [índice ACP](./archive/acp/README.md) reúne el rastro de implementación, los briefs originales y los tres candidatos de arquitectura. Conserva el contexto histórico; las decisiones vigentes y los límites están en este documento.
