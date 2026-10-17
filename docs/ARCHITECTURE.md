@@ -81,7 +81,7 @@ La lista de subagentes de Cursor es interfaz nativa de su herramienta `Task`, y 
 3. **Progreso MCP**: `wait_agent` envía `notifications/progress` con la lista cuando el host pasa un `progressToken`.
 4. **Terminal**: `dispatch top` la redibuja en vivo.
 
-La actividad sale de la salida del propio CLI (herramientas y narración) sin llamadas extra a modelos. El modelo efectivo que reporta el CLI se muestra junto al alias pedido.
+La actividad sale de la salida del propio CLI (herramientas y narración) sin llamadas extra a modelos. El modelo efectivo que reporta el CLI se muestra junto al modelo pedido, con el resultado de la verificación de modelo (sección siguiente).
 
 ### D-09. Almacén de agentes: un escritor por archivo, estado derivado
 
@@ -97,11 +97,33 @@ Varios procesos tocan el mismo agente: el servidor MCP o el CLI que lo lanza, el
 
 La creación exclusiva escribe un temporal y lo enlaza con `link`, que falla si el destino existe. Un lector nunca ve el archivo a medio escribir, cosa que un `open` con `wx` no garantiza.
 
-El spec guarda `origin {frontend, sessionId, pid}`: `acp` cuando el proceso tiene `ZEDPSTACK_ACP_SESSION`, `cli` desde `dispatch agent spawn` y `mcp` en otro caso. `expectedModel` queda en `null` hasta el corte 5 de `docs/ACP_DESIGN.md`.
+El spec guarda `origin {frontend, sessionId, pid}`: `acp` cuando el proceso tiene `ZEDPSTACK_ACP_SESSION`, `cli` desde `dispatch agent spawn` y `mcp` en otro caso. `expectedModel` es el modelo que se espera que corra el CLI (ver «Verificación de modelo»).
 
-`loadAgent` une los archivos en un AgentView `{spec, run, launch, stop, cleanup, status, error, finishedAt}`. `deriveStatus` es pura y sigue este orden: `stop.json` da `stopped` aunque el runner escriba después un resultado; un `outcome` da `completed` o `failed`; un runner vivo con `run.json` da `running`; sin `run.json`, un runner vivo o un spec de menos de 15 s da `starting`; cualquier otro caso da `failed` (el runner murió sin terminar). Ninguna lectura escribe, así que `status`, `list_agents` y el tablero no compiten con el runner.
+`loadAgent` une los archivos en un AgentView `{spec, run, launch, stop, cleanup, status, error, finishedAt, modelCheck}`. `deriveStatus` es pura y sigue este orden: `stop.json` da `stopped` aunque el runner escriba después un resultado; un `outcome` da `completed` o `failed`; un runner vivo con `run.json` da `running`; sin `run.json`, un runner vivo o un spec de menos de 15 s da `starting`; cualquier otro caso da `failed` (el runner murió sin terminar). Ninguna lectura escribe, así que `status`, `list_agents` y el tablero no compiten con el runner.
 
 Un `agent.json` cuya versión difiere de 2 se lee con el adaptador v1. Los registros v1 guardaban `status` y podían no declarar versión. El adaptador produce el mismo AgentView sin reescribir el archivo. En versión 2, `loadAgent` ignora los campos heredados `status`, `error`, `finishedAt` y `updatedAt` que un proceso antiguo haya añadido a `agent.json`.
+
+## Verificación de modelo
+
+Un dictamen nunca se atribuye en silencio a un modelo que el usuario no pidió. `src/modelCheck.mjs` es el único módulo que sabe comparar modelos.
+
+- **Esperado.** `spawnAgent` guarda `spec.expectedModel` con `expectedModelFor`. Un id concreto (`claude-opus-5-5`, `composer-2.5`) se espera a sí mismo. Un alias (`opus`, `haiku`, `default`, `auto`) espera el `effective` de la caché de sondeos de `/setup-zedpstack` (`~/.zedpstack/model-probe.json`), o `null` si nadie lo sondeó. Leer la caché nunca lanza un sondeo.
+- **Efectivo.** El runner guarda en `run.json` el modelo que reporta el CLI: `init` en Claude y Cursor, la cabecera `model:` en Codex.
+- **Comparación.** `loadAgent` deriva `modelCheck` sin escribir. `normalizeModelId` pasa a minúsculas, quita parámetros entre corchetes, sufijos de fecha y decoraciones de presentación (`1M`, `256K`, niveles de esfuerzo), así que `Composer 2.5` equivale a `composer-2.5`. Un prefijo de familia no basta: `claude-opus-4-8` no satisface `claude-opus-5-5`.
+
+| `state` | Cuándo | Qué se ve |
+|---|---|---|
+| `ok` | El efectivo normalizado coincide con el esperado | `opus → claude-opus-5-5` |
+| `unverified` | Sin evidencia todavía, o un alias sin sondeo | `haiku → claude-haiku-5-5 (alias)` |
+| `mismatch` | El efectivo difiere del esperado | `opus → claude-opus-4-8 ⚠ esperado claude-opus-5-5` |
+
+`model_check` se añade a `agent_status`, `agent_result`, `wait_agent`, `list_agents` y las filas del tablero; los campos existentes no cambian. Un `mismatch` no hace fallar al worker: queda `completed`, pero `agent_result` añade `warnings` y antepone esa línea a `text`, así que la tarjeta ACP también empieza por el aviso. El título de la tarjeta se actualiza al terminar con la etiqueta del modelo.
+
+Cuando la API rechaza un modelo porque el CLI es antiguo («requires Claude Code 2.1.280 or later»), el error del worker nombra la versión instalada, por ejemplo `claude CLI 2.1.195 cannot run claude-opus-5-5: the API requires 2.1.280 or later`. El repo no registra versiones mínimas de los CLI, así que `doctor` no compara versiones.
+
+`setup_plan` añade `pin` (el id concreto sondeado) a cada alias que corre y una línea en `recommendations` que propone fijarlo. `setup_write` acepta ids concretos y, si se escribe un alias, lo escribe tal cual y añade a `warnings` el modelo que corre hoy.
+
+**Orquestador.** `claude-agent-acp@0.93.0` emite `usage_update._meta["_claude/model"]` con el modelo que respondió (comprobado el 2026-10-17: `claude-sonnet-5-5` con el modelo `default`). El hub compara ese valor con el `currentValue` de la opción `model` y, si es un id concreto distinto, escribe una vez en el hilo la línea de `mismatch`. Un alias del orquestador no se contrasta, porque la caché de sondeos describe el CLI de los workers y no el SDK que lleva el engine. `cursor-agent acp` no emite ningún campo de modelo, así que el orquestador de Cursor queda `unverified`. El de Codex no se pudo comprobar, porque el engine exigió `CODEX_API_KEY` u `OPENAI_API_KEY`.
 
 ## Cancelación y supervisión (hub ACP)
 

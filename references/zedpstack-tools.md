@@ -66,7 +66,8 @@ Every worker also gets read access to the pstack skills directory so it can open
 
 - Each `spawn_agent`, `wait_agent`, `agent_status` and `list_agents` result has two text blocks: a board (one row per agent with title, model, CLI and latest activity), then the JSON. Copy the board into your chat as SKILL.md shows; that is the user's only view of the subagents inside the chat.
 - The board's title is the spawn's `description`. Use `<Skill>: <angle>`.
-- `model → effective` on a row means the CLI resolved the requested alias to that model (the JSON has `effective_model`). Check it against what the user expects before you attribute a verdict to a model.
+- `model → effective` on a row means the CLI ran that model for the requested slug. Every agent in the JSON carries `model_check` with `state`: `ok` (the CLI ran the expected model), `unverified` (no evidence yet, or an alias nobody probed; the row adds `(alias)`), or `mismatch` (the row adds `⚠ esperado <id>`).
+- A `mismatch` worker stays `completed`, but `agent_result` and `wait_agent` add a `warnings` entry and start `text` with the same line. Do not attribute that verdict to the expected model: say which model gave it, or re-dispatch with the concrete id.
 - `wait_agent` also sends MCP progress notifications carrying the board while it waits, when the host passes a `progressToken`. Hosts that render them show the board updating inside the tool call.
 - `dispatch top` in a terminal pane draws the same board live, with spinners and elapsed time.
 

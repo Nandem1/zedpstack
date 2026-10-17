@@ -55,7 +55,7 @@ Zed debe ser el único sitio de trabajo: el hilo "zedpstack" es el orquestador. 
 - `RunState` (run.json, solo el runner, tmp+rename): runnerPid, workerPid, startedAt, effectiveModel, outcome.
 - `LaunchMark` (launch.json, `{runnerPid}`, solo `spawnAgent`, una vez).
 - `StopMark` (stop.json, `wx`), `CleanupMark` (cleanup.json).
-- `AgentView` fusionado al leer: `{spec, run, launch, stop, cleanup, status, error, finishedAt, modelCheck}` (`modelCheck` llega en el corte 5).
+- `AgentView` fusionado al leer: `{spec, run, launch, stop, cleanup, status, error, finishedAt, modelCheck}`.
 - `HubSession`: id, cwd, runtime, engine, primed, turn, cards, opciones y comandos del hijo.
 
 ## Opciones de configuración (ACP v1)
@@ -88,7 +88,8 @@ Una ruta relativa dentro de un archivo descargable del registro de Cursor no ide
 - ¿Los engines mandan ediciones y shell por `fs/write_text_file` y `terminal/create` del cliente, o las ejecutan internamente? Si es lo segundo, la guarda de protocolo no las ve y solo queda el hook PreToolUse existente.
 - Los engines son dependencias externas que pueden cambiar: versiones fijadas, `doctor` informa del binario y la versión resueltos, y un incumplimiento marca el runtime como no disponible en vez de degradar en silencio.
 - Cursor: comprobado el 2026-10-17 que `cursor-agent acp` acepta el `mcpServers` inyectado en `session/new` y llama a `spawn_agent` y `wait_agent` (también `claude-agent-acp@0.93.0`). Ambos piden `session/request_permission` por cada herramienta MCP.
-- Codex y Cursor deben demostrar una fuente de evidencia del modelo efectivo; sin ella el estado es `unverified`, nunca `ok`.
+- Codex y Cursor deben demostrar una fuente de evidencia del modelo efectivo; sin ella el estado es `unverified`, nunca `ok`. Para los workers la evidencia existe: el `init` de Cursor y la cabecera `model:` de Codex. Para el orquestador, el 2026-10-17 se capturaron todas las notificaciones de un turno trivial. `claude-agent-acp@0.93.0` envía `usage_update` con `_meta["_claude/model"]: "claude-sonnet-5-5"` (modelo `default`), y el hub lo usa. `cursor-agent acp` envía `session_info_update`, `agent_thought_chunk`, `agent_message_chunk` y `available_commands_update`, ninguno con el modelo, así que su orquestador queda `unverified`. `codex-acp` no pasó de `authenticate` porque pidió `CODEX_API_KEY` u `OPENAI_API_KEY`, así que queda sin comprobar y sin adaptador.
+- La decisión 5 decía que al escribir la hoja se fija el id sondeado. El corte 5 no reescribe en silencio: `setup_write` escribe el alias que se le pide y avisa del modelo que corre hoy, y `setup_plan` recomienda fijarlo.
 - Cambiar de runtime reinicia la conversación; se acepta a cambio de no inventar continuidad propia.
 - `session/close` es inestable en ACP. El hub lo anuncia (`sessionCapabilities.close`) y lo atiende, pero si Zed cierra un hilo sin avisar, la sesión vive hasta el cierre del hub. El tope de engines limita el coste.
 - Un engine de terceros que no vigila `ZEDPSTACK_PARENT_PID` depende de terminar con el EOF de stdin cuando el hub muere por SIGKILL. `claude-agent-acp@0.93.0` lo cumple: el grupo desapareció 3 s después del SIGKILL (2026-10-17).
@@ -99,7 +100,7 @@ Una ruta relativa dentro de un archivo descargable del registro de Cursor no ide
 - [x] Corte 2: almacén dividido y `origin` (`store.mjs` con un escritor por archivo, `deriveStatus`, adaptador v1, `origin` por frontend; pruebas de carrera stop/runner en proceso y entre procesos).
 - [x] Corte 3: MCP, skill en primer prompt, tarjetas por almacén (`engineMcpServers`, `orchestratorPrompt.mjs`, `cards.mjs`; `/spawn` y `server.mjs` eliminados; verificado con engines reales Claude y Cursor).
 - [x] Corte 4: cancelación y supervisión (turno con `cancelling` compartido, workers del turno detenidos antes de responder `cancelled`, permisos pendientes cancelados, caída del engine con `refusal` y reinicio perezoso, `session/close`, tope `ZEDPSTACK_ACP_MAX_ENGINES`, vigilancia de `ZEDPSTACK_PARENT_PID` en el engine y el MCP; verificado con el engine real de Claude). Ver «Cancelación y supervisión» en docs/ARCHITECTURE.md.
-- [ ] Corte 5: verificación de modelo.
+- [x] Corte 5: verificación de modelo (`modelCheck.mjs` con `normalizeModelId`, `expectedModelFor` y `checkModel`; `expectedModel` en el spec, `modelCheck` derivado al leer y `model_check` en todas las salidas; aviso en tablero, tarjeta y resultado; error de CLI antiguo con la versión instalada; `setup_plan` recomienda fijar ids y `setup_write` avisa al escribir un alias; aviso del orquestador Claude por `usage_update`). Verificado con workers reales de Cursor y Claude y con los engines reales de Claude y Cursor. Ver «Verificación de modelo» en docs/ARCHITECTURE.md.
 - [ ] Corte 6: permisos y guarda de ediciones.
 - [ ] Corte 7: `/codex` y `/cursor` con preferencias.
 - [ ] Corte 8: endurecimiento multihilo.
