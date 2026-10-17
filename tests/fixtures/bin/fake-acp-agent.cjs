@@ -7,6 +7,8 @@ let sessionId = null;
 let receivedMcpServers = [];
 let modelValue = 'alpha';
 let modeValue = 'agent';
+const nativeOptions = process.env.FAKE_ACP_CONFIG_OPTIONS ? JSON.parse(process.env.FAKE_ACP_CONFIG_OPTIONS) : null;
+const nativeValues = new Map((nativeOptions ?? []).map((option) => [option.id, option.currentValue]));
 let authenticated = process.env.FAKE_ACP_AUTH !== '1';
 let authResolve;
 const authReady = new Promise((resolve) => { authResolve = resolve; });
@@ -53,6 +55,8 @@ function commandNotification() {
 }
 
 function configOptions() {
+  const definitions = JSON.parse(process.env.FAKE_ACP_CONFIG_BY_MODEL ?? '{}')[modelValue] ?? nativeOptions;
+  if (definitions) return definitions.map((option) => ({ ...option, currentValue: nativeValues.get(option.id) ?? option.currentValue }));
   return [
     {
       id: 'model',
@@ -81,7 +85,7 @@ function chunk(text) {
 function startInjectedMcp() {
   const server = receivedMcpServers.find((s) => s.name === 'zedpstack');
   if (!server) throw new Error('no zedpstack MCP server injected');
-  const env = { ...process.env };
+  const env = process.env.FAKE_ACP_MCP_ENV_ONLY === '1' ? {} : { ...process.env };
   for (const { name, value } of server.env ?? []) env[name] = value;
   return spawn(server.command, server.args, { env, stdio: ['pipe', 'pipe', 'inherit'] });
 }
@@ -232,7 +236,9 @@ async function handleRequest(msg) {
     }
     case 'session/set_config_option':
       if (process.env.FAKE_ACP_LEGACY === '1') throw new Error('legacy agent has no set_config_option');
+      if (process.env.FAKE_ACP_FAIL_CONFIG_ID === params.configId) throw new Error('temporary config failure');
       if (params.configId === 'model') modelValue = params.value;
+      nativeValues.set(params.configId, params.value);
       write(commandNotification(), { jsonrpc: '2.0', id, result: { configOptions: configOptions() } }, {
         jsonrpc: '2.0',
         method: 'session/update',

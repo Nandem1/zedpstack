@@ -15,15 +15,25 @@ const RUNTIME_NAMES = {
  * @param {string[]} installed
  */
 export function runtimeOption(current, installed = ['claude', 'codex', 'cursor']) {
-  const values = installed.length ? installed : ['claude', 'codex', 'cursor'];
   return {
     id: ZP_RUNTIME_ID,
     name: 'Orchestrator',
     category: '_zedpstack',
     type: 'select',
     currentValue: current,
-    options: values.map((value) => ({ value, name: RUNTIME_NAMES[value] ?? value })),
+    options: Object.entries(RUNTIME_NAMES).map(([value, name]) => ({
+      value, name, ...(!installed.includes(value) ? { description: '(no instalado)' } : {}),
+    })),
   };
+}
+
+export function optionValues(option) {
+  return (option?.options ?? []).flatMap((choice) => choice.options ?? [choice]).map((choice) => choice.value);
+}
+
+export function isOptionValueValid(option, value) {
+  if (option?.type === 'boolean') return typeof value === 'boolean';
+  return option?.type === 'select' && optionValues(option).includes(value);
 }
 
 export function mergeOptions(zpOption, childOptions = []) {
@@ -81,7 +91,7 @@ export function mergeCommands(childCommands = []) {
 }
 
 export function zedpstackHome(env = process.env) {
-  return env.ZEDPSTACK_HOME ?? path.join(os.homedir(), '.zedpstack');
+  return env.ZEDPSTACK_HOME ?? path.join(env.HOME ?? os.homedir(), '.zedpstack');
 }
 
 export function prefsPath(env = process.env) {
@@ -95,9 +105,12 @@ export function loadPrefs(env = process.env) {
   }
   try {
     const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const record = (value) => value && typeof value === 'object' && !Array.isArray(value);
     return {
-      lastRuntime: data.lastRuntime ?? 'claude',
-      perRuntime: data.perRuntime ?? {},
+      lastRuntime: Object.hasOwn(RUNTIME_NAMES, data?.lastRuntime) ? data.lastRuntime : 'claude',
+      perRuntime: Object.fromEntries(Object.entries(record(data?.perRuntime) ? data.perRuntime : {}).filter(
+        ([runtime, values]) => Object.hasOwn(RUNTIME_NAMES, runtime) && record(values),
+      )),
     };
   } catch {
     return { lastRuntime: 'claude', perRuntime: {} };

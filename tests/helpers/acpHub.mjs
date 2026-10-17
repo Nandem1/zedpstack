@@ -61,7 +61,8 @@ export function connectHub(t, env, { clientRequest, log } = {}) {
     env,
     ...(log ? { log } : {}),
     spawnEngine: async (opts) => {
-      const engine = await startEngine({ ...opts, env });
+      const variants = JSON.parse(env.FAKE_ACP_VARIANTS ?? '{}');
+      const engine = await startEngine({ ...opts, env: { ...env, ...variants[opts.runtime] } });
       engines.push(engine);
       return engine;
     },

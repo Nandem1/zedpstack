@@ -61,6 +61,7 @@ describe('engineMcpServers', () => {
   it('replaces a client zedpstack server and scopes ours to the outer session', () => {
     const other = { name: 'other', command: 'x', args: [], env: [] };
     const servers = engineMcpServers({
+      env: {},
       clientServers: [{ name: 'zedpstack', command: 'old', args: [], env: [] }, other],
       sessionId: 'sess-1',
       repo: '/r',
@@ -178,7 +179,7 @@ describe('hub worker cards through the injected MCP', () => {
     await ctx.rpc('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'MCPINFO' }] });
     const info = ctx.updates.findLast((u) => u.update.sessionUpdate === 'agent_message_chunk');
     const servers = JSON.parse(info.update.content.text);
-    assert.deepEqual(servers, engineMcpServers({ clientServers: [other], sessionId, repo: sb.repo, bridgePath: ctx.hub.bridgePath }));
+    assert.deepEqual(servers, engineMcpServers({ clientServers: [other], sessionId, repo: sb.repo, bridgePath: ctx.hub.bridgePath, env }));
     assert.equal(servers.at(-1).env.find((e) => e.name === 'ZEDPSTACK_ACP_BRIDGE').value, ctx.hub.bridgePath);
   });
 

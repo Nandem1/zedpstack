@@ -11,13 +11,15 @@ import { startBridge } from './bridge.mjs';
 import { createWorkerCards } from './cards.mjs';
 import { isBoardCommand, isChildCommand, parseEditsCommand } from './commands.mjs';
 import { engineMcpServers, startEngine } from './engine.mjs';
+import { inspectEngines } from './diagnostics.mjs';
 import {
   childOptionState,
+  isOptionValueValid,
   loadPrefs,
   mergeCommands,
   mergeOptions,
   parseRuntimeSwitch,
-  routeOption,
+  optionValues,
   runtimeOption,
   savePrefs,
   ZP_RUNTIME_ID,
@@ -111,8 +113,8 @@ export function createHub({
   }
 
   function mergedConfigFor(session) {
-    const zp = runtimeOption(session.runtime, ['claude', 'codex', 'cursor']);
-    zp.currentValue = session.runtime;
+    const installed = Object.entries(inspectEngines({ env })).filter(([, engine]) => engine.available).map(([runtime]) => runtime);
+    const zp = runtimeOption(session.runtime, installed);
     return mergeOptions(zp, session.childOptions.configOptions);
   }
 
@@ -128,14 +130,16 @@ export function createHub({
   }
 
   async function setChildOption(session, configId, value) {
+    const engine = session.engine;
     const route = session.childOptions.legacyRoutes[configId];
-    const params = { sessionId: session.engine.childSessionId };
+    const params = { sessionId: engine.childSessionId };
     if (route) params[route.valueKey] = value;
     else Object.assign(params, { configId, value });
-    const result = await session.engine.peer.request(route?.method ?? 'session/set_config_option', params);
+    const result = await engine.peer.request(route?.method ?? 'session/set_config_option', params);
+    if (session.engine !== engine || session.closed) return;
     if (result.configOptions != null) {
       session.childOptions = childOptionState(result);
-    } else if (route) {
+    } else {
       session.childOptions.configOptions = session.childOptions.configOptions.map((option) =>
         option.id === configId ? { ...option, currentValue: value } : option);
     }
@@ -143,14 +147,25 @@ export function createHub({
 
   async function applySavedPrefsToChild(session) {
     if (!session.engine?.peer || session.engine.dead) return;
-    const prefs = loadPrefs(env);
-    const saved = prefs.perRuntime[session.runtime] ?? {};
+    const runtime = session.runtime;
+    const engine = session.engine;
+    const saved = loadPrefs(env).perRuntime[runtime] ?? {};
     for (const [configId, value] of Object.entries(saved)) {
-      if (configId === ZP_RUNTIME_ID) continue;
+      if (session.engine !== engine || session.closed) return;
+      const option = session.childOptions.configOptions.find((option) => option.id === configId);
+      if (!isOptionValueValid(option, value)) {
+        const prefs = loadPrefs(env);
+        if (JSON.stringify(prefs.perRuntime[runtime]?.[configId]) === JSON.stringify(value)) {
+          delete prefs.perRuntime[runtime][configId];
+          savePrefs(prefs, env);
+          log(`${runtime}: dropped stale preference ${configId}=${JSON.stringify(value)}`);
+        }
+        continue;
+      }
       try {
         await setChildOption(session, configId, value);
-      } catch {
-        /* */
+      } catch (error) {
+        log(`${runtime}: could not reapply ${configId}: ${error.message}`);
       }
     }
   }
@@ -203,6 +218,7 @@ export function createHub({
           sessionId: session.sessionId,
           repo: session.repo,
           bridgePath: bridge.path,
+          env,
         }),
         env,
       });
@@ -250,10 +266,12 @@ export function createHub({
   }
 
   function wireEnginePeer(session) {
-    const peer = session.engine?.peer;
+    const engine = session.engine;
+    const peer = engine?.peer;
     if (!peer) return;
 
     peer.onNotification((method, params) => {
+      if (session.engine !== engine || session.closed) return;
       if (method !== 'session/update') return;
       const update = params.update ?? params;
       let outUpdate = update;
@@ -510,6 +528,46 @@ export function createHub({
     });
   }
 
+  async function applyConfig(session, { configId, value }) {
+    if (session.closed) throw Object.assign(new Error('session closed'), { rpc: -32602 });
+    const option = mergedConfigFor(session).find((option) => option.id === configId);
+    if (!isOptionValueValid(option, value)) {
+      const choices = option?.type === 'boolean' ? [true, false] : optionValues(option);
+      throw Object.assign(new Error(
+        `invalid value ${JSON.stringify(value)} for ${configId} in ${session.runtime}. Available: ${JSON.stringify(choices)}`,
+      ), { rpc: -32602 });
+    }
+    if (configId === ZP_RUNTIME_ID) {
+      await switchRuntime(session, value);
+    } else {
+      const runtime = session.runtime;
+      if (engineAlive(session)) await setChildOption(session, configId, value);
+      const prefs = loadPrefs(env);
+      prefs.perRuntime[runtime] ??= {};
+      prefs.perRuntime[runtime][configId] = value;
+      savePrefs(prefs, env);
+    }
+    return { configOptions: mergedConfigFor(session) };
+  }
+
+  function enqueueConfig(session, params) {
+    const result = new Promise((resolve, reject) => session.configQueue.push({ ...params, resolve, reject }));
+    if (!session.configDraining) {
+      session.configDraining = true;
+      // Zed sends defaults back to back; wait for the batch before choosing its runtime first.
+      setImmediate(async () => {
+        while (session.configQueue.length) {
+          const runtimeIndex = session.configQueue.findIndex((change) => change.configId === ZP_RUNTIME_ID);
+          const [change] = session.configQueue.splice(Math.max(0, runtimeIndex), 1);
+          try { change.resolve(await applyConfig(session, change)); }
+          catch (error) { change.reject(error); }
+        }
+        session.configDraining = false;
+      });
+    }
+    return result;
+  }
+
   const handle = {
     async initialize(params) {
       clientCapabilities = params.clientCapabilities ?? {};
@@ -553,6 +611,8 @@ export function createHub({
         pendingPermissions: new Set(),
         alwaysAllowed: new Set(),
         editsAllowed: false,
+        configQueue: [],
+        configDraining: false,
         cards: createWorkerCards({ repo, sessionId, notify: notifyZed, streamMode: acpStreamMode(env) }),
       };
       sessions.set(sessionId, session);
@@ -586,21 +646,7 @@ export function createHub({
       const session = getHubSession(params.sessionId);
       if (!session) throw Object.assign(new Error(`unknown session: ${params.sessionId}`), { rpc: -32602 });
 
-      if (params.configId === ZP_RUNTIME_ID) {
-        await switchRuntime(session, params.value);
-        return { configOptions: mergedConfigFor(session) };
-      }
-
-      if (routeOption(params.configId) === 'child' && session.engine?.peer && !session.engine.dead) {
-        await setChildOption(session, params.configId, params.value);
-      }
-
-      const prefs = loadPrefs(env);
-      if (!prefs.perRuntime[session.runtime]) prefs.perRuntime[session.runtime] = {};
-      prefs.perRuntime[session.runtime][params.configId] = params.value;
-      savePrefs(prefs, env);
-
-      return { configOptions: mergedConfigFor(session) };
+      return enqueueConfig(session, params);
     },
 
     async 'session/set_mode'(params) {
@@ -627,7 +673,7 @@ export function createHub({
       const text = promptTextFromBlocks(params.prompt);
       const runtimeSwitch = parseRuntimeSwitch(text);
       if (runtimeSwitch) {
-        await switchRuntime(session, runtimeSwitch);
+        await enqueueConfig(session, { configId: ZP_RUNTIME_ID, value: runtimeSwitch });
         return { stopReason: 'end_turn' };
       }
 
