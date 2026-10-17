@@ -5,10 +5,11 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { closeAgent } from '../src/agents/lifecycle.mjs';
-import { isProcessAlive, readAgent } from '../src/agents/store.mjs';
+import { isProcessAlive, loadAgent } from '../src/agents/store.mjs';
 import { createSessionStore, handleAcpNotification, handleAcpRequest, runSpawnTurn } from '../src/acp/server.mjs';
 import { THROTTLE_MS } from '../src/acp/updates.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
+import { childEnv } from './helpers/env.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const FAKE_AGENT = path.join(ROOT, 'tests', 'fixtures', 'bin', 'fake-acp-agent.cjs');
@@ -25,7 +26,7 @@ function fakeEngineEnv(extra = {}) {
 
 function startAcpServer(extraEnv = {}) {
   const child = spawn(process.execPath, [path.join(ROOT, 'scripts', 'acp.mjs')], {
-    env: { ...process.env, ...fakeEngineEnv(extraEnv) },
+    env: childEnv(fakeEngineEnv(extraEnv)),
     stdio: ['pipe', 'pipe', 'inherit'],
   });
   const stdoutLines = [];
@@ -97,10 +98,10 @@ describe('ACP spawn cancellation', () => {
 
     assert.equal(agentIds.length, 2);
     for (const id of agentIds) {
-      const agent = readAgent(sb.repo, id);
+      const agent = loadAgent(sb.repo, id);
       assert.equal(agent.status, 'stopped', `${id} stopped before the turn settles`);
-      assert.equal(isProcessAlive(agent.runnerPid), false, `${id} runner exited`);
-      assert.equal(isProcessAlive(agent.workerPid), false, `${id} worker exited`);
+      assert.equal(isProcessAlive(agent.launch.runnerPid), false, `${id} runner exited`);
+      assert.equal(isProcessAlive(agent.run?.workerPid), false, `${id} worker exited`);
     }
   });
 });
@@ -269,10 +270,11 @@ describe('ACP server', () => {
     const res = await promptPromise;
     assert.equal(res.result.stopReason, 'cancelled');
     for (const call of calls) {
-      const agent = readAgent(sb.repo, call.toolCallId.slice(3));
-      assert.equal(agent.status, 'stopped', `${agent.id} stopped before cancelled response`);
-      assert.equal(isProcessAlive(agent.runnerPid), false, `${agent.id} runner exited`);
-      assert.equal(isProcessAlive(agent.workerPid), false, `${agent.id} worker exited`);
+      const agent = loadAgent(sb.repo, call.toolCallId.slice(3));
+      const { id } = agent.spec;
+      assert.equal(agent.status, 'stopped', `${id} stopped before cancelled response`);
+      assert.equal(isProcessAlive(agent.launch.runnerPid), false, `${id} runner exited`);
+      assert.equal(isProcessAlive(agent.run?.workerPid), false, `${id} worker exited`);
     }
   });
 });

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeSandbox } from './helpers/sandbox.mjs';
+import { childEnv } from './helpers/env.mjs';
 import { applyModelSheetToConfig } from '../src/setupConfig.mjs';
 import { runPlaybook } from '../src/run.mjs';
 import { readManifest, writeManifestAtomic } from '../src/manifest.mjs';
@@ -61,7 +62,7 @@ describe('architect batch execution', () => {
       fileURLToPath(new URL('../scripts/dispatch.mjs', import.meta.url)),
       'run', '--playbook', 'architect-sketch', '--goal', 'Design src/index.mjs',
       '--repo', sandbox.repo, '--run-id', 'three',
-    ], { env: process.env, encoding: 'utf8', timeout: 20_000 });
+    ], { env: childEnv(), encoding: 'utf8', timeout: 20_000 });
     assert.equal(cli.status, 0, cli.stderr);
     const { runRoot, status } = JSON.parse(cli.stdout);
     assert.equal(status, 'awaiting_judgment');

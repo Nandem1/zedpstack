@@ -6,12 +6,13 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { makeSandbox } from './helpers/sandbox.mjs';
+import { childEnv } from './helpers/env.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 function startServer() {
   const child = spawn(process.execPath, [path.join(ROOT, 'scripts', 'mcp.mjs')], {
-    env: process.env,
+    env: childEnv(),
     stdio: ['pipe', 'pipe', 'inherit'],
   });
   const pending = new Map();

@@ -15,6 +15,7 @@ import {
 } from '../src/guard.mjs';
 import { buildDoctorReport, formatDoctorReport } from '../src/setupReport.mjs';
 import { handleRequest } from '../src/mcp/server.mjs';
+import { childEnv } from './helpers/env.mjs';
 
 describe('orchestrator edit guard decide()', () => {
   it('denies Edit inside repo, allows outside and .zedpstack', () => {
@@ -123,7 +124,7 @@ describe('guard-edits hook script', () => {
     const res = spawnSync(process.execPath, [hookScript], {
       input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: target }, cwd: repo }),
       encoding: 'utf8',
-      env: { ...process.env, ZEDPSTACK_REPO: repo },
+      env: childEnv({ ZEDPSTACK_REPO: repo }),
     });
     assert.equal(res.status, 2);
     assert.match(res.stderr, /delegate this edit via spawn_agent/);
