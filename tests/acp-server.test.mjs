@@ -5,16 +5,27 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
-import { AVAILABLE_COMMANDS } from '../src/acp/commands.mjs';
+import { mergeCommands } from '../src/acp/options.mjs';
 import { createSessionStore, handleAcpRequest } from '../src/acp/server.mjs';
 import { THROTTLE_MS } from '../src/acp/updates.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const FAKE_AGENT = path.join(ROOT, 'tests', 'fixtures', 'bin', 'fake-acp-agent.cjs');
+
+function fakeEngineEnv(extra = {}) {
+  const cmd = JSON.stringify([process.execPath, FAKE_AGENT]);
+  return {
+    ZEDPSTACK_ACP_ENGINE_CLAUDE: cmd,
+    ZEDPSTACK_ACP_ENGINE_CODEX: cmd,
+    ZEDPSTACK_ACP_ENGINE_CURSOR: cmd,
+    ...extra,
+  };
+}
 
 function startAcpServer(extraEnv = {}) {
   const child = spawn(process.execPath, [path.join(ROOT, 'scripts', 'acp.mjs')], {
-    env: { ...process.env, ...extraEnv },
+    env: { ...process.env, ...fakeEngineEnv(extraEnv) },
     stdio: ['pipe', 'pipe', 'inherit'],
   });
   const stdoutLines = [];
@@ -106,7 +117,7 @@ describe('ACP server', () => {
         m.params?.update?.sessionUpdate === 'available_commands_update',
     );
     assert.ok(noteLine > responseLine, 'available_commands_update after session/new response');
-    assert.deepEqual(allParsed[noteLine].params.update.availableCommands, AVAILABLE_COMMANDS);
+    assert.deepEqual(allParsed[noteLine].params.update.availableCommands, mergeCommands([]));
     const promptIdx = server.stdoutLines.length;
     await server.rpc('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'hello' }] });
     const cmdsBeforePrompt = server.stdoutLines

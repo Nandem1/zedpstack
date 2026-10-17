@@ -1,6 +1,8 @@
 # Spike ACP (Agent Client Protocol v1)
 
-Adaptador experimental que expone zedpstack como agente ACP por stdio (JSON-RPC 2.0, una línea por mensaje). El orquestador en Zed envía comandos de texto; el adaptador lanza workers CLI existentes y refleja su progreso como `tool_call` / `tool_call_update`.
+Adaptador que expone zedpstack como agente ACP por stdio (JSON-RPC 2.0, una línea por mensaje). La arquitectura objetivo y los cortes de implementación están en [ACP_DESIGN.md](./ACP_DESIGN.md).
+
+El hub ACP (`src/acp/hub.mjs`) reenvía la conversación a un engine hijo ACP (Claude/Codex/Cursor) y sigue manejando `/spawn` y `/board` localmente. Escribe `/claude`, `/codex` o `/cursor` (o elige **Orchestrator** en el pie del hilo) para cambiar de runtime; eso reinicia la conversación del engine hijo.
 
 ## Registro en Zed (settings.json)
 
@@ -36,7 +38,7 @@ Zed 1.24+ registra `spawn` y `board` como comandos ACP (`available_commands_upda
 
 Solo la **primera línea** es la cabecera hasta `::`; el prompt puede continuar en líneas siguientes (incluidas líneas que empiecen por `/`).
 
-Cualquier otro texto recibe un `agent_message_chunk` con la ayuda.
+Cualquier otro texto se reenvía al engine ACP hijo activo (respuesta en streaming vía `agent_message_chunk`).
 
 ## Checklist manual (Zed 1.24.2)
 
@@ -68,7 +70,7 @@ Cualquier otro texto recibe un `agent_message_chunk` con la ayuda.
 ## Arquitectura mínima
 
 ```
-Zed (stdio) → scripts/acp.mjs → src/acp/server.mjs
-                    ↓ spawnAgent / followAgent / agentResult
-              workers CLI (.zedpstack/agents/<id>/)
+Zed (stdio) → scripts/acp.mjs → src/acp/hub.mjs → engine ACP hijo (stdio)
+                    ↓ /spawn, /board
+              spawnAgent / followAgent → workers CLI (.zedpstack/agents/<id>/)
 ```
