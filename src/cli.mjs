@@ -198,6 +198,7 @@ export async function main(argv) {
 
   if (command === 'mcp') {
     await startMcpServer();
+    process.stdout.write('', () => process.exit(0));
     return;
   }
 

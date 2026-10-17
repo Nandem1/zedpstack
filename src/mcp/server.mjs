@@ -5,6 +5,7 @@
 
 import path from 'node:path';
 import readline from 'node:readline';
+import { isProcessAlive } from '../agents/store.mjs';
 import { ZEDPSTACK_VERSION } from '../constants.mjs';
 import { startSession } from '../guard.mjs';
 import { orchestratorPrompt } from '../orchestratorPrompt.mjs';
@@ -102,10 +103,20 @@ export async function handleRequest(msg, { notify = () => {} } = {}) {
   }
 }
 
-export function startMcpServer({ input = process.stdin, output = process.stdout } = {}) {
+/**
+ * Resolves when the client is gone: stdin ended and every reply was written, or
+ * the process `ZEDPSTACK_PARENT_PID` names died. The ACP hub sets that pid
+ * because a SIGKILLed hub leaves its engine, and this server, holding the pipes.
+ */
+export function startMcpServer({
+  input = process.stdin,
+  output = process.stdout,
+  parentPid = Number(process.env.ZEDPSTACK_PARENT_PID) || null,
+  parentPollMs = 2000,
+} = {}) {
   const write = (obj) => output.write(`${JSON.stringify(obj)}\n`);
   const rl = readline.createInterface({ input, crlfDelay: Infinity });
-  rl.on('line', async (line) => {
+  const handleLine = async (line) => {
     if (!line.trim()) return;
     let msg;
     try {
@@ -124,6 +135,21 @@ export function startMcpServer({ input = process.stdin, output = process.stdout 
     } catch (e) {
       write({ jsonrpc: '2.0', id: msg.id, error: err(e.rpc ?? -32603, e.message) });
     }
+  };
+  const inflight = new Set();
+  rl.on('line', (line) => {
+    const reply = handleLine(line);
+    inflight.add(reply);
+    reply.finally(() => inflight.delete(reply));
   });
-  return new Promise((resolve) => rl.on('close', resolve));
+  return new Promise((resolve) => {
+    rl.on('close', () => Promise.allSettled([...inflight]).then(() => resolve()));
+    if (!parentPid) return;
+    const watchdog = setInterval(() => {
+      if (isProcessAlive(parentPid)) return;
+      clearInterval(watchdog);
+      resolve();
+    }, parentPollMs);
+    watchdog.unref();
+  });
 }

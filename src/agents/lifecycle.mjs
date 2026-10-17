@@ -361,6 +361,32 @@ export async function stopAgent({ repo, id }) {
   return summarize(loadAgent(repoRoot, id));
 }
 
+/** Ids of the unfinished agents an ACP session started at or after `sinceMs`. */
+export function liveSessionAgentIds({ repo, sessionId, sinceMs = 0 }) {
+  const repoRoot = resolveRepo(repo);
+  return listAgentIds(repoRoot).filter((id) => {
+    let view;
+    try {
+      view = loadAgent(repoRoot, id);
+    } catch {
+      return false;
+    }
+    return view.spec.origin?.sessionId === sessionId
+      && Date.parse(view.spec.createdAt) >= sinceMs
+      && !TERMINAL_AGENT_STATUSES.has(view.status);
+  });
+}
+
+/**
+ * Stop what `liveSessionAgentIds` selects. Each stop is marked before this
+ * returns its promise, which settles once the processes are gone.
+ */
+export function stopSessionAgents({ repo, sessionId, sinceMs }) {
+  const ids = liveSessionAgentIds({ repo, sessionId, sinceMs });
+  const stops = ids.map((id) => stopAgent({ repo, id }).catch(() => null));
+  return Promise.all(stops).then(() => ids);
+}
+
 export async function closeAgent({ repo, id, removeWorktree = false, deleteBranch = false }) {
   const repoRoot = resolveRepo(repo);
   const summary = await stopAgent({ repo: repoRoot, id });
