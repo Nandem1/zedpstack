@@ -7,8 +7,9 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { ZEDPSTACK_VERSION } from '../constants.mjs';
 import { startSession } from '../guard.mjs';
+import { orchestratorPrompt } from '../orchestratorPrompt.mjs';
 import { defaultZedpstackRepo } from '../repoDefault.mjs';
-import { TOOLS, readOwnDoc } from './tools.mjs';
+import { TOOLS } from './tools.mjs';
 
 const SUPPORTED_PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 
@@ -27,13 +28,6 @@ const PROMPTS = [
     arguments: [{ name: 'task', description: 'What you want done', required: true }],
   },
 ];
-
-/** The `/zedpstack` prompt is SKILL.md's body, so the skill and the prompt never drift. */
-export function orchestratorPrompt(task) {
-  const { text, path: skillPath } = readOwnDoc('SKILL.md');
-  const body = text.replace(/^---[\s\S]*?---\s*/, '').trim();
-  return `${body}\n\n(zedpstack lives at ${skillPath.replace(/\/SKILL\.md$/, '')}.)\n\n## Task\n\n${task ?? ''}\n`;
-}
 
 const err = (code, message) => ({ code, message });
 

@@ -15,6 +15,10 @@ export function dispatchScriptPath() {
   return path.join(zedpstackRoot(), 'scripts', 'dispatch.mjs');
 }
 
+export function mcpScriptPath() {
+  return path.join(zedpstackRoot(), 'scripts', 'mcp.mjs');
+}
+
 export function runDir(repoRoot, runId) {
   return path.join(repoRoot, '.zedpstack', 'runs', runId);
 }
