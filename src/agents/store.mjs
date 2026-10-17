@@ -12,6 +12,7 @@ import { checkModel } from '../modelCheck.mjs';
  *   run.json      RunState, replaced whole by the runner process only
  *   stop.json     { requestedAt, by }, created once by stopAgent
  *   cleanup.json  { removedAt, branchDeleted }, created once by closeAgent
+ *   apply.json    { appliedAt, commit }, created once by the first applyAgentChanges that succeeded
  *
  * Status is derived when reading (`deriveStatus`); readers never write.
  */
@@ -120,6 +121,10 @@ export function markCleanup(repoRoot, id, { branchDeleted }) {
   return { cleanup: readJson(target), created };
 }
 
+export function markApplied(repoRoot, id, { commit }) {
+  createOnce(file(repoRoot, id, 'apply.json'), { appliedAt: new Date().toISOString(), commit });
+}
+
 /** Pure. `stop` is sticky: it wins over an outcome the runner writes after it. */
 export function deriveStatus(spec, run, launch, stop, runnerAlive, nowMs) {
   if (stop) return 'stopped';
@@ -186,7 +191,7 @@ function fromV1(record) {
 }
 
 /**
- * Merged AgentView `{spec, run, launch, stop, cleanup, status, error, finishedAt, modelCheck}`.
+ * Merged AgentView `{spec, run, launch, stop, cleanup, applied, status, error, finishedAt, modelCheck}`.
  * `error`, `finishedAt` and `modelCheck` are derived alongside `status` so
  * callers never re-branch on which file decided it.
  */
@@ -200,6 +205,7 @@ export function loadAgent(repoRoot, id, nowMs = Date.now()) {
   const launch = readJson(path.join(dir, 'launch.json')) ?? legacy?.launch ?? null;
   const stop = readJson(path.join(dir, 'stop.json')) ?? legacy?.stop ?? null;
   const cleanup = readJson(path.join(dir, 'cleanup.json')) ?? legacy?.cleanup ?? null;
+  const applied = readJson(path.join(dir, 'apply.json'));
   const runnerAlive = isProcessAlive(run?.runnerPid ?? launch?.runnerPid);
   const status = deriveStatus(spec, run, launch, stop, runnerAlive, nowMs);
   let error = null;
@@ -218,7 +224,7 @@ export function loadAgent(repoRoot, id, nowMs = Date.now()) {
     effective: run?.effectiveModel,
     expected: spec.expectedModel,
   });
-  return { spec, run, launch, stop, cleanup, status, error, finishedAt, modelCheck };
+  return { spec, run, launch, stop, cleanup, applied, status, error, finishedAt, modelCheck };
 }
 
 export function listAgentIds(repoRoot) {

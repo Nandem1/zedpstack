@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { askHuman } from '../acp/bridge.mjs';
 import { formatBoardText } from '../agents/board.mjs';
 import {
   agentBoard,
@@ -8,10 +9,12 @@ import {
   agentStatus,
   applyAgentChanges,
   closeAgent,
+  closeDiscardsWork,
   listAgents,
   spawnAgent,
   waitAgents,
 } from '../agents/lifecycle.mjs';
+import { isGitRepo } from '../agents/worktree.mjs';
 import { RUNTIME_BINARIES } from '../permissions.mjs';
 import { listPstackSkills, readPstackSkillFile, resolvePstackInstall } from '../pstack.mjs';
 import { buildSetupPlan, writeSetup } from '../setupWizard.mjs';
@@ -26,6 +29,104 @@ const agentIdProp = { type: 'string', description: 'Id returned by spawn_agent.'
 
 function defaultRepo(args) {
   return args.repo ?? process.env.ZEDPSTACK_REPO ?? process.cwd();
+}
+
+const REJECTED = 'rejected by user';
+
+/** A risky tool's normal result shape plus why nothing happened. */
+function rejected(shape, verdict) {
+  return { ...shape, error: REJECTED, ...(verdict.reason ? { reason: verdict.reason } : {}) };
+}
+
+function changesDetail(id, changes) {
+  return [
+    `Agente: ${id}`,
+    `Commit: ${changes.commit}`,
+    `Rama: ${changes.branch}`,
+    'Archivos:',
+    ...(changes.files ?? []).map((line) => `  ${line}`),
+    changes.diffStat ?? '',
+  ].join('\n').trimEnd();
+}
+
+/** A writer in the user's checkout: asked for `isolation: 'none'`, or no git repo to isolate in. */
+function writesInPlace(args, repo) {
+  if (args.readonly === true) return false;
+  if (args.isolation === 'none') return true;
+  try {
+    return !isGitRepo(repo);
+  } catch {
+    return false;
+  }
+}
+
+async function spawnWithConsent(args) {
+  const repo = defaultRepo(args);
+  if (writesInPlace(args, repo)) {
+    const verdict = await askHuman({
+      action: 'spawn_agent',
+      title: `Lanzar un writer que edita el checkout directamente (${args.role ?? args.description ?? 'agente'})`,
+      detail: [
+        `Repo: ${repo}`,
+        `Rol: ${args.role ?? '-'}  modelo: ${args.model ?? 'según la hoja'}`,
+        'Tarea:',
+        String(args.prompt ?? '').slice(0, 2000),
+      ].join('\n'),
+    });
+    if (!verdict.allowed) return rejected({ agent_id: null, spawned: false, isolation: 'none', cwd: repo }, verdict);
+  }
+  return spawnAgent({ ...args, repo });
+}
+
+async function applyWithConsent(args) {
+  const repo = defaultRepo(args);
+  const id = args.agent_id;
+  const { status, changes } = agentResult({ repo, id });
+  if (status === 'completed' && changes?.commit) {
+    const verdict = await askHuman({
+      action: 'apply_agent_changes',
+      agentId: id,
+      title: `Aplicar los cambios de ${id} al checkout`,
+      detail: changesDetail(id, changes),
+    });
+    if (!verdict.allowed) return rejected({ agent_id: id, commit: changes.commit, applied: false }, verdict);
+  }
+  return applyAgentChanges({ repo, id });
+}
+
+async function closeWithConsent(args) {
+  const repo = defaultRepo(args);
+  const id = args.agent_id;
+  const removeWorktree = Boolean(args.remove_worktree);
+  const deleteBranch = Boolean(args.delete_branch);
+  if (closeDiscardsWork({ repo, id, removeWorktree, deleteBranch })) {
+    const { status, changes } = agentResult({ repo, id });
+    const verdict = await askHuman({
+      action: 'close_agent',
+      agentId: id,
+      title: `Descartar el trabajo no aplicado de ${id}`,
+      detail: [
+        `Agente: ${id} (${status})`,
+        `Borra: ${[removeWorktree && 'worktree', deleteBranch && 'rama'].filter(Boolean).join(' y ')}`,
+        changes?.commit ? changesDetail(id, changes) : 'El agente sigue trabajando; su trabajo en curso se pierde.',
+      ].join('\n'),
+    });
+    if (!verdict.allowed) return rejected({ agent_id: id, closed: false, worktree: null }, verdict);
+  }
+  return closeAgent({ repo, id, removeWorktree, deleteBranch });
+}
+
+async function setupWriteWithConsent(args) {
+  const request = { defaultEffort: args.default_effort, roles: args.roles ?? {}, dryRun: Boolean(args.dry_run) };
+  if (!request.dryRun) {
+    const verdict = await askHuman({
+      action: 'setup_write',
+      title: 'Reescribir la hoja de workers de zedpstack',
+      detail: JSON.stringify({ default_effort: request.defaultEffort ?? null, roles: request.roles }, null, 2),
+    });
+    if (!verdict.allowed) return rejected({ written: false, changed: false }, verdict);
+  }
+  return writeSetup(request);
 }
 
 function runtimeAvailability() {
@@ -68,7 +169,7 @@ export const TOOLS = [
       },
       required: ['prompt'],
     },
-    handler: (args) => spawnAgent({ ...args, repo: defaultRepo(args) }),
+    handler: spawnWithConsent,
     board: (args) => formatBoardText(agentBoard({ repo: defaultRepo(args), recentMinutes: 0 })),
   },
   {
@@ -124,7 +225,7 @@ export const TOOLS = [
     name: 'apply_agent_changes',
     description: "Bring a finished writer's commit into the host working tree as uncommitted changes (git cherry-pick --no-commit). Aborts cleanly on conflict.",
     inputSchema: { type: 'object', properties: { agent_id: agentIdProp, repo: repoProp }, required: ['agent_id'] },
-    handler: (args) => applyAgentChanges({ repo: defaultRepo(args), id: args.agent_id }),
+    handler: applyWithConsent,
   },
   {
     name: 'close_agent',
@@ -139,13 +240,7 @@ export const TOOLS = [
       },
       required: ['agent_id'],
     },
-    handler: (args) =>
-      closeAgent({
-        repo: defaultRepo(args),
-        id: args.agent_id,
-        removeWorktree: Boolean(args.remove_worktree),
-        deleteBranch: Boolean(args.delete_branch),
-      }),
+    handler: closeWithConsent,
   },
   {
     name: 'list_agents',
@@ -190,7 +285,7 @@ export const TOOLS = [
         dry_run: { type: 'boolean' },
       },
     },
-    handler: (args) => writeSetup({ defaultEffort: args.default_effort, roles: args.roles ?? {}, dryRun: Boolean(args.dry_run) }),
+    handler: setupWriteWithConsent,
   },
   {
     name: 'read_skill',

@@ -65,13 +65,33 @@ export function findSessionRepoFromCwd(cwd) {
   return null;
 }
 
+/** Realpath of the deepest existing ancestor: engines report /private/tmp for a /tmp cwd on macOS. */
+function realPath(target) {
+  const rest = [];
+  let dir = path.resolve(target);
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync(dir), ...rest);
+    } catch {
+      const parent = path.dirname(dir);
+      if (parent === dir) return path.resolve(target);
+      rest.unshift(path.basename(dir));
+      dir = parent;
+    }
+  }
+}
+
+function repoRelative(targetPath, repoRoot) {
+  return path.relative(realPath(repoRoot), realPath(targetPath));
+}
+
 function isInsideRepo(targetPath, repoRoot) {
-  const rel = path.relative(path.resolve(repoRoot), path.resolve(targetPath));
+  const rel = repoRelative(targetPath, repoRoot);
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
 function isZedpstackInternal(targetPath, repoRoot) {
-  const rel = path.relative(path.resolve(repoRoot), path.resolve(targetPath));
+  const rel = repoRelative(targetPath, repoRoot);
   return rel === '.zedpstack' || rel.startsWith(`.zedpstack${path.sep}`);
 }
 
@@ -115,7 +135,7 @@ function stripShellNoise(command) {
 function resolveBashTarget(target, cwd, repoRoot) {
   const resolved = path.isAbsolute(target) ? target : path.resolve(cwd, target);
   if (!isInsideRepo(resolved, repoRoot) || isZedpstackInternal(resolved, repoRoot)) return null;
-  return path.relative(repoRoot, resolved) || target;
+  return repoRelative(resolved, repoRoot) || target;
 }
 
 function fileRedirectTarget(command) {
@@ -191,18 +211,30 @@ export function decide({ tool, input, cwd, env = process.env }) {
     const session = readSession(repoRoot);
     if (!session) return { deny: false, reason: null };
     if (session.editsAllowed) return { deny: false, reason: null };
+    return editVerdict({ tool, input, cwd, repoRoot });
+  } catch {
+    return { deny: false, reason: null };
+  }
+}
 
+/**
+ * The edit rules alone, for a repo the caller already decided is guarded: the
+ * PreToolUse hook gets it from the session marker, the ACP hub from its session cwd.
+ */
+export function editVerdict({ tool, input, cwd, repoRoot }) {
+  try {
     if (EDIT_TOOLS.has(tool)) {
       const target = editTargetPath(tool, input);
       if (!target) return { deny: false, reason: null };
       const resolved = path.isAbsolute(target) ? target : path.resolve(cwd ?? repoRoot, target);
       if (!isInsideRepo(resolved, repoRoot)) return { deny: false, reason: null };
       if (isZedpstackInternal(resolved, repoRoot)) return { deny: false, reason: null };
+      const auditPath = repoRelative(resolved, repoRoot) || target;
       return {
         deny: true,
-        reason: `orchestrator edit guard: delegate this edit via spawn_agent (${path.relative(repoRoot, resolved) || target})`,
+        reason: `orchestrator edit guard: delegate this edit via spawn_agent (${auditPath})`,
         repoRoot,
-        auditPath: path.relative(repoRoot, resolved) || target,
+        auditPath,
       };
     }
 

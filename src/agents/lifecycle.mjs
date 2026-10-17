@@ -25,6 +25,7 @@ import {
   isProcessAlive,
   listAgentIds,
   loadAgent,
+  markApplied,
   markCleanup,
   markStop,
   newAgentId,
@@ -432,7 +433,22 @@ export function applyAgentChanges({ repo, id }) {
   if (!commit) {
     return { agent_id: id, applied: false, error: 'agent left no committed changes' };
   }
-  return { agent_id: id, commit, ...applyAgentCommit(repoRoot, commit) };
+  const result = applyAgentCommit(repoRoot, commit);
+  if (result.applied) markApplied(repoRoot, id, { commit });
+  return { agent_id: id, commit, ...result };
+}
+
+/**
+ * Whether `closeAgent` with these flags could throw away a writer's work that
+ * never reached the host: a writer with a worktree, not applied, that is still
+ * running or left a commit.
+ */
+export function closeDiscardsWork({ repo, id, removeWorktree = false, deleteBranch = false }) {
+  if (!removeWorktree && !deleteBranch) return false;
+  const view = loadAgent(resolveRepo(repo), id);
+  if (!view.spec.worktree || view.cleanup || view.applied) return false;
+  if (!TERMINAL_AGENT_STATUSES.has(view.status)) return true;
+  return Boolean(view.run?.outcome?.changes?.commit);
 }
 
 export function listAgents({ repo, status }) {
