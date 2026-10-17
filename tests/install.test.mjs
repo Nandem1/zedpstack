@@ -4,6 +4,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { guardEditsHookCommand, runInstall } from '../src/install.mjs';
+import { zedpstackRoot } from '../src/paths.mjs';
+
+function assertSkillLinks(home, hostDir) {
+  const skillsDir = path.join(home, hostDir, 'skills');
+  assert.deepEqual(fs.readdirSync(skillsDir).sort(), ['setup-zedpstack', 'zedpstack', 'zedpstack-bitacora']);
+  for (const name of ['zedpstack', 'setup-zedpstack', 'zedpstack-bitacora']) {
+    const link = path.join(skillsDir, name);
+    assert.ok(fs.lstatSync(link).isSymbolicLink());
+    assert.equal(fs.realpathSync(link), name === 'zedpstack' ? zedpstackRoot() : path.join(zedpstackRoot(), name));
+    assert.ok(fs.existsSync(path.join(link, 'SKILL.md')));
+  }
+}
 
 describe('install', () => {
   it('dry run changes nothing; apply registers codex, cursor and skill links idempotently', () => {
@@ -15,6 +27,8 @@ describe('install', () => {
     const dry = runInstall({ hosts: ['codex', 'cursor'], home });
     assert.ok(dry.every((h) => h.actions.every((a) => a.result !== 'linked')));
     assert.ok(!fs.existsSync(path.join(home, '.codex', 'config.toml')));
+    assert.ok(!fs.existsSync(path.join(home, '.codex', 'skills')));
+    assert.ok(!fs.existsSync(path.join(home, '.agents', 'skills')));
 
     runInstall({ hosts: ['codex', 'cursor'], home, apply: true });
     const toml = fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8');
@@ -24,7 +38,8 @@ describe('install', () => {
     const cursor = JSON.parse(fs.readFileSync(path.join(home, '.cursor', 'mcp.json'), 'utf8'));
     assert.ok(cursor.mcpServers.other, 'keeps other servers');
     assert.match(cursor.mcpServers.zedpstack.args[0], /scripts\/mcp\.mjs$/);
-    assert.ok(fs.lstatSync(path.join(home, '.codex', 'skills', 'zedpstack')).isSymbolicLink());
+    assertSkillLinks(home, '.codex');
+    assertSkillLinks(home, '.agents');
 
     const again = runInstall({ hosts: ['codex', 'cursor'], home, apply: true });
     assert.ok(again.every((h) => h.actions.every((a) => a.result === 'unchanged')));
@@ -35,6 +50,8 @@ describe('install', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-home-'));
     delete process.env.XDG_CONFIG_HOME;
     const [zed] = runInstall({ hosts: ['zed'], home });
+    assert.equal(zed.actions.length, 1);
+    assert.equal(zed.actions[0].kind, 'mcp');
     assert.equal(zed.actions[0].state, 'manual');
     assert.ok(JSON.parse(zed.actions[0].snippet).context_servers.zedpstack.command);
   });
@@ -52,12 +69,20 @@ describe('claude-code orchestrator edit guard hook', () => {
     process.env.PATH = home;
 
     const [installed] = runInstall({ hosts: ['claude-code'], home, apply: true });
+    assertSkillLinks(home, '.claude');
     assert.match(installed.actions.find((a) => a.kind === 'mcp').result, /^failed: .*ENOENT/);
     assert.equal(installed.actions.find((a) => a.kind === 'orchestrator-edit-guard').result, 'installed');
   });
 
-  it('installs idempotently and preserves other PreToolUse hooks', () => {
+  it('installs idempotently and preserves other PreToolUse hooks', (t) => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-claude-hook-'));
+    const originalPath = process.env.PATH;
+    t.after(() => {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+      fs.rmSync(home, { recursive: true, force: true });
+    });
+    process.env.PATH = home;
     const settingsPath = path.join(home, '.claude', 'settings.json');
     fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
     fs.writeFileSync(

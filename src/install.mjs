@@ -108,6 +108,7 @@ function skillLinks(skillsDir) {
   return [
     symlinkAction(path.join(skillsDir, 'zedpstack'), root),
     symlinkAction(path.join(skillsDir, 'setup-zedpstack'), path.join(root, 'setup-zedpstack')),
+    symlinkAction(path.join(skillsDir, 'zedpstack-bitacora'), path.join(root, 'zedpstack-bitacora')),
   ];
 }
 
