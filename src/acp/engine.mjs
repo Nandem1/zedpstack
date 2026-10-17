@@ -5,6 +5,7 @@ import path from 'node:path';
 import { ZEDPSTACK_VERSION } from '../constants.mjs';
 import { mcpScriptPath } from '../paths.mjs';
 import { createPeer } from './rpc.mjs';
+import { AUTH_POLICY, selectAuthMethod } from './auth.mjs';
 
 const PINNED = {
   claude: ['npx', '-y', '@agentclientprotocol/claude-agent-acp@0.93.0'],
@@ -72,24 +73,32 @@ function resolveFromRegistry(runtime, registry, registryDir, platformArch) {
   return null;
 }
 
+export function engineMcpEnv({ env, sessionId, repo, bridgePath = null, parentPid }) {
+  const forwarded = Object.fromEntries(Object.entries(env).filter(([name, value]) =>
+    value != null && (/^(ZEDPSTACK_|PSTACK_)/.test(name) || name === 'PATH' || name === 'HOME')));
+  Object.assign(forwarded, {
+    ZEDPSTACK_ACP_SESSION: sessionId,
+    ZEDPSTACK_REPO: repo,
+    ZEDPSTACK_PARENT_PID: String(parentPid),
+  });
+  if (bridgePath) forwarded.ZEDPSTACK_ACP_BRIDGE = bridgePath;
+  else delete forwarded.ZEDPSTACK_ACP_BRIDGE;
+  return Object.entries(forwarded).map(([name, value]) => ({ name, value: String(value) }));
+}
+
 /**
  * The client's MCP servers plus zedpstack's own, scoped to the outer session so
  * every agent the engine spawns records that session as its origin. The outer id
  * survives runtime switches, the child session id does not.
  */
-export function engineMcpServers({ clientServers = [], sessionId, repo, bridgePath = null }) {
+export function engineMcpServers({ clientServers = [], env = process.env, parentPid = process.pid, ...context }) {
   return [
     ...(clientServers ?? []).filter((server) => server?.name !== 'zedpstack'),
     {
       name: 'zedpstack',
       command: process.execPath,
       args: [mcpScriptPath()],
-      env: [
-        { name: 'ZEDPSTACK_ACP_SESSION', value: sessionId },
-        { name: 'ZEDPSTACK_REPO', value: repo },
-        { name: 'ZEDPSTACK_PARENT_PID', value: String(process.pid) },
-        ...(bridgePath ? [{ name: 'ZEDPSTACK_ACP_BRIDGE', value: bridgePath }] : []),
-      ],
+      env: engineMcpEnv({ env, parentPid, ...context }),
     },
   ];
 }
@@ -99,19 +108,33 @@ export function engineMcpServers({ clientServers = [], sessionId, repo, bridgePa
  */
 export function resolveEngineCommand(
   runtime,
+  options = {},
+) {
+  return resolveEngine(runtime, options).command;
+}
+
+export function resolveEngine(
+  runtime,
   { env = {}, userConfig = {}, registry = null, registryDir = null, platformArch = `${process.platform}-${process.arch}` } = {},
 ) {
   const r = String(runtime).toLowerCase();
-  return (
-    envEngineOverride(r, env) ??
-    configEngineOverride(r, userConfig) ??
-    resolveFromRegistry(r, registry, registryDir, platformArch) ??
-    [...(PINNED[r] ?? PINNED.claude)]
-  );
+  if (!Object.hasOwn(PINNED, r)) throw new Error(`unknown ACP runtime: ${runtime}`);
+  const candidates = [
+    ['env', envEngineOverride(r, env)],
+    ['user-config', configEngineOverride(r, userConfig)],
+    ['zed-registry', resolveFromRegistry(r, registry, registryDir, platformArch)],
+    [r === 'cursor' ? 'path' : 'npx-pin', [...PINNED[r]]],
+  ];
+  const [source, command] = candidates.find(([, command]) => command);
+  const npxPackage = /^npx(?:\.cmd)?$/.test(path.basename(command[0]))
+    ? command.slice(1).find((arg) => !arg.startsWith('-')) ?? null : null;
+  const version = npxPackage?.match(/.+@([^@]+)$/)?.[1]
+    ?? (source === 'zed-registry' ? findRegistryEntry(registry, r)?.version ?? null : null);
+  return { command, source, version, npxPackage };
 }
 
 function readUserConfig(env) {
-  const home = env.ZEDPSTACK_HOME ?? path.join(os.homedir(), '.zedpstack');
+  const home = env.ZEDPSTACK_HOME ?? path.join(env.HOME ?? os.homedir(), '.zedpstack');
   const file = path.join(home, 'config');
   if (!fs.existsSync(file)) return {};
   try {
@@ -121,10 +144,11 @@ function readUserConfig(env) {
   }
 }
 
-function defaultRegistryPath() {
+function defaultRegistryPath(env = process.env) {
+  const home = env.HOME ?? os.homedir();
   if (process.platform === 'darwin') {
     return path.join(
-      os.homedir(),
+      home,
       'Library',
       'Application Support',
       'Zed',
@@ -133,13 +157,13 @@ function defaultRegistryPath() {
     );
   }
   if (process.platform === 'linux') {
-    return path.join(os.homedir(), '.local', 'share', 'zed', 'external_agents', 'registry');
+    return path.join(home, '.local', 'share', 'zed', 'external_agents', 'registry');
   }
-  return path.join(os.homedir(), 'AppData', 'Roaming', 'Zed', 'external_agents', 'registry');
+  return path.join(home, 'AppData', 'Roaming', 'Zed', 'external_agents', 'registry');
 }
 
-function loadZedRegistry(registryDir) {
-  const dir = registryDir ?? defaultRegistryPath();
+function loadZedRegistry(registryDir, env) {
+  const dir = registryDir ?? defaultRegistryPath(env);
   const file = path.join(dir, 'registry.json');
   if (!fs.existsSync(file)) return { registry: null, registryDir: dir };
   try {
@@ -147,6 +171,11 @@ function loadZedRegistry(registryDir) {
   } catch {
     return { registry: null, registryDir: dir };
   }
+}
+
+export function configuredEngine(runtime, { env = process.env, userConfig = null, registryDir = null, ...options } = {}) {
+  const loaded = loadZedRegistry(registryDir, env);
+  return resolveEngine(runtime, { env, userConfig: userConfig ?? readUserConfig(env), ...loaded, ...options });
 }
 
 /**
@@ -164,27 +193,7 @@ export async function startEngine({
   handshakeTimeoutMs = 30_000,
 }) {
   const rt = String(runtime).toLowerCase();
-  const { registry, registryDir: regDir } = registryDir
-    ? { registry: null, registryDir }
-    : loadZedRegistry(null);
-  let registryData = registry;
-  if (!registryData && registryDir) {
-    const file = path.join(registryDir, 'registry.json');
-    if (fs.existsSync(file)) {
-      registryData = JSON.parse(fs.readFileSync(file, 'utf8'));
-    }
-  } else if (!registryData) {
-    const loaded = loadZedRegistry(null);
-    registryData = loaded.registry;
-  }
-
-  const cfg = userConfig ?? readUserConfig(env);
-  const command = resolveEngineCommand(rt, {
-    env,
-    userConfig: cfg,
-    registry: registryData,
-    registryDir: regDir ?? registryDir,
-  });
+  const { command } = configuredEngine(rt, { env, userConfig, registryDir });
 
   const child = spawnFn(command[0], command.slice(1), {
     cwd,
@@ -297,9 +306,8 @@ export async function startEngine({
     const methods = initializeResult.authMethods ?? [];
     if (methods.length) {
       stage = 'authenticate';
-      const method = methods.find((method) => method.id === 'cursor_login')
-        ?? methods.find((method) => !/interactive|oauth|browser|device|login/i.test(method.id));
-      if (!method) throw new Error('no non-interactive authentication method available');
+      const method = selectAuthMethod(rt, methods, env);
+      process.stderr.write(`[acp-engine:${rt}] authenticate ${method.id}\n`);
       await peer.request('authenticate', { methodId: method.id });
     }
 
@@ -346,7 +354,7 @@ export async function startEngine({
     throw new Error(
       `engine:${rt}: ${stage} failed: ${reason}`
         + (tail ? `\nstderr:\n${tail}` : '')
-        + (rt === 'cursor' ? '\nejecuta `agent login`' : ''),
+        + (AUTH_POLICY[rt] ? `\n${AUTH_POLICY[rt].hint}` : ''),
       { cause: error },
     );
   } finally {

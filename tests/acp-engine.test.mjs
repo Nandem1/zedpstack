@@ -103,7 +103,6 @@ describe('engine lifecycle', () => {
 
   for (const auth of [
     { methods: [{ id: 'browser_login' }, { id: 'cursor_login' }], expected: 'cursor_login' },
-    { methods: [{ id: 'interactive' }, { id: 'api_key' }], expected: 'api_key' },
   ]) {
     it(`authenticates with ${auth.expected} before session/new`, { timeout: 3000 }, async (t) => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-acp-auth-'));
@@ -126,7 +125,7 @@ describe('engine lifecycle', () => {
     const tracked = trackEngine(t, {
       FAKE_ACP_AUTH: '1', FAKE_ACP_AUTH_METHODS: '[{"id":"browser_login"}]',
     });
-    await assert.rejects(tracked.start({ handshakeTimeoutMs: 500 }), /non-interactive.*ejecuta `agent login`/s);
+    await assert.rejects(tracked.start({ handshakeTimeoutMs: 500 }), /no usable authentication method.*browser_login.*ejecuta `agent login`/s);
     assert.throws(() => process.kill(tracked.child.pid, 0), { code: 'ESRCH' });
   });
 
