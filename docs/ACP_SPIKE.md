@@ -6,13 +6,16 @@ Adaptador que expone zedpstack como agente ACP por stdio (JSON-RPC 2.0, una lín
 
 Cada hilo de Zed abierto con el agente `zedpstack` es un orquestador. El hub (`src/acp/hub.mjs`) arranca un engine hijo ACP con el runtime elegido (Claude, Codex o Cursor) y le reenvía la conversación. Escribe `/claude`, `/codex` o `/cursor`, o elige **Orchestrator** en el pie del hilo, para cambiar de runtime. El cambio reinicia la conversación del engine.
 
-El hub interviene en tres puntos de cada hilo:
+El hub interviene en cinco puntos de cada hilo:
 
-1. **MCP inyectado.** En `session/new` del engine, el hub pasa los servidores MCP que envió Zed más el servidor `zedpstack` (`scripts/mcp.mjs`). Si Zed ya enviaba uno llamado `zedpstack`, se sustituye. El servidor recibe `ZEDPSTACK_ACP_SESSION` con el id de sesión del hilo y `ZEDPSTACK_REPO` con su `cwd`. El id del hilo no cambia al cambiar de runtime.
+1. **MCP inyectado.** En `session/new` del engine, el hub pasa los servidores MCP que envió Zed más el servidor `zedpstack` (`scripts/mcp.mjs`). Si Zed ya enviaba uno llamado `zedpstack`, se sustituye. El servidor recibe `ZEDPSTACK_ACP_SESSION` con el id de sesión del hilo, `ZEDPSTACK_REPO` con su `cwd` y `ZEDPSTACK_ACP_BRIDGE` con el socket de permisos del hub. El id del hilo no cambia al cambiar de runtime.
 2. **Skill en el primer prompt.** El primer prompt de cada sesión de engine lleva delante, como bloque de texto aparte, el cuerpo de `SKILL.md` (el mismo texto que el prompt MCP `/zedpstack`). Después de cambiar de runtime se vuelve a anteponer. No se antepone a `/board` ni a los comandos con barra que anunció el propio engine.
 3. **Tarjetas de workers.** El engine lanza workers con la herramienta MCP `spawn_agent`. Cada agente guarda en `agent.json` su `origin` (`{frontend: 'acp', sessionId}`). El hub sondea `.zedpstack/agents/` del repo y abre una tarjeta expandible (`tool_call` con `kind: other`, id `zp-<agentId>`) por cada agente cuyo origen es el hilo. La tarjeta se sigue actualizando cuando el turno que lo lanzó ya terminó. Al inicio de cada prompt el hub vuelve a sincronizar; un worker que ya había terminado aparece una sola vez, ya cerrado.
 
-Los permisos de las herramientas MCP (`spawn_agent`, `wait_agent`, …) los pide el propio engine con `session/request_permission`, y Zed los muestra como cualquier otra herramienta.
+4. **Permisos de zedpstack.** `apply_agent_changes`, un `spawn_agent` que escribe en el checkout, un `close_agent` que descarta trabajo no aplicado y `setup_write` preguntan en el hilo antes de actuar (`zp-perm-<n>`, opciones Permitir, Permitir siempre en este hilo y Rechazar). Un rechazo no hace nada y la herramienta lo devuelve con `error: 'rejected by user'`.
+5. **Guarda de ediciones.** El hub rechaza los `fs/write_text_file` y `terminal/create` del engine que escribirían en el repo, salvo tras `/edits on`. Los engines de Claude y Cursor editan con sus herramientas internas, que esta guarda no ve. Los detalles están en «Permisos y guarda de ediciones» de [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+Los permisos de las herramientas MCP (`spawn_agent`, `wait_agent`, …) los pide además el propio engine con `session/request_permission`, y Zed los muestra como cualquier otra herramienta.
 
 ## Registro en Zed (settings.json)
 
@@ -42,6 +45,7 @@ Variables útiles en `env`:
 |--------|--------|
 | `/claude`, `/codex`, `/cursor` | Cambia el runtime del orquestador (reinicia la conversación) |
 | `board` (o `/board`) | Tablero de agentes recientes del repo |
+| `/edits on`, `/edits off`, `/edits` | Permite o bloquea que el orquestador edite el repo por el cliente en este hilo (empieza bloqueado). Sin argumento muestra el estado |
 
 Los comandos del engine (por ejemplo `/compact`) se anuncian junto a estos y pasan sin cambios. Cualquier otro texto va al engine, que decide cuándo lanzar workers.
 
@@ -57,7 +61,6 @@ Los comandos del engine (por ejemplo `/compact`) se anuncian junto a estos y pas
 
 ## Fuera de alcance por ahora
 
-- La cancelación del turno se reenvía al engine, pero todavía no detiene los workers del turno (corte 4).
 - Sin `session/load` ni persistencia de sesión.
 - Las notificaciones `notifications/progress` del camino MCP no llegan a Zed porque Zed no envía `progressToken`; las tarjetas salen del almacén.
 

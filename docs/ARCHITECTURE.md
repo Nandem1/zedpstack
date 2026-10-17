@@ -148,9 +148,35 @@ El hub ACP (`scripts/acp.mjs`, `src/acp/hub.mjs`) lanza un engine por hilo y deb
 | `ZEDPSTACK_PARENT_PID` | `scripts/mcp.mjs`, el engine falso de las pruebas | Sale cuando ese pid muere |
 | `ZEDPSTACK_ACP_MAX_ENGINES` | hub ACP | Engines vivos como máximo, 8 por defecto |
 
+## Permisos y guarda de ediciones (hub ACP)
+
+Dentro de un hilo de Zed, las acciones de zedpstack que tocan el checkout del usuario se preguntan con la UI nativa de permisos de Zed, sea cual sea el modo de permisos del engine (incluido `bypassPermissions`). Fuera de ACP nada cambia.
+
+**Puente.** El hub abre un socket Unix en `<ZEDPSTACK_HOME o ~/.zedpstack>/run/acp-<pid>.sock`. El directorio queda en 0700 y el socket en 0600. Al arrancar borra los sockets de pids muertos, y al cerrarse borra el suyo. El MCP inyectado recibe la ruta en `ZEDPSTACK_ACP_BRIDGE`. El protocolo es JSON por líneas. La petición es `{id, sessionId, action, agentId?, title, detail}` y la respuesta `{id, allowed, reason?}`. `askHuman` (`src/acp/bridge.mjs`) concede al instante y sin E/S cuando `ZEDPSTACK_ACP_BRIDGE` no existe, que es el caso de Claude Code, Codex y Cursor por MCP. Con la variable puesta falla cerrado: un socket inalcanzable, un cierre antes de responder o 10 min sin respuesta equivalen a rechazo. Una ruta de socket de más de 103 bytes no se abre. Ese hub lo registra y las acciones se rechazan.
+
+**Pregunta.** El hub emite `session/request_permission` a Zed con el id de sesión externo. El `toolCall` lleva `toolCallId: zp-perm-<n>`, `status: pending`, `kind` según la acción y el detalle como texto. Las opciones son `allow_once`, `allow_always` y `reject_once`. `allow_always` vale para esa acción en ese hilo hasta que el hilo se cierra. Al resolverse, el hub cierra la tarjeta con `tool_call_update` `completed` o `failed`. Cancelar el turno, cerrar el hilo, reiniciar o perder el engine, apagar el hub o desconectar el MCP resuelven cada pregunta pendiente como rechazo, con el motivo en `reason`. Las preguntas simultáneas son independientes.
+
+| Herramienta MCP | Cuándo pregunta | `kind` | Respuesta al rechazar |
+|---|---|---|---|
+| `apply_agent_changes` | El agente terminó y dejó un commit. El detalle trae agente, commit, rama, archivos y diffStat | `edit` | `{agent_id, commit, applied: false, error: 'rejected by user', reason}` |
+| `spawn_agent` | Writer que escribe en el checkout: `isolation: 'none'`, o un repo sin git | `execute` | `{agent_id: null, spawned: false, isolation: 'none', cwd, error, reason}` |
+| `close_agent` | `remove_worktree` o `delete_branch` sobre un writer con worktree no aplicado, que sigue corriendo o dejó un commit | `delete` | `{agent_id, closed: false, worktree: null, error, reason}` |
+| `setup_write` | Siempre, salvo `dry_run` | `edit` | `{written: false, changed: false, error, reason}` |
+
+Un rechazo no tiene efectos. Las lecturas nunca pasan por el puente. `apply_agent_changes` deja `apply.json` en el agente cuando aplica, y `close_agent` lo usa para saber que ese trabajo ya llegó al checkout.
+
+**Guarda de ediciones.** El hub revisa las peticiones del engine al cliente con las mismas reglas que el hook PreToolUse (`editVerdict` en `src/guard.mjs`). Rechaza un `fs/write_text_file` cuya ruta real cae dentro del cwd de la sesión y fuera de `.zedpstack/`. También rechaza un `terminal/create` que la heurística de Bash marca como escritura en el repo. El error JSON-RPC (-32000) dice «el orquestador no edita archivos: delega con spawn_agent (o /edits on)» y nombra el destino. Cada rechazo se anota en `.zedpstack/orchestrator-audit.jsonl`. El resto pasa sin cambios. `/edits on` y `/edits off` cambian `editsAllowed` solo en ese hilo, que empieza en `off`. `/edits` sin argumento muestra el estado. El interruptor no toca `.zedpstack/session.json`, porque ese marcador es del repo y lo comparten todos los hilos y el hook de Claude Code.
+
+**Límite medido.** El 2026-10-17, con un cliente que anunciaba `fs.readTextFile`, `fs.writeTextFile` y `terminal`, `claude-agent-acp@0.93.0` y `cursor-agent acp` crearon el archivo con su herramienta interna (Write o Edit File). Ninguno llamó a `fs/write_text_file`, así que la guarda de protocolo no los ve. Con Claude queda el hook PreToolUse (`dispatch install`), que el engine sí ejecuta. Lo bloqueó con el marcador de sesión activo. `/edits on` no levanta ese hook. Para ese repo hace falta `dispatch session allow-edits`. Con Cursor no queda ninguna defensa contra las ediciones directas del orquestador. Los permisos de las acciones de zedpstack sí funcionan con los dos engines.
+
+| Variable | Quién la lee | Efecto |
+|---|---|---|
+| `ZEDPSTACK_ACP_BRIDGE` | MCP inyectado (`askHuman`) | Socket del puente de permisos. Sin ella, todo se concede |
+
 ## Límites conocidos
 
 - Un CLI separado no puede heredar el modelo del orquestador (`inherit-parent`), así que corre el default de pstack y lo deja anotado.
 - No se puede reanudar un agente ni mandarle mensajes; se lanza uno nuevo con el alcance consolidado (que es lo que poteto-mode recomienda de todos modos).
 - El writer de Claude no tiene sandbox de SO, solo la allowlist de comandos. Si una tarea delicada necesita sandbox real, usa Codex o Cursor.
 - La reenvío de context servers de Zed a los agentes ACP depende de la versión de Zed. Si no llegan, registra el MCP directamente en el host (`dispatch install`).
+- Dentro de un hilo ACP con `cursor-agent acp`, el orquestador puede editar el repo directamente. Ver «Permisos y guarda de ediciones».

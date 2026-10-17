@@ -52,6 +52,7 @@ MCP tool names below are bare. Hosts prefix them, for example `mcp__zedpstack__s
 - Review with `git -C <repo> show <commit>`, then `apply_agent_changes` cherry-picks it into your working tree, staged and uncommitted. A conflict aborts cleanly and returns the error.
 - Parallel writers never share files on disk. Merge their commits one at a time and re-verify after each.
 - `close_agent {"remove_worktree": true}` cleans up; add `delete_branch: true` once the commit is applied or abandoned.
+- In a Zed thread run by the zedpstack ACP agent, the user approves `apply_agent_changes`, a writer with `isolation: "none"`, a `close_agent` that would discard unapplied work, and `setup_write`. A refusal returns the usual shape with `error: "rejected by user"` and a `reason`, and nothing happened. Tell the user it was rejected and why; do not retry it another way. Other hosts never ask.
 
 ## Permissions
 
