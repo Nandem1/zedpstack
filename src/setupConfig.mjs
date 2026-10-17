@@ -12,13 +12,29 @@ import {
   zedpstackManagedRoles,
 } from './modelSheet.mjs';
 import { zedpstackRoot } from './paths.mjs';
+import { collectBindingRoutingErrors } from './modelRouting.mjs';
 
-export function defaultModelSheetPath() {
+/** Cursor / IDE pstack override (orchestrator Task slugs). */
+export function orchestratorModelSheetPath() {
   const cursor = path.join(os.homedir(), '.cursor', 'rules', 'pstack-models.mdc');
   if (fs.existsSync(cursor)) return cursor;
   const plain = path.join(os.homedir(), '.cursor', 'rules', 'pstack-models.md');
   if (fs.existsSync(plain)) return plain;
   return path.join(os.homedir(), '.zedpstack', 'pstack-models.md');
+}
+
+/** Worker spawn sheet — never prefer Cursor mdc over an explicit worker file. */
+export function workerModelSheetPath() {
+  return path.join(os.homedir(), '.zedpstack', 'pstack-models.md');
+}
+
+export function defaultModelSheetPath() {
+  if (process.env.ZEDPSTACK_MODEL_SHEET) {
+    return path.resolve(process.env.ZEDPSTACK_MODEL_SHEET);
+  }
+  const worker = workerModelSheetPath();
+  if (fs.existsSync(worker)) return worker;
+  return orchestratorModelSheetPath();
 }
 
 export function readModelSheet(filePath) {
@@ -66,8 +82,10 @@ export function applyModelSheetToConfig({
   sheetPath,
   configPath,
   allowMissingSheet = false,
+  dryRun = false,
+  strict = false,
 } = {}) {
-  const resolvedPath = sheetPath ?? process.env.ZEDPSTACK_MODEL_SHEET ?? defaultModelSheetPath();
+  const resolvedPath = sheetPath ?? defaultModelSheetPath();
   const sheet = readModelSheet(resolvedPath);
   if (!sheet.exists && !allowMissingSheet) {
     throw new Error(
@@ -87,8 +105,14 @@ export function applyModelSheetToConfig({
   if (fs.existsSync(cfgFile)) {
     configData = JSON.parse(fs.readFileSync(cfgFile, 'utf8'));
   }
+  const routingErrors = collectBindingRoutingErrors(bindings);
+  if (strict && routingErrors.length) {
+    const msg = routingErrors.map((e) => e.message).join('\n');
+    throw new Error(`setup apply --strict: routing errors:\n${msg}`);
+  }
+
   const previousRoles = configData.roles ?? {};
-  configData.roles = reconcileConfigRoles(
+  const nextRoles = reconcileConfigRoles(
     previousRoles,
     bindings,
     rolesAffected,
@@ -98,17 +122,26 @@ export function applyModelSheetToConfig({
     configData.$schema = './schemas/config.schema.json';
   }
 
-  fs.mkdirSync(path.dirname(cfgFile), { recursive: true });
-  fs.writeFileSync(cfgFile, `${JSON.stringify(configData, null, 2)}\n`, 'utf8');
+  if (!dryRun) {
+    configData.roles = nextRoles;
+    fs.mkdirSync(path.dirname(cfgFile), { recursive: true });
+    fs.writeFileSync(cfgFile, `${JSON.stringify(configData, null, 2)}\n`, 'utf8');
+  }
 
   const rolesRemoved = Object.keys(previousRoles).filter(
-    (role) => role in previousRoles && !(role in configData.roles),
+    (role) => role in previousRoles && !(role in nextRoles),
   );
 
   return {
+    dryRun,
+    strict,
+    routingErrors,
     sheetPath: sheet.path,
     sheetExists: sheet.exists,
+    orchestratorSheetPath: orchestratorModelSheetPath(),
+    workerSheetPath: workerModelSheetPath(),
     configPath: cfgFile,
+    rolesPreview: dryRun ? nextRoles : undefined,
     rolesUpdated: Object.keys(bindings),
     rolesAffected,
     rolesRemoved,
@@ -124,7 +157,7 @@ export function applyModelSheetToConfig({
 }
 
 export function initModelSheet(filePath) {
-  const target = path.resolve(filePath ?? defaultModelSheetPath());
+  const target = path.resolve(filePath ?? workerModelSheetPath());
   fs.mkdirSync(path.dirname(target), { recursive: true });
   if (!fs.existsSync(target)) {
     const body = defaultSheetTemplate();
@@ -146,11 +179,12 @@ ${body}`,
 }
 
 export function showSetupStatus() {
-  const sheet = readModelSheet(
-    process.env.ZEDPSTACK_MODEL_SHEET ?? defaultModelSheetPath(),
-  );
+  const sheet = readModelSheet(defaultModelSheetPath());
   const { path: cfgPath, data } = loadConfig();
   return {
+    orchestratorHost: process.env.ZEDPSTACK_ORCHESTRATOR ?? null,
+    orchestratorSheet: orchestratorModelSheetPath(),
+    workerSheet: workerModelSheetPath(),
     modelSheet: sheet.path,
     modelSheetExists: sheet.exists,
     configPath: cfgPath,

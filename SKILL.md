@@ -38,13 +38,47 @@ node ~/.agents/skills/zedpstack/scripts/dispatch.mjs run \
 
 ## Ver progreso (streaming)
 
+### Cursor / Composer no muestra el subprocess
+
+Si el orquestador ejecuta `dispatch run` en un **bloque de terminal**, la UI solo enseña el comando hasta que **termina** (minutos). El stderr de `--tee-events` **no** se pinta en el chat.
+
+**Patrón obligatorio en Cursor:**
+
+1. Lanzar en segundo plano y obtener `runId` al instante:
+
+   ```bash
+   node ~/Projects/zedpstack/scripts/dispatch.mjs run --detach \
+     --goal "..." --repo "/ruta/repo" --playbook how-investigation
+   ```
+
+2. Seguir progreso legible (stdout, visible en salida del tool):
+
+   ```bash
+   node ~/Projects/zedpstack/scripts/dispatch.mjs follow \
+     --run-id <id> --repo "/ruta/repo" --from-start
+   ```
+
+3. O en **Terminal del IDE** (panel inferior):
+
+   ```bash
+   node ~/Projects/zedpstack/scripts/dispatch.mjs watch --run-id <id> --repo "/ruta/repo" --from-start
+   ```
+
+4. O leer el archivo que el orquestador puede ir mostrando:
+
+   `.zedpstack/runs/<id>/progress.log` (`Claude explorer — running`, `> Inspecting …`).
+
+El orquestador debe **repostar** líneas nuevas de `progress.log` o `follow` en el chat cada ~15–30 s mientras corre el run.
+
 | Modo | Uso |
 |------|-----|
-| **JSONL en vivo** | `--tee-events` en `run`/`resume` → stderr `[zedpstack] {...}` |
-| **Seguimiento legible** | Terminal 2: `dispatch watch --run-id <id> --repo <repo> --from-start` |
-| **Artefactos** | `.zedpstack/runs/<id>/events.jsonl`, `workers/*/stdout.log` |
+| **progress.log** | Siempre en el run dir (v0.5.1+) |
+| **follow** | Progreso humano en stdout |
+| **detach + follow** | Cursor-friendly |
+| **JSONL** | `--tee-events` → stderr (solo terminal real) |
+| **watch** | `events.jsonl` legible |
 
-Chunks `worker.output` no se persisten en `events.jsonl` por defecto (solo tee); usa `--persist-stream-events` si necesitas replay completo.
+Chunks `worker.output` no se persisten en `events.jsonl` por defecto; usa `--persist-stream-events` para replay completo.
 
 ## Judgment
 

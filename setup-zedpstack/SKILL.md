@@ -1,64 +1,43 @@
 ---
 name: setup-zedpstack
-description: Configura modelos y esfuerzo de workers zedpstack desde la hoja pstack (como /setup-pstack). Sincroniza a zedpstack.config.json.
+description: Configura workers zedpstack al estilo pstack — mostrar estado, routing por CLI, decisión del usuario. No copiar slugs Cursor→Claude.
 disable-model-invocation: true
 ---
 
 # setup-zedpstack
 
-Alinea **zedpstack** con la hoja de modelos de **pstack** (`setup-pstack`): mismas filas por rol, runtime inferido (Claude vs Codex) y `effort` opcional (`slug @high`).
+Filosofía **pstack**: el orquestador **muestra** cómo está configurado; si falta algo o hay conflicto, **el usuario decide** (preguntas en chat o edición de hoja). No ejecutar `apply` a ciegas desde la hoja de Cursor.
 
-## Cuándo usarlo
+## Dos hojas
 
-- Primera instalación del paquete `~/Projects/zedpstack`
-- Cambiar modelos de explorers/synthesizers/reviewers
-- Tras editar `~/.cursor/rules/pstack-models.mdc` manualmente
+| Hoja | Ruta | Para qué |
+|------|------|----------|
+| Orquestador IDE | `~/.cursor/rules/pstack-models.mdc` | Task / composer / grok en Cursor |
+| Workers dispatch | `~/.zedpstack/pstack-models.md` | `claude` / `codex` / `agent` spawn |
 
-## Pasos
+## Routing de modelos (workers)
 
-1. **Detectar modelos** disponibles en esta sesión (Claude `Agent` / Codex slugs). No escribas slugs que no hayas confirmado.
+| Slugs | Runtime | CLI |
+|-------|---------|-----|
+| `haiku`, `sonnet`, `opus` | `claude` | `claude -p` |
+| `gpt-*`, `*-sol` | `codex` | `codex exec` |
+| `composer-*`, `cursor-grok-*`, `grok-*`, `glm-*` | `cursor` | `agent -p --mode plan` |
 
-2. **Hoja de override** (misma forma que pstack):
+Detalle: `docs/SETUP_ORCHESTRATOR_AND_ROUTING.md` en el clon `~/Projects/zedpstack`.
 
-   - Cursor: `~/.cursor/rules/pstack-models.mdc` (recomendado; `alwaysApply` para el orquestador)
-   - Alternativa: `~/.zedpstack/pstack-models.md`
+## Flujo del orquestador
 
-   Si no existe:
+1. `dispatch setup diagnose --human`
+2. Si falta hoja workers: `setup init --file ~/.zedpstack/pstack-models.md`
+3. Preguntar al usuario y editar filas worker (traducir slugs Cursor → runtime correcto)
+4. `setup apply --dry-run --file ~/.zedpstack/pstack-models.md`
+5. Tras confirmación: `setup apply --file ~/.zedpstack/pstack-models.md` (`--strict` opcional)
+6. `setup show`
 
-   ```bash
-   node ~/Projects/zedpstack/scripts/dispatch.mjs setup init
-   ```
+## Orquestador agnóstico
 
-3. **Editar filas** relevantes para workers (no solo orquestador):
+`ZEDPSTACK_ORCHESTRATOR=cursor|claude-code|codex|zed` — workers leen solo `zedpstack.config.json`.
 
-   - `how explorer` / `how explainer`
-   - `why investigators` / `why synthesizer`
-   - `architect ground`, `architect runners` (2 modelos), `architect synthesize`
-   - `interrogate reviewers` (3 modelos), `interrogate lead`
-   - `reflect tooling`, `reflect judgment`, `reflect divergent`, `reflect synthesizer`
-   - `default effort: session` o `low|medium|high|xhigh|max`
+## Progreso UI
 
-4. **Sincronizar a dispatch** (la hoja debe existir; si no, `setup init` primero):
-
-   ```bash
-   node ~/Projects/zedpstack/scripts/dispatch.mjs setup apply
-   ```
-
-   La salida incluye `overflowWarnings` y `droppedLines` si la hoja tiene filas pstack no mapeadas o modelos de más en un panel.
-
-5. **Verificar**:
-
-   ```bash
-   node ~/Projects/zedpstack/scripts/dispatch.mjs setup show
-   ```
-
-## Effort
-
-zedpstack guarda `effort` en `zedpstack.config.json` por rol. Los CLIs worker aún no aplican todos los niveles; la hoja queda como contrato alineado con pstack para cuando el adaptador lo soporte.
-
-## Relación con pstack
-
-- **pstack** en Cursor: la hoja alimenta `Task` / subagentes del orquestador.
-- **zedpstack**: la misma hoja alimenta **spawn** de `claude`/`codex` en `.zedpstack/runs/`.
-
-Mantén ambos en sync con `setup apply` tras cambiar la hoja.
+`--tee-events` en TTY → líneas legibles; `dispatch watch --from-start` igual.

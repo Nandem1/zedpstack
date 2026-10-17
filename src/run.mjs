@@ -298,6 +298,7 @@ async function executeStep({
     workerId,
     runId,
     stepId,
+    role: stepDef.role,
     onWorkerSpawned: ({ pid }) => patchAttemptPid(pid),
   });
 
@@ -400,6 +401,7 @@ export async function runPlaybook({
   const eventSink = new EventSink(runRoot, {
     tee: teeEvents,
     persistWorkerStream: persistStreamEvents,
+    humanProgress: 'auto',
   });
   let manifest;
 

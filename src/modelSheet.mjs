@@ -3,6 +3,8 @@
  * Maps sheet roles to zedpstack RoleBinding keys for dispatch workers.
  */
 
+import { classifyModelSlug } from './modelRouting.mjs';
+
 const EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 
 /** pstack sheet role label → zedpstack config role ids */
@@ -117,24 +119,14 @@ export function parseModelSheet(text) {
 }
 
 /**
- * Infer CLI runtime from model slug (heuristic; user can override in config).
+ * Infer worker CLI runtime from model slug (see modelRouting.mjs).
  */
 export function inferRuntimeForModel(model) {
   if (!model || model === 'inherit-parent' || model === 'auto') {
     return 'claude';
   }
-  const s = model.toLowerCase();
-  if (
-    s.includes('gpt') ||
-    s.includes('codex') ||
-    s.includes('-sol') ||
-    s.includes('o3') ||
-    s.includes('o4') ||
-    s.startsWith('chatgpt')
-  ) {
-    return 'codex';
-  }
-  return 'claude';
+  const { model: slug } = parseModelValue(model);
+  return classifyModelSlug(slug).runtime;
 }
 
 function bindingForModel(raw, globalEffort) {

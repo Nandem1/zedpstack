@@ -1,5 +1,6 @@
 import { runClaudeWorker } from './claude.mjs';
 import { runCodexWorker } from './codex.mjs';
+import { runCursorWorker } from './cursor.mjs';
 import {
   assertPermissionProfile,
   verifyRuntimeAvailable,
@@ -18,6 +19,11 @@ export async function runWorkerForBinding(ctx) {
     outcome = await runClaudeWorker(ctx);
   } else if (binding.runtime === 'codex') {
     outcome = await runCodexWorker(ctx);
+  } else if (binding.runtime === 'cursor') {
+    if (!ctx.repoRoot) {
+      throw new Error('cursor worker requires repoRoot');
+    }
+    outcome = await runCursorWorker(ctx);
   } else {
     throw new Error(`Unsupported runtime: ${binding.runtime}`);
   }

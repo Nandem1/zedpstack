@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { cancelRun } from './cancel.mjs';
 import { completeJudgment, runPlaybook } from './run.mjs';
 import {
@@ -7,7 +8,11 @@ import {
   initModelSheet,
   showSetupStatus,
 } from './setupConfig.mjs';
+import { buildSetupDiagnosis, formatSetupDiagnosisHuman } from './setupReport.mjs';
 import { watchRun } from './watchRun.mjs';
+import { followProgress, tailProgressOnce } from './tailProgress.mjs';
+import { spawn } from 'node:child_process';
+import { dispatchScriptPath } from './paths.mjs';
 import { zedpstackRoot } from './paths.mjs';
 
 function parseArgs(argv) {
@@ -34,11 +39,22 @@ function parseArgs(argv) {
           'context-file',
           'model-sheet',
           'config',
+          'offset',
         ].includes(key)
       ) {
         opts[key] = args.shift();
       } else if (key === 'tee-events') {
         opts.teeEvents = true;
+      } else if (key === 'dry-run') {
+        opts.dryRun = true;
+      } else if (key === 'strict') {
+        opts.strict = true;
+      } else if (key === 'human') {
+        opts.human = true;
+      } else if (key === 'detach') {
+        opts.detach = true;
+      } else if (key === 'once') {
+        opts.once = true;
       } else if (key === 'persist-stream-events') {
         opts.persistStreamEvents = true;
       } else if (key === 'from-start') {
@@ -65,6 +81,50 @@ export async function main(argv) {
     if (!goal) {
       throw new Error('run requires --goal "..."');
     }
+    if (opts.detach) {
+      const script = dispatchScriptPath();
+      const runId = opts['run-id'] ?? randomUUID();
+      const childArgs = [
+        script,
+        'run',
+        '--run-id',
+        runId,
+        '--goal',
+        goal,
+        '--repo',
+        repoRoot,
+        '--playbook',
+        playbook,
+        '--tee-events',
+      ];
+      if (opts['context-file']) {
+        childArgs.push('--context-file', path.resolve(opts['context-file']));
+      }
+      const child = spawn(process.execPath, childArgs, {
+        detached: true,
+        stdio: 'ignore',
+        cwd: repoRoot,
+      });
+      child.unref();
+      console.log(
+        JSON.stringify(
+          {
+            detached: true,
+            runId,
+            progressLog: runId
+              ? path.join(repoRoot, '.zedpstack', 'runs', runId, 'progress.log')
+              : null,
+            follow:
+              runId
+                ? `node ${script} follow --run-id ${runId} --repo ${repoRoot}`
+                : null,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
     let context = '';
     const contextFile = opts['context-file'];
     if (contextFile) {
@@ -74,6 +134,7 @@ export async function main(argv) {
       playbookId: playbook,
       goal,
       repoRoot,
+      runId: opts['run-id'],
       context,
       teeEvents: Boolean(opts.teeEvents),
       persistStreamEvents: Boolean(opts.persistStreamEvents),
@@ -133,6 +194,29 @@ export async function main(argv) {
     return;
   }
 
+  if (command === 'follow' || command === 'tail-progress') {
+    const runId = opts['run-id'];
+    if (!runId) throw new Error('follow requires --run-id');
+    if (opts.once) {
+      const { text, nextOffset, terminal } = tailProgressOnce({
+        repoRoot,
+        runId,
+        offset: Number(opts.offset ?? 0),
+      });
+      if (text) process.stdout.write(text);
+      console.log(
+        JSON.stringify({ nextOffset, terminal }, null, 2),
+      );
+      return;
+    }
+    await followProgress({
+      repoRoot,
+      runId,
+      fromStart: Boolean(opts.fromStart),
+    });
+    return;
+  }
+
   if (command === 'watch') {
     const runId = opts['run-id'];
     if (!runId) throw new Error('watch requires --run-id');
@@ -162,6 +246,15 @@ export async function main(argv) {
       console.log(JSON.stringify(showSetupStatus(), null, 2));
       return;
     }
+    if (sub === 'diagnose' || sub === 'plan') {
+      const report = buildSetupDiagnosis();
+      if (opts.human) {
+        console.log(formatSetupDiagnosisHuman(report));
+      } else {
+        console.log(JSON.stringify(report, null, 2));
+      }
+      return;
+    }
     if (sub === 'init') {
       const target = initModelSheet(opts.file);
       console.log(JSON.stringify({ modelSheet: target, created: true }, null, 2));
@@ -171,14 +264,16 @@ export async function main(argv) {
       const result = applyModelSheetToConfig({
         sheetPath: opts.file ?? opts['model-sheet'],
         configPath: opts.config,
+        dryRun: Boolean(opts.dryRun),
+        strict: Boolean(opts.strict),
       });
       console.log(JSON.stringify(result, null, 2));
       return;
     }
-    throw new Error('setup subcommands: show | init | apply');
+    throw new Error('setup subcommands: show | diagnose | plan | init | apply');
   }
 
   throw new Error(
-    `Unknown command: ${command}. Use: run | resume | judgment | cancel | watch | list | setup`,
+    `Unknown command: ${command}. Use: run | resume | judgment | cancel | follow | watch | list | setup`,
   );
 }

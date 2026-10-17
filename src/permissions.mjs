@@ -14,8 +14,14 @@ export function assertPermissionProfile(binding) {
 }
 
 export function verifyRuntimeAvailable(binding) {
-  const bin = binding.runtime === 'claude' ? 'claude' : 'codex';
-  const check = spawnSync(bin, ['--version'], { encoding: 'utf8' });
+  const bin =
+    binding.runtime === 'claude'
+      ? 'claude'
+      : binding.runtime === 'codex'
+        ? 'codex'
+        : 'agent';
+  const versionArgs = binding.runtime === 'cursor' ? ['-v'] : ['--version'];
+  const check = spawnSync(bin, versionArgs, { encoding: 'utf8' });
   if (check.error || check.status !== 0) {
     throw new Error(`CLI "${bin}" not available or failed --version`);
   }
@@ -66,6 +72,27 @@ export function buildClaudeArgv({ model, permissionProfile, repoRoot }) {
 
 const CODEX_EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh']);
 
+export function buildCursorArgv({ model, permissionProfile, repoRoot }) {
+  if (permissionProfile !== 'read-only') {
+    throw new Error('cursor adapter: only read-only in v0');
+  }
+  if (!repoRoot) {
+    throw new Error('cursor worker requires repoRoot');
+  }
+  return [
+    'agent',
+    '-p',
+    '--mode',
+    'plan',
+    '--model',
+    model,
+    '--output-format',
+    'stream-json',
+    '--stream-partial-output',
+    '--force',
+  ];
+}
+
 export function buildCodexArgv({
   model,
   repoRoot,
@@ -98,12 +125,15 @@ export function workerEnv(runtime, baseEnv = process.env) {
   const common = ['PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TMPDIR'];
   const claudeKeys = ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'];
   const codexKeys = ['OPENAI_API_KEY', 'CODEX_HOME'];
+  const cursorKeys = ['CURSOR_API_KEY', 'CURSOR_AGENT'];
   const allow =
     runtime === 'claude'
       ? [...common, ...claudeKeys]
       : runtime === 'codex'
         ? [...common, ...codexKeys]
-        : common;
+        : runtime === 'cursor'
+          ? [...common, ...cursorKeys]
+          : common;
 
   const env = {};
   for (const key of allow) {

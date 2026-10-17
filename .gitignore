@@ -9,3 +9,4 @@ docs/session-*.log
 *.log
 docs/review-v04-codex-sol.err
 docs/review-v04-codex-sol.stdout
+.zedpstack/

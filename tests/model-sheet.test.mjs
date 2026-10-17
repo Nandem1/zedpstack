@@ -57,6 +57,7 @@ reflect judgment: opus
     const { bindings, overflows } = bindingsFromSheet(parsed);
     assert.equal(overflows.length, 0);
     assert.equal(bindings['reflect-reviewer-judgment'].model, 'cursor-grok-4.6-high');
+    assert.equal(bindings['reflect-reviewer-judgment'].runtime, 'cursor');
     assert.equal(bindings['reflect-reviewer-divergent'].model, 'cursor-grok-4.6-high');
     assert.equal(bindings['reflect-synthesize'].model, 'cursor-grok-4.6-high');
   });

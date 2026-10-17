@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { runDir } from './paths.mjs';
+import { formatHumanProgressEvent } from './progressUi.mjs';
 
 /** Run-level events that end `watch` when `follow` is true. */
 export const TERMINAL_RUN_EVENTS = new Set([
@@ -41,7 +42,11 @@ function previewChunk(chunk, maxLen = 120) {
   return `${preview}${chunk.length > maxLen ? '…' : ''}`;
 }
 
-export function formatEvent(event) {
+export function formatEvent(event, { preferHuman = false } = {}) {
+  if (preferHuman) {
+    const human = formatHumanProgressEvent(event);
+    if (human) return human;
+  }
   const { ts, type, stepId, workerId, runtime, model, status, errors, chunk } = event;
   const head = `[${ts}] ${type}`;
   const parts = [head];
@@ -105,7 +110,7 @@ export async function watchRun({
         continue;
       }
       if (shouldDisplayEvent(event.type)) {
-        writeLine(formatEvent(event));
+        writeLine(formatEvent(event, { preferHuman: process.stderr.isTTY }));
       }
       if (isTerminalRunEvent(event.type)) {
         sawTerminal = true;
