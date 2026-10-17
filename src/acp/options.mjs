@@ -64,6 +64,11 @@ const HUB_COMMANDS = [
   { name: 'codex', description: 'Orquestador con Codex ACP' },
   { name: 'cursor', description: 'Orquestador con Cursor ACP' },
   { name: 'board', description: 'Tablero de agentes recientes' },
+  {
+    name: 'edits',
+    description: 'Permite (on) o bloquea (off) que el orquestador edite el repo directamente en este hilo',
+    input: { hint: 'on | off' },
+  },
 ];
 
 export function mergeCommands(childCommands = []) {

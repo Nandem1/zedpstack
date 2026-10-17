@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { createHub } from '../../src/acp/hub.mjs';
@@ -6,6 +8,11 @@ import { createPeer } from '../../src/acp/rpc.mjs';
 import { FIXTURES } from './sandbox.mjs';
 
 export const FAKE_AGENT = path.join(FIXTURES, 'bin', 'fake-acp-agent.cjs');
+
+/** A ZEDPSTACK_HOME short enough for the bridge socket path, even after makeSandbox nests TMPDIR. */
+export function shortHome(prefix = 'zp-') {
+  return fs.mkdtempSync(path.join(fs.existsSync('/tmp') ? '/tmp' : os.tmpdir(), prefix));
+}
 
 export function engineEnv(extra = {}) {
   const cmd = JSON.stringify([process.execPath, FAKE_AGENT]);
@@ -45,6 +52,8 @@ export function connectHub(t, env, { clientRequest, log } = {}) {
     if (method === 'fs/read_text_file') {
       return { content: 'file-body' };
     }
+    if (method === 'fs/write_text_file') return {};
+    if (method === 'terminal/create') return { terminalId: 'term-1' };
     throw Object.assign(new Error(`unexpected zed request ${method}`), { rpc: -32601 });
   });
 

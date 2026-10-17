@@ -2,14 +2,13 @@ import { describe, it, before, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { ZP_RUNTIME_ID } from '../src/acp/options.mjs';
 import { stopAgent } from '../src/agents/lifecycle.mjs';
 import { TERMINAL_AGENT_STATUSES, isProcessAlive, listAgentIds, loadAgent } from '../src/agents/store.mjs';
-import { connectHub, engineEnv } from './helpers/acpHub.mjs';
+import { connectHub, engineEnv, shortHome } from './helpers/acpHub.mjs';
 import { childEnv } from './helpers/env.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
@@ -61,7 +60,7 @@ describe('acp cancel and engine supervision (in-process hub)', () => {
   });
 
   beforeEach((t) => {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-cancel-home-'));
+    const home = shortHome('zp-cancel-home-');
     env = childEnv(engineEnv({
       ZEDPSTACK_HOME: home,
       FAKE_ACP_MCP: '1',
@@ -262,7 +261,7 @@ describe('acp hub process supervision', () => {
   afterEach(() => stopLeftovers(sb.repo));
 
   function hubEnv(extra = {}) {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-super-'));
+    const home = shortHome('zp-super-');
     return childEnv(engineEnv({
       ZEDPSTACK_HOME: home,
       FAKE_ACP_MCP: '1',

@@ -2,11 +2,14 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { formatBoardText } from '../agents/board.mjs';
 import { agentBoard, liveSessionAgentIds, stopSessionAgents } from '../agents/lifecycle.mjs';
+import { ensureStateDirIgnored } from '../agents/store.mjs';
 import { ZEDPSTACK_VERSION } from '../constants.mjs';
+import { appendDenialAudit, editVerdict } from '../guard.mjs';
 import { checkModel, isAlias, modelWarning } from '../modelCheck.mjs';
 import { orchestratorPrompt } from '../orchestratorPrompt.mjs';
+import { startBridge } from './bridge.mjs';
 import { createWorkerCards } from './cards.mjs';
-import { isBoardCommand, isChildCommand } from './commands.mjs';
+import { isBoardCommand, isChildCommand, parseEditsCommand } from './commands.mjs';
 import { engineMcpServers, startEngine } from './engine.mjs';
 import {
   childOptionState,
@@ -26,6 +29,38 @@ const CANCEL_WORKERS_WAIT_MS = 10_000;
 const DEFAULT_MAX_ENGINES = 8;
 const CANCELLED_PERMISSION = { outcome: { outcome: 'cancelled' } };
 const ENGINE_LOST_TEXT = 'El engine anterior terminó y la conversación anterior se perdió. Se inicia un engine nuevo.';
+const EDIT_REFUSED_TEXT = 'el orquestador no edita archivos: delega con spawn_agent (o /edits on)';
+const EDIT_REFUSED_RPC = -32000;
+const EDITS_TEXT = {
+  on: 'Ediciones directas del orquestador permitidas en este hilo. `/edits off` las bloquea de nuevo.',
+  off: 'Ediciones directas del orquestador bloqueadas en este hilo: delega con spawn_agent. `/edits on` las permite.',
+};
+
+const PERMISSION_OPTIONS = [
+  { optionId: 'allow_once', name: 'Permitir', kind: 'allow_once' },
+  { optionId: 'allow_always', name: 'Permitir siempre en este hilo', kind: 'allow_always' },
+  { optionId: 'reject_once', name: 'Rechazar', kind: 'reject_once' },
+];
+const ALLOW_OPTION_IDS = new Set(['allow_once', 'allow_always']);
+const ACTION_KIND = {
+  apply_agent_changes: 'edit',
+  spawn_agent: 'execute',
+  close_agent: 'delete',
+  setup_write: 'edit',
+};
+
+/** Client requests that would write in the repo, phrased as the tool calls `editVerdict` knows. */
+function editProbe(method, params, repo) {
+  if (method === 'fs/write_text_file') {
+    return { tool: 'Write', input: { file_path: params.path }, cwd: repo };
+  }
+  if (method === 'terminal/create') {
+    // Unquoted on purpose: quoting would hide a redirect inside an argument from the heuristic.
+    const command = [params.command, ...(params.args ?? [])].filter((part) => part != null).join(' ');
+    return { tool: 'Bash', input: { command }, cwd: params.cwd ? path.resolve(repo, params.cwd) : repo };
+  }
+  return null;
+}
 
 const delay = (ms) => new Promise((resolve) => {
   setTimeout(resolve, ms).unref();
@@ -64,8 +99,12 @@ export function createHub({
   const engineCap = maxEngines(env);
   let clientCapabilities = {};
   let shutdownPromise = null;
+  let permissionSeq = 0;
 
   const notifyZed = (params) => zed.notify?.(params);
+  // Started before any engine; if it cannot listen, the MCP still gets its path and fails closed.
+  const bridge = startBridge({ env, onAsk: askZed });
+  bridge.ready.catch((e) => log(`permission bridge unavailable, zedpstack actions will be refused: ${e.message}`));
 
   function getHubSession(outerSessionId) {
     return sessions.get(outerSessionId) ?? null;
@@ -147,11 +186,13 @@ export function createHub({
   async function startEngineNow(session, runtime) {
     if (session.closed) return;
     session.runtime = runtime;
+    if (session.engine) cancelPendingPermissions(session, 'el engine se reinició');
     await stopEngine(session);
     session.engineLost = false;
     session.childCommands = [];
     session.primed = false;
     evictIdleEngines();
+    await bridge.ready.catch(() => {});
     try {
       const engine = await spawnEngine({
         runtime,
@@ -161,6 +202,7 @@ export function createHub({
           clientServers: session.clientMcpServers,
           sessionId: session.sessionId,
           repo: session.repo,
+          bridgePath: bridge.path,
         }),
         env,
       });
@@ -173,6 +215,7 @@ export function createHub({
         if (session.engine !== engine) return;
         session.engine = null;
         session.engineLost = true;
+        cancelPendingPermissions(session, 'el engine terminó');
       });
       session.childOptions = childOptionState(engine.newSessionResult);
       session.childCommands = engine.initialCommands ?? [];
@@ -248,6 +291,8 @@ export function createHub({
     });
 
     peer.onRequest(async (method, params) => {
+      const refusal = editRefusal(session, method, params);
+      if (refusal) throw Object.assign(new Error(refusal), { rpc: EDIT_REFUSED_RPC });
       const forwarded = zed.request(method, { ...params, sessionId: session.sessionId }).catch((e) => {
         throw Object.assign(new Error(e.message ?? 'Zed client error'), { rpc: e.rpc ?? -32603 });
       });
@@ -266,8 +311,76 @@ export function createHub({
     });
   }
 
-  function cancelPendingPermissions(session) {
-    for (const cancel of session.pendingPermissions) cancel();
+  /** Null to pass the request through, or the refusal message. */
+  function editRefusal(session, method, params) {
+    if (session.editsAllowed) return null;
+    const probe = editProbe(method, params, session.repo);
+    if (!probe) return null;
+    const verdict = editVerdict({ ...probe, repoRoot: session.repo });
+    if (!verdict.deny) return null;
+    try {
+      ensureStateDirIgnored(session.repo);
+      appendDenialAudit(session.repo, { tool: method, path: verdict.auditPath });
+    } catch {
+      /* the audit is evidence, not the guard */
+    }
+    log(`${session.sessionId}: refused ${method} (${verdict.auditPath})`);
+    return `${EDIT_REFUSED_TEXT}. Destino: ${verdict.auditPath}`;
+  }
+
+  /** Each pending permission resolves as refused, or as `cancelled` toward the engine, with `reason`. */
+  function cancelPendingPermissions(session, reason) {
+    for (const cancel of session.pendingPermissions) cancel(reason);
+  }
+
+  /**
+   * One bridge request from a zedpstack MCP: ask Zed in the outer session. Every
+   * ask is independent; `allow_always` holds for that action until the session ends.
+   */
+  async function askZed(req, signal) {
+    const session = getHubSession(req.sessionId);
+    if (!session) return { allowed: false, reason: `sesión desconocida: ${req.sessionId}` };
+    if (session.turn?.cancelling) return { allowed: false, reason: 'el turno se canceló' };
+    if (session.alwaysAllowed.has(req.action)) return { allowed: true, reason: 'permitido siempre en este hilo' };
+
+    const toolCallId = `zp-perm-${++permissionSeq}`;
+    const asked = zed.request('session/request_permission', {
+      sessionId: session.sessionId,
+      toolCall: {
+        toolCallId,
+        title: req.title ?? req.action,
+        kind: ACTION_KIND[req.action] ?? 'other',
+        status: 'pending',
+        content: [{ type: 'content', content: { type: 'text', text: String(req.detail ?? '') } }],
+      },
+      options: PERMISSION_OPTIONS,
+    }).then((answer) => {
+      const { outcome, optionId } = answer?.outcome ?? {};
+      if (outcome === 'selected' && ALLOW_OPTION_IDS.has(optionId)) return { allowed: true, optionId };
+      return { allowed: false, reason: outcome === 'selected' ? 'rechazado por el usuario' : 'Zed canceló la pregunta' };
+    }, (e) => ({ allowed: false, reason: `Zed no respondió: ${e.message}` }));
+
+    let cancel;
+    const cancelled = new Promise((resolve) => {
+      cancel = (reason) => resolve({ allowed: false, reason: reason ?? 'cancelado' });
+    });
+    const onGone = () => cancel('el MCP dejó de esperar la respuesta');
+    session.pendingPermissions.add(cancel);
+    signal?.addEventListener('abort', onGone, { once: true });
+    try {
+      const verdict = await Promise.race([asked, cancelled]);
+      if (verdict.optionId === 'allow_always' && !session.closed) session.alwaysAllowed.add(req.action);
+      if (!session.closed) {
+        notifyZed({
+          sessionId: session.sessionId,
+          update: { sessionUpdate: 'tool_call_update', toolCallId, status: verdict.allowed ? 'completed' : 'failed' },
+        });
+      }
+      return verdict.allowed ? { allowed: true } : { allowed: false, reason: verdict.reason };
+    } finally {
+      session.pendingPermissions.delete(cancel);
+      signal?.removeEventListener('abort', onGone);
+    }
   }
 
   /** Every call for one turn returns the same promise; with no open turn it is a no-op. */
@@ -290,7 +403,7 @@ export function createHub({
       sinceMs: turn.startedAt,
     }).catch(() => []);
     const stopping = [stopTurnWorkers()];
-    cancelPendingPermissions(session);
+    cancelPendingPermissions(session, 'el turno se canceló');
     if (turn.promptPromise) {
       await Promise.race([turn.promptPromise.catch(() => {}), delay(CANCEL_PROMPT_WAIT_MS)]);
     }
@@ -308,6 +421,7 @@ export function createHub({
       session.engine = null;
       session.engineLost = true;
     }
+    cancelPendingPermissions(session, 'el engine terminó');
     const how = signal ? `señal ${signal}` : `código ${code ?? 'desconocido'}`;
     const tail = engine.stderrTail(10);
     notifyZed({
@@ -437,6 +551,8 @@ export function createHub({
         starting: null,
         closed: false,
         pendingPermissions: new Set(),
+        alwaysAllowed: new Set(),
+        editsAllowed: false,
         cards: createWorkerCards({ repo, sessionId, notify: notifyZed, streamMode: acpStreamMode(env) }),
       };
       sessions.set(sessionId, session);
@@ -524,6 +640,16 @@ export function createHub({
         return { stopReason: 'end_turn' };
       }
 
+      const edits = parseEditsCommand(text);
+      if (edits) {
+        if (edits !== 'status') session.editsAllowed = edits === 'on';
+        notifyZed({
+          sessionId: params.sessionId,
+          update: agentMessageChunk(EDITS_TEXT[session.editsAllowed ? 'on' : 'off']),
+        });
+        return { stopReason: 'end_turn' };
+      }
+
       const turn = { startedAt: Date.now(), controller: new AbortController(), promptPromise: null, cancelling: null };
       session.turn = turn;
       session.lastUsed = turn.startedAt;
@@ -543,11 +669,11 @@ export function createHub({
     },
   };
 
-  async function closeSession(session) {
+  async function closeSession(session, reason = 'el hilo se cerró') {
     sessions.delete(session.sessionId);
     session.closed = true;
     session.cards.dispose();
-    cancelPendingPermissions(session);
+    cancelPendingPermissions(session, reason);
     await stopEngine(session);
   }
 
@@ -570,10 +696,11 @@ export function createHub({
         }
         if (left.length) log(`${session.sessionId}: workers left running: ${left.join(', ')}`);
       }
-      await Promise.all(all.map(closeSession));
+      await Promise.all(all.map((session) => closeSession(session, 'el hub se está cerrando')));
+      await bridge.close();
     })();
     return shutdownPromise;
   }
 
-  return { handle, notify, shutdown };
+  return { handle, notify, shutdown, bridgePath: bridge.path };
 }

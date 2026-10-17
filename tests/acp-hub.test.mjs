@@ -1,14 +1,13 @@
 import { describe, it, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { ZP_RUNTIME_ID } from '../src/acp/options.mjs';
 import { orchestratorPrompt } from '../src/orchestratorPrompt.mjs';
-import { connectHub, engineEnv } from './helpers/acpHub.mjs';
+import { connectHub, engineEnv, shortHome } from './helpers/acpHub.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
-const HUB_COMMAND_NAMES = ['claude', 'codex', 'cursor', 'board'];
+const HUB_COMMAND_NAMES = ['claude', 'codex', 'cursor', 'board', 'edits'];
 const CHILD_COMMAND_NAMES = ['help', 'compact'];
 
 function processAlive(pid) {
@@ -31,7 +30,7 @@ describe('acp hub', () => {
   });
 
   beforeEach((t) => {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-hub-home-'));
+    const home = shortHome('zp-hub-home-');
     env = engineEnv({ ZEDPSTACK_HOME: home });
     ctx = connectHub(t, env);
   });
@@ -322,7 +321,7 @@ describe('acp hub', () => {
 
   it('engine start failure still yields session', async (t) => {
     const badEnv = engineEnv({
-      ZEDPSTACK_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'zp-hub-failure-home-')),
+      ZEDPSTACK_HOME: shortHome('zp-hub-failure-home-'),
       ZEDPSTACK_ACP_ENGINE_CLAUDE: JSON.stringify(['/no/such/binary']),
     });
     const local = connectHub(t, badEnv);

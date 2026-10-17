@@ -77,7 +77,7 @@ function resolveFromRegistry(runtime, registry, registryDir, platformArch) {
  * every agent the engine spawns records that session as its origin. The outer id
  * survives runtime switches, the child session id does not.
  */
-export function engineMcpServers({ clientServers = [], sessionId, repo }) {
+export function engineMcpServers({ clientServers = [], sessionId, repo, bridgePath = null }) {
   return [
     ...(clientServers ?? []).filter((server) => server?.name !== 'zedpstack'),
     {
@@ -88,6 +88,7 @@ export function engineMcpServers({ clientServers = [], sessionId, repo }) {
         { name: 'ZEDPSTACK_ACP_SESSION', value: sessionId },
         { name: 'ZEDPSTACK_REPO', value: repo },
         { name: 'ZEDPSTACK_PARENT_PID', value: String(process.pid) },
+        ...(bridgePath ? [{ name: 'ZEDPSTACK_ACP_BRIDGE', value: bridgePath }] : []),
       ],
     },
   ];

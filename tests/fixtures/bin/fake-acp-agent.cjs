@@ -86,8 +86,8 @@ function startInjectedMcp() {
   return spawn(server.command, server.args, { env, stdio: ['pipe', 'pipe', 'inherit'] });
 }
 
-/** Calls spawn_agent on the zedpstack MCP server exactly as the hub injected it. */
-function spawnThroughInjectedMcp(task) {
+/** Calls one tool on the zedpstack MCP server exactly as the hub injected it. */
+function callInjectedMcp(name, args) {
   let mcp;
   try {
     mcp = startInjectedMcp();
@@ -99,10 +99,7 @@ function spawnThroughInjectedMcp(task) {
     readline.createInterface({ input: mcp.stdout }).on('line', (line) => {
       const msg = JSON.parse(line);
       if (msg.id === 1) {
-        send(2, 'tools/call', {
-          name: 'spawn_agent',
-          arguments: { prompt: task, role: 'how explorer', readonly: true, description: 'fake spawn' },
-        });
+        send(2, 'tools/call', { name, arguments: args });
       } else if (msg.id === 2) {
         mcp.stdin.end();
         const { content, isError } = msg.result;
@@ -283,8 +280,21 @@ async function handleRequest(msg) {
         heldMcps.push(mcp);
         write(chunk(`mcp:${mcp.pid}`));
       }
+      const mcpCall = /^MCPCALL (\S+) (.*)$/m.exec(text);
+      if (process.env.FAKE_ACP_MCP === '1' && mcpCall) {
+        try {
+          const result = await callInjectedMcp(mcpCall[1], JSON.parse(mcpCall[2]));
+          write(chunk(`mcp:${mcpCall[1]}:${JSON.stringify(result)}`));
+        } catch (e) {
+          write(chunk(`mcp-error:${e.message}`));
+        }
+        respond('end_turn');
+        break;
+      }
       if (process.env.FAKE_ACP_MCP === '1' && text.includes('SPAWN')) {
-        const agent = await spawnThroughInjectedMcp(text);
+        const agent = await callInjectedMcp('spawn_agent', {
+          prompt: text, role: 'how explorer', readonly: true, description: 'fake spawn',
+        });
         write(chunk(`spawned:${agent.agent_id}`));
         if (!sleeps) {
           respond(turn.cancelled ? 'cancelled' : 'end_turn');
@@ -358,6 +368,19 @@ async function handleRequest(msg) {
       }
       if (text.includes('FS')) {
         await clientRequest('fs/read_text_file', { sessionId, path: '/tmp/x' });
+      }
+      // The edits an engine could route through the client: WRITE=<path> and TERM=<shell command>.
+      const fsWrite = /\bWRITE=(\S+)/.exec(text);
+      if (process.env.FAKE_ACP_FS_WRITE === '1' && fsWrite) {
+        const answer = await clientRequest('fs/write_text_file', { sessionId, path: fsWrite[1], content: 'fake\n' })
+          .then(() => 'ok', (e) => `error:${e.message}`);
+        write(chunk(`fs:${answer}`));
+      }
+      const term = /\bTERM=(.+)$/m.exec(text);
+      if (process.env.FAKE_ACP_TERMINAL === '1' && term) {
+        const answer = await clientRequest('terminal/create', { sessionId, command: 'bash', args: ['-c', term[1]] })
+          .then(() => 'ok', (e) => `error:${e.message}`);
+        write(chunk(`term:${answer}`));
       }
       write({ jsonrpc: '2.0', id, result: { stopReason: 'end_turn' } });
       break;

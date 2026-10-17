@@ -2,14 +2,13 @@ import { describe, it, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createWorkerCards } from '../src/acp/cards.mjs';
 import { engineMcpServers } from '../src/acp/engine.mjs';
 import { createSpec, loadAgent, writeRun } from '../src/agents/store.mjs';
-import { connectHub, engineEnv } from './helpers/acpHub.mjs';
+import { connectHub, engineEnv, shortHome } from './helpers/acpHub.mjs';
 import { childEnv } from './helpers/env.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
@@ -167,7 +166,7 @@ describe('hub worker cards through the injected MCP', () => {
   });
 
   beforeEach((t) => {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-cards-home-'));
+    const home = shortHome('zp-cards-home-');
     env = childEnv(engineEnv({ ZEDPSTACK_HOME: home, FAKE_ACP_MCP: '1' }));
     ctx = connectHub(t, env);
   });
@@ -179,7 +178,8 @@ describe('hub worker cards through the injected MCP', () => {
     await ctx.rpc('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'MCPINFO' }] });
     const info = ctx.updates.findLast((u) => u.update.sessionUpdate === 'agent_message_chunk');
     const servers = JSON.parse(info.update.content.text);
-    assert.deepEqual(servers, engineMcpServers({ clientServers: [other], sessionId, repo: sb.repo }));
+    assert.deepEqual(servers, engineMcpServers({ clientServers: [other], sessionId, repo: sb.repo, bridgePath: ctx.hub.bridgePath }));
+    assert.equal(servers.at(-1).env.find((e) => e.name === 'ZEDPSTACK_ACP_BRIDGE').value, ctx.hub.bridgePath);
   });
 
   it('a SPAWN turn yields one live card that keeps updating after end_turn', async () => {
@@ -229,7 +229,7 @@ describe('hub worker cards through the injected MCP', () => {
 describe('scripts/acp.mjs process', () => {
   it('speaks JSON lines only and streams a card for a worker spawned by the engine', async (t) => {
     const sb = makeSandbox();
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-acp-proc-'));
+    const home = shortHome('zp-acp-proc-');
     const child = spawn(process.execPath, [path.join(ROOT, 'scripts', 'acp.mjs')], {
       env: childEnv(engineEnv({ ZEDPSTACK_HOME: home, FAKE_ACP_MCP: '1' })),
       stdio: ['pipe', 'pipe', 'ignore'],

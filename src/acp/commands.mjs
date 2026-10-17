@@ -11,6 +11,15 @@ export function isBoardCommand(text) {
   return BOARD_FIRST_LINE_RE.test(firstLine(text));
 }
 
+const EDITS_FIRST_LINE_RE = /^\/edits(?:\s+(on|off))?\s*$/i;
+
+/** `'on'`, `'off'`, `'status'` for a bare `/edits`, or null for any other prompt. */
+export function parseEditsCommand(text) {
+  const m = firstLine(text).match(EDITS_FIRST_LINE_RE);
+  if (!m) return null;
+  return m[1]?.toLowerCase() ?? 'status';
+}
+
 /** A `/name` prompt the engine announced in its own available_commands_update. */
 export function isChildCommand(text, childCommands = []) {
   const name = firstLine(text).match(SLASH_FIRST_LINE_RE)?.[1];
