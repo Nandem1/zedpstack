@@ -123,7 +123,21 @@ Cuando la API rechaza un modelo porque el CLI es antiguo («requires Claude Code
 
 `setup_plan` añade `pin` (el id concreto sondeado) a cada alias que corre y una línea en `recommendations` que propone fijarlo. `setup_write` acepta ids concretos y, si se escribe un alias, lo escribe tal cual y añade a `warnings` el modelo que corre hoy.
 
-**Orquestador.** `claude-agent-acp@0.93.0` emite `usage_update._meta["_claude/model"]` con el modelo que respondió (comprobado el 2026-10-17: `claude-sonnet-5-5` con el modelo `default`). El hub compara ese valor con el `currentValue` de la opción `model` y, si es un id concreto distinto, escribe una vez en el hilo la línea de `mismatch`. Un alias del orquestador no se contrasta, porque la caché de sondeos describe el CLI de los workers y no el SDK que lleva el engine. `cursor-agent acp` no emite ningún campo de modelo, así que el orquestador de Cursor queda `unverified`. El de Codex no se pudo comprobar, porque el engine exigió `CODEX_API_KEY` u `OPENAI_API_KEY`.
+**Orquestador.** `claude-agent-acp@0.93.0` emite `usage_update._meta["_claude/model"]` con el modelo que respondió (comprobado el 2026-10-17: `claude-sonnet-5-5` con el modelo `default`). El hub compara ese valor con el `currentValue` de la opción `model` y, si es un id concreto distinto, escribe una vez en el hilo la línea de `mismatch`. Un alias del orquestador no se contrasta, porque la caché de sondeos describe el CLI de los workers y no el SDK que lleva el engine. `cursor-agent acp` no emite ningún campo de modelo, así que el orquestador de Cursor queda `unverified`. Codex ya autentica con el login existente, pero no se comprobó un turno ni se añadió un adaptador de evidencia del modelo efectivo.
+
+## Engines, entorno y preferencias ACP
+
+`src/acp/engine.mjs` resuelve cada engine por override de entorno, config del usuario, registro de Zed y fallback fijado, o `cursor-agent acp` en `PATH`. Devuelve un registro con comando, origen, paquete y versión. `startEngine` y el diagnóstico local de `src/acp/diagnostics.mjs` usan esa misma resolución. `dispatch doctor` informa del ejecutable y de la caché npx exacta sin arrancar engines ni consultar la red. `zp.runtime` conserva los tres runtimes y describe como `(no instalado)` aquellos sin ejecutable o caché completa.
+
+`src/acp/auth.mjs` define la política de autenticación. Codex prefiere `chat-gpt`, que reutiliza el login de `codex login`; solo permite `api-key` con `CODEX_API_KEY` u `OPENAI_API_KEY` en el hub. Cursor usa `cursor_login` y Claude `claude-login` cuando los anuncian. Un método desconocido nunca se elige por su posición o nombre. El error enumera los métodos disponibles y el comando de login. Con ningún método anunciado se pasa directamente a `session/new`.
+
+`engineMcpEnv` construye el `env` explícito del MCP inyectado. Reenvía `PATH`, `HOME` y todas las variables `ZEDPSTACK_*` y `PSTACK_*`. Sesión, repo, puente y pid se sustituyen por los del hub actual. Esto conserva `ZEDPSTACK_HOME`, `ZEDPSTACK_MODEL_SHEET` y `PSTACK_ROOT` aunque el engine no herede su entorno al MCP. Las claves de proveedor no se reenvían por este canal.
+
+`src/acp/options.mjs` valida las elecciones contra las opciones nativas o derivadas, incluidas las listas agrupadas y booleanas. `src/acp/hub.mjs` mantiene una cola por sesión. Agrupa las peticiones consecutivas hasta `setImmediate` y ejecuta primero los cambios `zp.runtime` pendientes; las demás opciones se validan después del cambio. Un valor inválido devuelve `-32602` sin envío al engine, cambio de estado ni escritura de preferencias. Las notificaciones de un engine sustituido no alteran las opciones del nuevo.
+
+Las preferencias se guardan en `acp-prefs.json` como `{lastRuntime, perRuntime: {claude: {...}, codex: {...}, cursor: {...}}`. Cada runtime recupera solamente sus valores. Antes de cada reaplicación el hub valida contra las opciones vivas y elimina las entradas obsoletas del archivo, con un aviso en stderr por entrada eliminada. Los errores transitorios de RPC conservan los valores válidos.
+
+El modelo del orquestador proviene del desplegable del engine. El flujo Cursor con `grok-4.6` usa esa selección guardada y una hoja de workers independiente para asignar Claude y Codex por rol. `default_config_options` de Zed se omite o contiene valores válidos en todos los runtimes usados. El ejemplo de `agent_servers.zedpstack` custom está en [ACP_DESIGN.md](./ACP_DESIGN.md#orquestador-cursor-y-workers-por-rol).
 
 ## Cancelación y supervisión (hub ACP)
 

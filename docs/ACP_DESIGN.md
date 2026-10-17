@@ -13,9 +13,9 @@ Zed debe ser el único sitio de trabajo: el hilo "zedpstack" es el orquestador. 
    - claude: `@agentclientprotocol/claude-agent-acp` (npx, versión fijada)
    - codex: `@agentclientprotocol/codex-acp` (npx, versión fijada)
    - cursor: `cursor-agent acp` (binario)
-   Evidencia local: `~/Library/Application Support/Zed/external_agents/registry/registry.json` lista las tres distribuciones, y Zed ya las instala para el usuario. El engine se resuelve en este orden: override en `~/.zedpstack/config` (`acp.engines.<runtime>`), entrada del registro de Zed, y `npx -y <paquete>@<versión>` como último recurso.
+   Evidencia local: `~/Library/Application Support/Zed/external_agents/registry/registry.json` lista las tres distribuciones, y Zed ya las instala para el usuario. El engine se resuelve en este orden: override JSON argv en `ZEDPSTACK_ACP_ENGINE_<RUNTIME>`, override en `~/.zedpstack/config` (`acp.engines.<runtime>`), entrada del registro de Zed, y `npx -y <paquete>@<versión>` como último recurso. Cursor usa `cursor-agent acp` en `PATH` cuando el registro solo contiene una ruta relativa al archivo descargable.
 2. **El hub solo interviene en cinco puntos**, todo lo demás pasa transparente (mensajes `session/update`, peticiones del hijo al cliente `fs/*`, `terminal/*`, `session/request_permission`, con remapeo de ids de sesión y de petición):
-   1. `session/new`: inyecta el servidor MCP de zedpstack en `mcpServers` del hijo, con `ZEDPSTACK_ACP_SESSION`, `ZEDPSTACK_REPO` y `ZEDPSTACK_ACP_BRIDGE`.
+   1. `session/new`: inyecta el servidor MCP de zedpstack en `mcpServers` del hijo. Su `env` incluye `PATH`, `HOME` y todas las variables `ZEDPSTACK_*` y `PSTACK_*` del hub. Sobrescribe sesión, repo, puente y pid con los del hilo actual. No reenvía claves de proveedor ni secretos ajenos a esos prefijos.
    2. Primer prompt de cada sesión de engine: antepone el cuerpo de la skill orquestadora (`orchestratorPrompt()`).
    3. Opciones y comandos: mezcla la opción `zp.runtime` y los comandos (`/claude`, `/codex`, `/cursor`, `/board`) con los `configOptions` y `available_commands_update` del hijo. Las opciones del hijo (modelo, esfuerzo, modo) se muestran tal cual, porque son la lista real de ese CLI. No se mantiene catálogo propio de modelos del orquestador.
    4. Tarjetas de workers: se superponen para todo agente cuyo `origin.sessionId` coincide con la sesión, reutilizando `createWorkerUpdateSink`.
@@ -65,13 +65,51 @@ Si el hijo no devuelve `configOptions`, el hub deriva `model` desde `models` y `
 
 El estado interno de opciones contiene `{configOptions, legacyRoutes}`. Las rutas existen solo para opciones derivadas. `model` usa `session/set_model` con `modelId` y `mode` usa `session/set_mode` con `modeId`. Las opciones nativas usan `session/set_config_option`. El cambio directo y la reaplicación de preferencias comparten esta selección de método. Las actualizaciones legacy `current_mode_update` y `current_model_update` modifican la opción derivada y generan un `config_option_update` con la lista completa.
 
+Cada sesión tiene una cola de cambios de configuración. El hub espera hasta `setImmediate` para agrupar las peticiones consecutivas de Zed y selecciona primero los cambios `zp.runtime` pendientes. Mantiene el orden de llegada entre cambios de runtime y entre las demás opciones. Una petición ya enviada al engine termina antes de ejecutar la siguiente.
+
+Antes de enviar o guardar un valor, el hub lo valida contra las opciones vivas. Admite listas planas, grupos de opciones y opciones booleanas. Un valor inválido o un id desconocido devuelve error JSON-RPC `-32602` con los valores disponibles y no modifica opciones ni preferencias. Las preferencias se guardan en `perRuntime.<runtime>`. Al reaplicarlas, los valores obsoletos se eliminan del archivo y se registran una vez en stderr, sin mensaje en el hilo. Un fallo RPC transitorio conserva una preferencia válida. La validación se repite después de cada respuesta, porque cambiar de modelo puede cambiar otras opciones.
+
+### Orquestador Cursor y workers por rol
+
+El flujo con Cursor y `grok-4.6` como orquestador usa el desplegable de modelos del propio engine, sin catálogo de zedpstack. Elige `/cursor` y después `grok-4.6` si el CLI lo anuncia. La selección se guarda solamente para Cursor. La hoja de workers puede asignar `how explorer` a `claude:claude-haiku-5-5` y `bug-fix` a `codex:gpt-6.1-sol`.
+
+Registra el hub como agente custom en `settings.json` de Zed:
+
+```json
+{
+	"agent_servers": {
+		"zedpstack": {
+			"type": "custom",
+			"command": "/usr/local/bin/node",
+			"args": ["/ruta/zedpstack/scripts/acp.mjs"],
+			"env": { "ZEDPSTACK_MODEL_SHEET": "/ruta/worker-models.md" }
+		}
+	}
+}
+```
+
+Omite `default_config_options` o incluye solamente valores válidos en todos los runtimes utilizados. Zed los aplica después de `session/new`; un valor como `mode=bypassPermissions` de Claude se rechaza en Cursor. Para elegir solo el runtime inicial puedes usar `"default_config_options": {"zp.runtime": "cursor"}` dentro de `agent_servers.zedpstack`. Las elecciones específicas de modelo y modo quedan en las preferencias del hub.
+
 ## Arranque y errores del engine
 
-El handshake completo tiene un límite de 30 segundos. `initialize` incluye nombre y versión del cliente. Si el hijo anuncia métodos de autenticación, el engine espera `authenticate` antes de enviar `session/new`. Prefiere `cursor_login`. Para otros métodos, elige el primer id que no indique interacción, navegador, OAuth, dispositivo o login.
+El handshake completo tiene un límite de 30 segundos. `initialize` incluye nombre y versión del cliente. Si el hijo anuncia métodos de autenticación, el engine espera `authenticate` antes de enviar `session/new`. `src/acp/auth.mjs` contiene la política explícita, en este orden:
+
+| Runtime | Método | Condición | Acción si falla |
+|---|---|---|---|
+| Claude | `claude-login` | Lo anuncia el engine; usa las credenciales del CLI | `claude auth login` o `ANTHROPIC_API_KEY` |
+| Codex | `chat-gpt` | Lo anuncia el engine; comprueba primero el login guardado | `codex login` |
+| Codex | `api-key` | Lo anuncia el engine y existe `CODEX_API_KEY` u `OPENAI_API_KEY` no vacía en el hub | Configurar la clave en el entorno del hub |
+| Cursor | `cursor_login` | Lo anuncia el engine; usa el login existente | `agent login` |
+
+No hay elección por heurística ni fallback a métodos desconocidos. Si ninguno cumple la política, el error enumera ids y nombres disponibles y da el comando de login o la variable necesaria. El método elegido se registra en stderr. No se reintenta con otra fuente de autenticación tras un rechazo.
+
+Verificado el 2026-10-17 con `codex-acp@2.2.2` real. `initialize` anunció `api-key`, con `_meta["api-key"].provider="openai"`, y `chat-gpt`. La capa engine eligió `chat-gpt` sin claves API y obtuvo `session/new` con opciones nativas de modelo, esfuerzo, modo, colaboración y fast mode. Con el `CODEX_HOME` original el app-server terminó con «Operation not permitted» en el sandbox. La prueba usó un directorio temporal escribible con una copia del login existente, borrada después. Cursor real anunció `cursor_login`, pero respondió «Login failed or timed out» en `authenticate` dentro del sandbox. La causa de ese rechazo no quedó determinada. No se pudo verificar allí un worker real de Cursor a través del MCP; la prueba con engine falso cubre la hoja temporal y un MCP sin entorno heredado.
 
 Un error o timeout termina el grupo del hijo y espera el cierre de sus pipes. El diagnóstico identifica la etapa, conserva el motivo RPC o el código o señal de salida y añade las últimas diez líneas de stderr, con un máximo de 8192 caracteres retenidos. Los errores de Cursor incluyen el hint «ejecuta `agent login`». El cierre explícito del peer acepta el motivo de terminación para que una petición pendiente no pierda ese dato bajo el mensaje genérico `closed`.
 
 Una ruta relativa dentro de un archivo descargable del registro de Cursor no identifica un ejecutable instalado. Si el registro no incluye un directorio de instalación, el resolver usa `cursor-agent acp` desde `PATH`.
+
+`dispatch doctor --human` y `--json` comparten el resolver con `startEngine`. La sección ACP muestra origen (`env`, `user-config`, `zed-registry`, `npx-pin` o `path`), comando, versión declarada, ejecutable, caché npx y política de autenticación. Solo lee archivos locales. Un ejecutable ausente, sin permiso de ejecución, o un paquete npx sin la versión resuelta completa se marca como no instalado, también en la descripción de `zp.runtime`. Encontrar el paquete en caché no garantiza que los metadatos de npm permitan ejecutar `npx --offline`, ni comprueba el login.
 
 ## Plan de cortes (cada uno termina en una comprobación)
 1. `/claude` + desplegables + turno de conversación en streaming (rpc, engine, hub passthrough, fixture de agente ACP falso).
@@ -88,7 +126,7 @@ Una ruta relativa dentro de un archivo descargable del registro de Cursor no ide
 - ¿Los engines mandan ediciones y shell por `fs/write_text_file` y `terminal/create` del cliente, o las ejecutan internamente? Comprobado el 2026-10-17 con un cliente que anunciaba `fs.writeTextFile` y `terminal`: `claude-agent-acp@0.93.0` (Write) y `cursor-agent acp` (Edit File) escriben internamente y nunca llaman al cliente. La guarda de protocolo no ve esas ediciones. Con Claude queda el hook PreToolUse (`dispatch install`), que el engine ejecuta y que bloqueó la escritura con el marcador de sesión activo. Con Cursor no queda defensa. La guarda sigue en el hub para engines que sí usen el cliente.
 - Los engines son dependencias externas que pueden cambiar: versiones fijadas, `doctor` informa del binario y la versión resueltos, y un incumplimiento marca el runtime como no disponible en vez de degradar en silencio.
 - Cursor: comprobado el 2026-10-17 que `cursor-agent acp` acepta el `mcpServers` inyectado en `session/new` y llama a `spawn_agent` y `wait_agent` (también `claude-agent-acp@0.93.0`). Ambos piden `session/request_permission` por cada herramienta MCP.
-- Codex y Cursor deben demostrar una fuente de evidencia del modelo efectivo; sin ella el estado es `unverified`, nunca `ok`. Para los workers la evidencia existe: el `init` de Cursor y la cabecera `model:` de Codex. Para el orquestador, el 2026-10-17 se capturaron todas las notificaciones de un turno trivial. `claude-agent-acp@0.93.0` envía `usage_update` con `_meta["_claude/model"]: "claude-sonnet-5-5"` (modelo `default`), y el hub lo usa. `cursor-agent acp` envía `session_info_update`, `agent_thought_chunk`, `agent_message_chunk` y `available_commands_update`, ninguno con el modelo, así que su orquestador queda `unverified`. `codex-acp` no pasó de `authenticate` porque pidió `CODEX_API_KEY` u `OPENAI_API_KEY`, así que queda sin comprobar y sin adaptador.
+- Codex y Cursor deben demostrar una fuente de evidencia del modelo efectivo; sin ella el estado es `unverified`, nunca `ok`. Para los workers la evidencia existe: el `init` de Cursor y la cabecera `model:` de Codex. Para el orquestador, el 2026-10-17 se capturaron todas las notificaciones de un turno trivial. `claude-agent-acp@0.93.0` envía `usage_update` con `_meta["_claude/model"]: "claude-sonnet-5-5"` (modelo `default`), y el hub lo usa. `cursor-agent acp` envía `session_info_update`, `agent_thought_chunk`, `agent_message_chunk` y `available_commands_update`, ninguno con el modelo, así que su orquestador queda `unverified`. `codex-acp@2.2.2` ya pasó `authenticate` y `session/new` con el login existente en el corte 7; no se ejecutó un turno para verificar su modelo efectivo y sigue sin adaptador.
 - La decisión 5 decía que al escribir la hoja se fija el id sondeado. El corte 5 no reescribe en silencio: `setup_write` escribe el alias que se le pide y avisa del modelo que corre hoy, y `setup_plan` recomienda fijarlo.
 - Cambiar de runtime reinicia la conversación; se acepta a cambio de no inventar continuidad propia.
 - `session/close` es inestable en ACP. El hub lo anuncia (`sessionCapabilities.close`) y lo atiende, pero si Zed cierra un hilo sin avisar, la sesión vive hasta el cierre del hub. El tope de engines limita el coste.
@@ -102,5 +140,5 @@ Una ruta relativa dentro de un archivo descargable del registro de Cursor no ide
 - [x] Corte 4: cancelación y supervisión (turno con `cancelling` compartido, workers del turno detenidos antes de responder `cancelled`, permisos pendientes cancelados, caída del engine con `refusal` y reinicio perezoso, `session/close`, tope `ZEDPSTACK_ACP_MAX_ENGINES`, vigilancia de `ZEDPSTACK_PARENT_PID` en el engine y el MCP; verificado con el engine real de Claude). Ver «Cancelación y supervisión» en docs/ARCHITECTURE.md.
 - [x] Corte 5: verificación de modelo (`modelCheck.mjs` con `normalizeModelId`, `expectedModelFor` y `checkModel`; `expectedModel` en el spec, `modelCheck` derivado al leer y `model_check` en todas las salidas; aviso en tablero, tarjeta y resultado; error de CLI antiguo con la versión instalada; `setup_plan` recomienda fijar ids y `setup_write` avisa al escribir un alias; aviso del orquestador Claude por `usage_update`). Verificado con workers reales de Cursor y Claude y con los engines reales de Claude y Cursor. Ver «Verificación de modelo» en docs/ARCHITECTURE.md.
 - [x] Corte 6: permisos y guarda de ediciones (`bridge.mjs` con socket Unix 0600 por hub, `askHuman` que concede sin puente y falla cerrado con él; `session/request_permission` con `allow_once`, `allow_always` por hilo y acción y `reject_once`; rechazo de preguntas pendientes al cancelar, cerrar, reiniciar o perder el engine y apagar el hub; `apply_agent_changes`, `spawn_agent` en el checkout, `close_agent` que descarta trabajo y `setup_write` preguntan; guarda `fs/write_text_file` y `terminal/create` con `editVerdict` y `/edits on|off`). Verificado con el engine real de Cursor (rechazo y permiso de `apply_agent_changes`) y con los de Claude y Cursor para las ediciones directas. Ver «Permisos y guarda de ediciones» en docs/ARCHITECTURE.md.
-- [ ] Corte 7: `/codex` y `/cursor` con preferencias.
+- [x] Corte 7: autenticación explícita por runtime, login existente de Codex, entorno MCP por prefijos, validación y cola de opciones con prioridad de runtime, preferencias independientes y limpieza de valores obsoletos, diagnóstico ACP local compartido y flujo Cursor `grok-4.6` con workers por rol. Codex real verificado hasta `session/new`; Cursor real solo hasta `initialize` por rechazo de autenticación en este entorno. La prueba del MCP sin entorno heredado usa el engine falso.
 - [ ] Corte 8: endurecimiento multihilo.

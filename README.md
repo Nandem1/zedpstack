@@ -72,6 +72,37 @@ Para elegirlos, usa `/setup-zedpstack`, que sigue el mismo flujo que `/setup-pst
 
 El runtime se deduce del slug. Para forzarlo, usa un prefijo: `cursor:claude-opus-5-5`. La hoja del host (por ejemplo `~/.cursor/rules/pstack-models.mdc`) nunca se usa para los workers.
 
+### Cursor como orquestador en Zed
+
+Para usar Cursor con `grok-4.6` como orquestador y Claude o Codex como workers, añade esta entrada a `settings.json` de Zed. Sustituye las rutas por las de tu máquina:
+
+```json
+{
+	"agent_servers": {
+		"zedpstack": {
+			"type": "custom",
+			"command": "/usr/local/bin/node",
+			"args": ["/ruta/zedpstack/scripts/acp.mjs"],
+			"env": {
+				"ZEDPSTACK_MODEL_SHEET": "/ruta/worker-models.md"
+			}
+		}
+	}
+}
+```
+
+Ejecuta `agent login`, abre el hilo zedpstack y escribe `/cursor`. Elige `grok-4.6` en el desplegable de modelos del engine, si tu CLI lo ofrece. El hub guarda modelo, esfuerzo y modo por runtime en `~/.zedpstack/acp-prefs.json`. El desplegable del orquestador y la hoja de workers son independientes. Por ejemplo, la hoja puede contener:
+
+```text
+how explorer: claude:claude-haiku-5-5
+bug-fix: codex:gpt-6.1-sol
+architect runners: codex:gpt-6.1-sol, claude:claude-opus-5-5
+```
+
+Omite `default_config_options` de Zed o incluye solamente valores válidos para todos los runtimes que uses. Un modo de Claude como `bypassPermissions` no es válido para Cursor. El hub rechaza esos valores sin guardarlos. Si envías varios valores consecutivos, aplica primero `zp.runtime` y valida los demás contra el engine elegido.
+
+`/codex` reutiliza el login de `codex login`. Solo elige autenticación por API key si el entorno del hub contiene `CODEX_API_KEY` u `OPENAI_API_KEY`. `node scripts/dispatch.mjs doctor --human` muestra la resolución, versión, ejecutable o caché y política de autenticación de cada engine sin iniciarlos ni consultar la red. `--json` devuelve el mismo diagnóstico estructurado.
+
 ## Seguridad
 
 - Los subagentes con `readonly: true` no pueden escribir: Claude solo recibe `Read,Grep,Glob`, Codex corre con `-s read-only` y Cursor con `--mode ask`.
