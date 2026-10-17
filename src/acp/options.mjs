@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -120,7 +121,63 @@ export function loadPrefs(env = process.env) {
 export function savePrefs(prefs, env = process.env) {
   const file = prefsPath(env);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(prefs, null, 2)}\n`, 'utf8');
+  const tmp = `${file}.${process.pid}-${randomBytes(6).toString('hex')}.tmp`;
+  try {
+    fs.writeFileSync(tmp, `${JSON.stringify(prefs, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    fs.renameSync(tmp, file);
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
+/** One shared document requires exclusion across hubs as well as atomic publication to readers. */
+export async function updatePrefs(mutate, env = process.env) {
+  const file = prefsPath(env);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const owner = `${process.pid}-${randomBytes(8).toString('hex')}`;
+  const staging = `${file}.lock-${owner}`;
+  const lock = `${file}.lock`;
+  fs.mkdirSync(staging, { mode: 0o700 });
+  fs.writeFileSync(path.join(staging, owner), '');
+  const deadline = Date.now() + 5000;
+  let acquired = false;
+  try {
+    while (!acquired) {
+      try {
+        // Publish a nonempty directory so stale cleanup cannot remove a new owner's empty lock.
+        fs.renameSync(staging, lock);
+        acquired = true;
+      } catch (error) {
+        if (!['EEXIST', 'ENOTEMPTY'].includes(error.code)) throw error;
+        let names;
+        try { names = fs.readdirSync(lock); } catch (error) {
+          if (error.code !== 'ENOENT') throw error;
+          continue;
+        }
+        for (const name of names) {
+          const pid = Number(/^(\d+)-[a-f0-9]+$/.exec(name)?.[1]);
+          if (!pid) continue;
+          try { process.kill(pid, 0); } catch (error) {
+            if (error.code === 'ESRCH') fs.rmSync(path.join(lock, name), { force: true });
+          }
+        }
+        try { fs.rmdirSync(lock); } catch (error) {
+          if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error;
+        }
+        if (Date.now() >= deadline) throw new Error(`timed out updating ACP preferences: ${file}`);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+    }
+    const prefs = loadPrefs(env);
+    if (mutate(prefs) === false) return false;
+    savePrefs(prefs, env);
+    return true;
+  } finally {
+    if (acquired) {
+      fs.renameSync(lock, staging);
+    }
+    fs.rmSync(staging, { recursive: true, force: true });
+  }
 }
 
 const RUNTIME_FIRST_LINE_RE = /^(?:\/)?(claude|codex|cursor)\s*$/i;
