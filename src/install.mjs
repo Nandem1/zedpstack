@@ -11,8 +11,21 @@ import { zedpstackRoot } from './paths.mjs';
 
 export const HOSTS = ['claude-code', 'codex', 'cursor', 'zed'];
 
+/**
+ * Homebrew's execPath is a versioned Cellar path that disappears on upgrade;
+ * prefer the stable `opt/<formula>` link to the same binary.
+ */
+export function stableNodePath(execPath = process.execPath) {
+  const m = /^(.*)\/Cellar\/([^/]+)\/[^/]+\/bin\/node$/.exec(execPath);
+  if (m) {
+    const stable = path.join(m[1], 'opt', m[2], 'bin', 'node');
+    if (fs.existsSync(stable)) return stable;
+  }
+  return execPath;
+}
+
 function mcpCommand() {
-  return { command: process.execPath, args: [path.join(zedpstackRoot(), 'scripts', 'mcp.mjs')] };
+  return { command: stableNodePath(), args: [path.join(zedpstackRoot(), 'scripts', 'mcp.mjs')] };
 }
 
 function symlinkAction(linkPath, target) {
@@ -51,15 +64,17 @@ function claudeCodeActions(home) {
   const { command, args } = mcpCommand();
   const probe = spawnSync('claude', ['mcp', 'get', 'zedpstack'], { encoding: 'utf8' });
   const registered = probe.status === 0;
+  const current = registered && probe.stdout.includes(`Command: ${command}`);
   return [
     ...skillLinks(path.join(home, '.claude', 'skills')),
     {
       kind: 'mcp',
       path: 'claude mcp (user scope)',
-      state: registered ? 'ok' : 'missing',
+      state: current ? 'ok' : registered ? 'outdated' : 'missing',
       command: ['claude', 'mcp', 'add', '--scope', 'user', 'zedpstack', '--', command, ...args].join(' '),
       apply: () => {
-        if (registered) return 'unchanged';
+        if (current) return 'unchanged';
+        if (registered) spawnSync('claude', ['mcp', 'remove', '--scope', 'user', 'zedpstack'], { encoding: 'utf8' });
         const res = spawnSync('claude', ['mcp', 'add', '--scope', 'user', 'zedpstack', '--', command, ...args], {
           encoding: 'utf8',
         });
@@ -84,17 +99,23 @@ function codexActions(home) {
     'default_tools_approval_mode = "approve"',
     '',
   ].join('\n');
-  const registered = /^\[mcp_servers\.zedpstack\]/m.test(existing);
+  const blockRe = /\n?\[mcp_servers\.zedpstack\]\n(?:(?!\[)[^\n]*\n?)*/;
+  const found = blockRe.exec(existing);
+  const current = found && found[0].trim() === block.trim();
   return [
     ...skillLinks(path.join(codexHome, 'skills')),
     {
       kind: 'mcp',
       path: configPath,
-      state: registered ? 'ok' : 'missing',
+      state: current ? 'ok' : found ? 'outdated' : 'missing',
       snippet: block.trim(),
       apply: () => {
-        if (registered) return 'unchanged';
+        if (current) return 'unchanged';
         fs.mkdirSync(path.dirname(configPath), { recursive: true });
+        if (found) {
+          fs.writeFileSync(configPath, existing.replace(blockRe, block), 'utf8');
+          return 'updated';
+        }
         fs.appendFileSync(configPath, block, 'utf8');
         return 'appended';
       },
@@ -113,13 +134,14 @@ function cursorActions(home) {
       parseError = err.message;
     }
   }
-  const registered = Boolean(data.mcpServers?.zedpstack);
+  const entry = data.mcpServers?.zedpstack;
+  const registered = Boolean(entry) && JSON.stringify(entry) === JSON.stringify(mcpCommand());
   return [
     ...skillLinks(path.join(home, '.agents', 'skills')),
     {
       kind: 'mcp',
       path: configPath,
-      state: parseError ? 'unparseable' : registered ? 'ok' : 'missing',
+      state: parseError ? 'unparseable' : registered ? 'ok' : entry ? 'outdated' : 'missing',
       snippet: JSON.stringify({ mcpServers: { zedpstack: mcpCommand() } }, null, 2),
       apply: () => {
         if (parseError) return `skipped: ${configPath} is not valid JSON (${parseError})`;
@@ -136,13 +158,14 @@ function cursorActions(home) {
 function zedActions(home) {
   const configPath = path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, '.config'), 'zed', 'settings.json');
   const existing = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
-  const registered = /"zedpstack"\s*:/.test(existing);
   const { command, args } = mcpCommand();
+  const mentioned = /"zedpstack"\s*:/.test(existing);
+  const registered = mentioned && existing.includes(command);
   return [
     {
       kind: 'mcp',
       path: configPath,
-      state: registered ? 'ok' : 'manual',
+      state: registered ? 'ok' : mentioned ? 'outdated (edit by hand)' : 'manual',
       snippet: JSON.stringify(
         { context_servers: { zedpstack: { source: 'custom', command, args, env: {} } } },
         null,

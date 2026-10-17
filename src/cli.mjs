@@ -2,7 +2,10 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { formatBoardText } from './agents/board.mjs';
+import { runTop } from './agents/top.mjs';
 import {
+  agentBoard,
   agentResult,
   agentStatus,
   applyAgentChanges,
@@ -128,8 +131,10 @@ async function agentCommand(sub, opts, repoRoot) {
       });
     case 'list':
       return listAgents({ repo: repoRoot, status: opts.status });
+    case 'board':
+      return formatBoardText(agentBoard({ repo: repoRoot, ids: list(opts.ids ?? id), recentMinutes: Number(opts.recent ?? 30) }));
     default:
-      throw new Error('agent subcommands: spawn | status | wait | result | apply | close | list');
+      throw new Error('agent subcommands: spawn | status | wait | result | apply | close | list | board');
   }
 }
 
@@ -168,7 +173,8 @@ Subagents (same contract as the MCP tools):
   agent spawn --prompt "..." [--role "how explorer"] [--slot n] [--model m] [--readonly]
               [--subagent-type poteto-agent] [--skills a,b] [--isolation worktree|none]
   agent wait [--ids a,b] [--any] [--timeout s] | status --id | result --id
-  agent apply --id | close --id [--remove-worktree] | list
+  agent apply --id | close --id [--remove-worktree] | list | board
+  top [--recent minutes] [--once]   live board of this repo's agents (run it in a terminal pane)
 
 Batch playbooks (no orchestrator):
   run --playbook <id> --goal "..." [--detach] [--tee-events] | resume | judgment | cancel
@@ -193,7 +199,17 @@ export async function main(argv) {
   if (command === 'agent') {
     const sub = opts._.shift();
     const result = await agentCommand(sub, opts, repoRoot);
-    if (sub !== 'exec') print(result);
+    if (sub === 'exec') return;
+    if (sub === 'spawn' || sub === 'wait') {
+      const ids = sub === 'spawn' ? undefined : [...result.done, ...result.pending].map((a) => a.agent_id);
+      result.board = formatBoardText(agentBoard({ repo: repoRoot, ids, recentMinutes: 0 }));
+    }
+    print(result);
+    return;
+  }
+
+  if (command === 'top') {
+    await runTop({ repoRoot, recentMinutes: Number(opts.recent ?? 30), once: Boolean(opts.once) });
     return;
   }
 

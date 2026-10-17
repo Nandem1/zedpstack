@@ -13,6 +13,10 @@ Cada agente escribe en `<repo>/.zedpstack/agents/<id>/`:
 | `stdout.log`, `stderr.log`, `result.json` | salida cruda e informe final |
 | `runner.log` | errores del proceso runner |
 
+`progress.log` recibe dos tipos de línea por agente: `> …` para herramientas (lecturas, búsquedas, comandos) y `· …` para la narración del modelo (la primera frase de cada mensaje de Claude, cada pensamiento de Cursor y cada bloque `codex` de Codex). Además, el modelo que reporta el CLI (`init` en Claude y Cursor, la cabecera `model:` en Codex) se guarda como `effectiveModel` en `agent.json`.
+
+La lista (`src/agents/board.mjs`) toma la última de esas líneas por agente. Se ve en tres sitios: al principio de cada resultado MCP, en las notificaciones de progreso de `wait_agent` y en `dispatch top`.
+
 `agent_status` (MCP) o `dispatch agent status --id <id>` muestra las últimas líneas de `progress.log`. El resto de este documento cubre el modo batch (`dispatch run`).
 
 

@@ -62,6 +62,14 @@ MCP tool names below are bare. Hosts prefix them, for example `mcp__zedpstack__s
 
 Every worker also gets read access to the pstack skills directory so it can open the skills you name.
 
+## Showing progress
+
+- Each `spawn_agent`, `wait_agent`, `agent_status` and `list_agents` result has two text blocks: a board (one row per agent with title, model, CLI and latest activity), then the JSON. Copy the board into your chat as SKILL.md shows; that is the user's only view of the subagents inside the chat.
+- The board's title is the spawn's `description`. Use `<Skill>: <angle>`.
+- `model → effective` on a row means the CLI resolved the requested alias to that model (the JSON has `effective_model`). Check it against what the user expects before you attribute a verdict to a model.
+- `wait_agent` also sends MCP progress notifications carrying the board while it waits, when the host passes a `progressToken`. Hosts that render them show the board updating inside the tool call.
+- `dispatch top` in a terminal pane draws the same board live, with spinners and elapsed time.
+
 ## Waiting and timeouts
 
 `wait_agent` waits 50 seconds by default so it stays under host tool timeouts (Codex defaults to 60 s; `dispatch install` sets 600 s). Workers themselves run up to `timeout_seconds` (default 1800). Agents keep running if your session ends; `list_agents` finds them again.

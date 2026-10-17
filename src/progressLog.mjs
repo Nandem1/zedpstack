@@ -16,7 +16,8 @@ const PROGRESS_EVENT_TYPES = new Set([
   'worker.completed',
   'worker.failed',
   'worker.timeout',
-  'worker.output',
+  'worker.activity',
+  'worker.meta',
 ]);
 
 /**

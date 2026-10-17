@@ -34,7 +34,7 @@ export function orchestratorPrompt(task) {
 
 const err = (code, message) => ({ code, message });
 
-export async function handleRequest(msg) {
+export async function handleRequest(msg, { notify = () => {} } = {}) {
   const { method, params = {} } = msg;
   switch (method) {
     case 'initialize': {
@@ -55,9 +55,28 @@ export async function handleRequest(msg) {
     case 'tools/call': {
       const tool = TOOLS.find((t) => t.name === params.name);
       if (!tool) throw Object.assign(new Error(`Unknown tool: ${params.name}`), { rpc: -32602 });
+      const args = params.arguments ?? {};
+      const progressToken = params._meta?.progressToken;
+      const ctx = {
+        progress:
+          progressToken === undefined
+            ? null
+            : ({ progress, total, message }) =>
+                notify('notifications/progress', { progressToken, progress, total, message }),
+      };
       try {
-        const result = await tool.handler(params.arguments ?? {});
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], isError: false };
+        const result = await tool.handler(args, ctx);
+        const content = [];
+        if (tool.board) {
+          try {
+            const board = tool.board(args, result);
+            if (board) content.push({ type: 'text', text: board });
+          } catch {
+            // the board is a view; never fail the call over it
+          }
+        }
+        content.push({ type: 'text', text: JSON.stringify(result, null, 2) });
+        return { content, isError: false };
       } catch (e) {
         return { content: [{ type: 'text', text: `zedpstack ${params.name} failed: ${e.message}` }], isError: true };
       }
@@ -95,7 +114,9 @@ export function startMcpServer({ input = process.stdin, output = process.stdout 
     const isRequest = msg.id !== undefined && msg.id !== null && typeof msg.method === 'string';
     if (!isRequest) return;
     try {
-      const result = await handleRequest(msg);
+      const result = await handleRequest(msg, {
+        notify: (method, params) => write({ jsonrpc: '2.0', method, params }),
+      });
       write({ jsonrpc: '2.0', id: msg.id, result });
     } catch (e) {
       write({ jsonrpc: '2.0', id: msg.id, error: err(e.rpc ?? -32603, e.message) });

@@ -39,11 +39,12 @@ process.stdin.on('end', () => {
   const report = `fake ${runtime} report\nmodel=${model}\nreadonly=${input.includes('You are read-only')}\nsrc/index.mjs:1 cited`;
   if (runtime === 'codex') {
     fs.writeFileSync(flag('-o'), report);
-    process.stderr.write('exec\n/bin/zsh -lc "rg foo" in /tmp\nsucceeded in 3ms:\n');
+    process.stderr.write(`model: ${model}\ncodex\nReading the brief first.\nexec\n/bin/zsh -lc "rg foo" in /tmp\nsucceeded in 3ms:\n`);
     process.exit(0);
   }
   const lines = [
-    { type: 'system', subtype: 'init' },
+    { type: 'system', subtype: 'init', model: `claude-${model}-fake` },
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'Tracing the fake write path. Then more.' }] } },
     { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: `${process.cwd()}/src/index.mjs` } }] } },
     { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] } },
     { type: 'assistant', message: { content: [{ type: 'text', text: report }] } },

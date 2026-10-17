@@ -22,6 +22,26 @@ You are the orchestrator. You work in **poteto-mode**, and zedpstack is your sub
 - You own every report. Read each one, check its claims against the code, and for writers review the commit (`agent_result` → `git show <commit>`) before `apply_agent_changes`.
 - Judgment, synthesis, and every message to the user stay in this chat.
 
+## Show the user what is running
+
+The user cannot see your subagents unless you show them. Every `spawn_agent`, `wait_agent`, `agent_status` and `list_agents` result starts with a plain-text board (one row per agent: title, model, CLI, latest activity). After each batch of spawns, and after each `wait_agent` whose board changed, write one sentence on what you are doing and why, then the agents as a list in this shape:
+
+```markdown
+Abro explorers e investigators en paralelo y sigo verificando el tipo de la columna.
+
+- ⠿ **How: frontend tracking PUT** · composer-2.5 (Cursor)
+  Documenting tracking PUT findings
+- ⠿ **Why: git history both repos** · gpt-6.1-sol (Codex)
+  > Running git log -S estado
+- ✓ **How: backend tracking SQL** · haiku → claude-haiku-4-5 (Claude)
+  done in 48s
+```
+
+- Give every spawn a `description` of the form `<Skill>: <angle>` in at most six words (`How: backend tracking SQL`, `Architect: runner B`, `Interrogate: reviewer 2`). It is the row title.
+- Copy model and activity from the board; do not invent them. An arrow (`opus → claude-opus-4-8`) means the CLI resolved the alias to that model; mention it when it is not the model the user expects.
+- While agents run, wait in rounds of about 45 seconds (`timeout_seconds: 45`) and post the board again only when a row changed, so the chat follows the work without repeating itself.
+- Tell the user once per session that `node <zedpstack>/scripts/dispatch.mjs top` in a terminal pane shows the same board live.
+
 ## When the MCP server is missing
 
 The same operations exist as a CLI that prints JSON (`--repo` defaults to the cwd):

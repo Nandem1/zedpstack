@@ -15,8 +15,13 @@ function startServer() {
     stdio: ['pipe', 'pipe', 'inherit'],
   });
   const pending = new Map();
+  const notifications = [];
   readline.createInterface({ input: child.stdout }).on('line', (line) => {
     const msg = JSON.parse(line);
+    if (msg.id === undefined) {
+      notifications.push(msg);
+      return;
+    }
     pending.get(msg.id)?.(msg);
     pending.delete(msg.id);
   });
@@ -27,13 +32,14 @@ function startServer() {
       pending.set(id, resolve);
       child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
     });
+  const callRaw = (name, args, meta) => rpc('tools/call', { name, arguments: args, ...(meta ? { _meta: meta } : {}) });
   const call = async (name, args) => {
-    const res = await rpc('tools/call', { name, arguments: args });
-    const text = res.result.content[0].text;
+    const res = await callRaw(name, args);
+    const text = res.result.content.at(-1).text;
     if (res.result.isError) throw new Error(text);
     return JSON.parse(text);
   };
-  return { child, rpc, call };
+  return { child, rpc, call, callRaw, notifications };
 }
 
 describe('MCP server', () => {
@@ -151,6 +157,26 @@ describe('MCP server', () => {
     assert.equal(closed.status, 'stopped');
     const listed = await server.call('list_agents', { repo: sb.repo, status: 'stopped' });
     assert.equal(listed.length, 1);
+  });
+
+  it('shows a Cursor-style board and streams progress while waiting', async () => {
+    const spawned = await server.callRaw('spawn_agent', {
+      repo: sb.repo, role: 'how explorer', readonly: true, description: 'How: board check', prompt: 'look',
+    });
+    const board = spawned.result.content[0].text;
+    assert.match(board, /^zedpstack · \d+ running/);
+    assert.match(board, /How: board check {2}haiku · Claude/);
+    const id = JSON.parse(spawned.result.content.at(-1).text).agent_id;
+
+    const waited = await server.callRaw(
+      'wait_agent',
+      { repo: sb.repo, agent_ids: [id], timeout_seconds: 20 },
+      { progressToken: 'tok-1' },
+    );
+    assert.match(waited.result.content[0].text, /✓ How: board check {2}haiku → claude-haiku-fake · Claude\n {2}done in/);
+    const progress = server.notifications.filter((n) => n.method === 'notifications/progress' && n.params.progressToken === 'tok-1');
+    assert.ok(progress.length >= 1, 'at least one progress notification');
+    assert.match(progress[0].params.message, /How: board check/);
   });
 
   it('rejects a spawn for an unknown role before creating anything', async () => {

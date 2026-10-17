@@ -9,6 +9,7 @@ import { verifyRuntimeAvailable } from '../permissions.mjs';
 import { resolvePstackInstall } from '../pstack.mjs';
 import { runWorkerProcess } from '../runtimes/worker.mjs';
 import { resolveAgentModel } from '../workerModels.mjs';
+import { boardRows } from './board.mjs';
 import {
   buildAgentPrompt,
   effortFromSubagentType,
@@ -199,6 +200,7 @@ export async function execAgent({ repo, id }) {
       extraReadDirs,
       allowedTools: configData().permissions?.claudeWriteAllowedTools,
       onSpawned: ({ pid }) => updateAgent(repoRoot, id, { workerPid: pid }),
+      onMeta: ({ effectiveModel }) => updateAgent(repoRoot, id, { effectiveModel }),
     });
   } catch (err) {
     sink.emit('worker.failed', { agentId: id, reason: err.message });
@@ -271,6 +273,7 @@ function summarize(record) {
   if (record.error) out.error = record.error;
   if (record.notes?.length) out.notes = record.notes;
   if (record.worktree) out.branch = record.worktree.branch;
+  if (record.effectiveModel) out.effective_model = record.effectiveModel;
   return out;
 }
 
@@ -312,7 +315,7 @@ export function agentResult({ repo, id, maxChars = MAX_INLINE_RESULT_CHARS }) {
  * Block until the agents finish (`mode: all`) or one finishes (`mode: any`),
  * or until the timeout. Finished agents come back with their result text.
  */
-export async function waitAgents({ repo, ids, timeoutSeconds = 50, mode = 'all', pollMs = 500 }) {
+export async function waitAgents({ repo, ids, timeoutSeconds = 50, mode = 'all', pollMs = 500, onTick }) {
   const repoRoot = resolveRepo(repo);
   const targets = ids?.length
     ? ids
@@ -321,6 +324,7 @@ export async function waitAgents({ repo, ids, timeoutSeconds = 50, mode = 'all',
   for (;;) {
     const records = targets.map((id) => reconcile(repoRoot, readAgent(repoRoot, id)));
     const done = records.filter((r) => TERMINAL_AGENT_STATUSES.has(r.status));
+    onTick?.({ records, done: done.length, total: records.length, rows: boardRows(repoRoot, records) });
     const finished = mode === 'any' ? done.length > 0 : done.length === records.length;
     if (finished || Date.now() >= deadline) {
       return {
@@ -394,4 +398,18 @@ export function listAgents({ repo, status }) {
     .map((id) => summarize(reconcile(repoRoot, readAgent(repoRoot, id))))
     .filter((a) => !status || a.status === status)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
+/**
+ * Board rows for the given ids, or for every agent that is still running or
+ * finished within the last `recentMinutes`.
+ */
+export function agentBoard({ repo, ids, recentMinutes = 30 }) {
+  const repoRoot = resolveRepo(repo);
+  const cutoff = Date.now() - recentMinutes * 60_000;
+  const records = (ids?.length ? ids : listAgentIds(repoRoot))
+    .map((id) => reconcile(repoRoot, readAgent(repoRoot, id)))
+    .filter((r) => ids?.length || !TERMINAL_AGENT_STATUSES.has(r.status) || Date.parse(r.finishedAt ?? r.updatedAt) >= cutoff)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return boardRows(repoRoot, records);
 }

@@ -12,6 +12,7 @@ import {
   detectCodexShellInvocation,
   detectCodexShellMutation,
 } from '../shellSignals.mjs';
+import { createActivityParser } from './activity.mjs';
 import { accumulateStreamSignals, extractStreamText } from './stream.mjs';
 
 /**
@@ -61,6 +62,7 @@ function kill(child, signal) {
  *   extraReadDirs?: string[],
  *   allowedTools?: string[],
  *   onSpawned?: (info: { pid: number }) => void,
+ *   onMeta?: (meta: { effectiveModel: string }) => void,
  * }} opts
  * @returns {Promise<{ exitCode: number, resultPath: string, processExited: true, timedOut: boolean, result: object }>}
  */
@@ -75,6 +77,7 @@ export async function runWorkerProcess({
   extraReadDirs = [],
   allowedTools,
   onSpawned,
+  onMeta,
 }) {
   const adapter = adapterFor(binding.runtime);
   const stdoutLog = path.join(workerRoot, 'stdout.log');
@@ -130,9 +133,19 @@ export async function runWorkerProcess({
   let lineBuf = '';
   const signals = { readAttempts: 0, readSuccess: 0, readDenied: 0 };
   let timedOut = false;
+  let effectiveModel = null;
+  const activity = createActivityParser(binding.runtime, {
+    onActivity: (text) => emit('worker.activity', { ...eventBase, runtime: binding.runtime, text }),
+    onMeta: (m) => {
+      effectiveModel = m.effectiveModel;
+      emit('worker.meta', { ...eventBase, runtime: binding.runtime, model: binding.model, effectiveModel });
+      onMeta?.(m);
+    },
+  });
 
   const consumeLine = (line) => {
     if (!line.trim()) return;
+    activity.stdoutLine(line);
     accumulateStreamSignals(line, signals);
     const { chunk, terminalResult } = extractStreamText(line);
     if (terminalResult !== null) terminalResultText = terminalResult;
@@ -162,6 +175,7 @@ export async function runWorkerProcess({
       child.stderr.on('data', (buf) => {
         const chunk = buf.toString();
         fs.appendFileSync(stderrLog, chunk);
+        activity.stderrChunk(chunk);
         emit('worker.stderr', { ...eventBase, runtime: binding.runtime, stream: 'stderr', chunk });
       });
       child.on('close', (code) => resolve(code ?? 1));
@@ -195,6 +209,7 @@ export async function runWorkerProcess({
     timedOut,
     runtime: binding.runtime,
     model: binding.model,
+    effectiveModel,
     permissionProfile: binding.permissionProfile,
     cliVersion: null,
     nativeSessionId: null,

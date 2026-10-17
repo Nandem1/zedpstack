@@ -72,6 +72,17 @@ Los workers reciben un entorno filtrado (PATH, HOME y las credenciales de su pro
 
 El prompt MCP `/zedpstack` es el cuerpo de `SKILL.md`. En Claude Code aparece como `/mcp__zedpstack__zedpstack`, y el symlink del skill da además `/zedpstack`.
 
+### D-08. Visibilidad: una lista, cuatro superficies
+
+La lista de subagentes de Cursor es interfaz nativa de su herramienta `Task`, y ningún MCP puede dibujarla. zedpstack ofrece lo más parecido en cada superficie que sí controla. Las cuatro salen de `src/agents/board.mjs`:
+
+1. **Resultado de la herramienta**: el primer bloque de texto de `spawn_agent`/`wait_agent`/`agent_status`/`list_agents`.
+2. **Chat**: `SKILL.md` obliga al orquestador a copiar la lista en su mensaje tras cada ronda, con títulos `<Skill>: <ángulo>`.
+3. **Progreso MCP**: `wait_agent` envía `notifications/progress` con la lista cuando el host pasa un `progressToken`.
+4. **Terminal**: `dispatch top` la redibuja en vivo.
+
+La actividad sale de la salida del propio CLI (herramientas y narración) sin llamadas extra a modelos. El modelo efectivo que reporta el CLI se muestra junto al alias pedido.
+
 ## Límites conocidos
 
 - Un CLI separado no puede heredar el modelo del orquestador (`inherit-parent`), así que corre el default de pstack y lo deja anotado.

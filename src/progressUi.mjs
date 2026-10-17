@@ -116,12 +116,11 @@ export function formatHumanProgressEvent(event, opts = {}) {
   if (type === 'run.failed') {
     return `Run failed: ${(errors ?? []).join('; ')}`;
   }
-  if (type === 'worker.output' && chunk) {
-    const lines = String(chunk).split('\n');
-    for (const line of lines) {
-      const activity = activityFromStreamJsonLine(line);
-      if (activity) return activity;
-    }
+  if (type === 'worker.activity') {
+    return event.text ?? null;
+  }
+  if (type === 'worker.meta') {
+    return `  model reported by ${rt}: ${event.effectiveModel}`;
   }
   return null;
 }

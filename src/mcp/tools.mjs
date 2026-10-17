@@ -1,7 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { formatBoardText } from '../agents/board.mjs';
 import {
+  agentBoard,
   agentResult,
   agentStatus,
   applyAgentChanges,
@@ -66,6 +68,7 @@ export const TOOLS = [
       required: ['prompt'],
     },
     handler: (args) => spawnAgent({ ...args, repo: defaultRepo(args) }),
+    board: (args) => formatBoardText(agentBoard({ repo: defaultRepo(args), recentMinutes: 0 })),
   },
   {
     name: 'wait_agent',
@@ -81,19 +84,34 @@ export const TOOLS = [
         repo: repoProp,
       },
     },
-    handler: (args) =>
-      waitAgents({
+    handler: (args, ctx) => {
+      let lastMessage = null;
+      let lastSent = 0;
+      return waitAgents({
         repo: defaultRepo(args),
         ids: args.agent_ids,
         mode: args.mode,
         timeoutSeconds: args.timeout_seconds ?? 50,
-      }),
+        onTick: ({ rows, done, total }) => {
+          const message = formatBoardText(rows);
+          if (message === lastMessage && Date.now() - lastSent < 10_000) return;
+          lastMessage = message;
+          lastSent = Date.now();
+          ctx.progress?.({ progress: done, total, message });
+        },
+      });
+    },
+    board: (args, data) =>
+      formatBoardText(
+        agentBoard({ repo: defaultRepo(args), ids: [...data.done, ...data.pending].map((a) => a.agent_id) }),
+      ),
   },
   {
     name: 'agent_status',
     description: 'Status of one agent plus its latest progress lines (files read, commands run).',
     inputSchema: { type: 'object', properties: { agent_id: agentIdProp, repo: repoProp }, required: ['agent_id'] },
     handler: (args) => agentStatus({ repo: defaultRepo(args), id: args.agent_id }),
+    board: (args) => formatBoardText(agentBoard({ repo: defaultRepo(args), ids: [args.agent_id] }), { header: false }),
   },
   {
     name: 'agent_result',
@@ -139,6 +157,7 @@ export const TOOLS = [
       },
     },
     handler: (args) => listAgents({ repo: defaultRepo(args), status: args.status }),
+    board: (args, data) => formatBoardText(agentBoard({ repo: defaultRepo(args), ids: data.map((a) => a.agent_id) })),
   },
   {
     name: 'list_models',

@@ -39,3 +39,22 @@ describe('install', () => {
     assert.ok(JSON.parse(zed.actions[0].snippet).context_servers.zedpstack.command);
   });
 });
+
+describe('install updates outdated registrations', () => {
+  it('rewrites a codex block that points at an old node binary, keeping other sections', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-home-'));
+    delete process.env.CODEX_HOME;
+    const cfg = path.join(home, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(cfg), { recursive: true });
+    fs.writeFileSync(cfg, 'model = "x"\n\n[mcp_servers.zedpstack]\ncommand = "/old/node"\nargs = ["/old/mcp.mjs"]\n\n[features]\nmulti_agent = true\n');
+    const [codex] = runInstall({ hosts: ['codex'], home });
+    assert.equal(codex.actions.at(-1).state, 'outdated');
+    runInstall({ hosts: ['codex'], home, apply: true });
+    const toml = fs.readFileSync(cfg, 'utf8');
+    assert.doesNotMatch(toml, /\/old\/node/);
+    assert.match(toml, /\[features\]\nmulti_agent = true/);
+    assert.equal(toml.match(/\[mcp_servers\.zedpstack\]/g).length, 1);
+    const [again] = runInstall({ hosts: ['codex'], home });
+    assert.equal(again.actions.at(-1).state, 'ok');
+  });
+});

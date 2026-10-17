@@ -39,6 +39,23 @@ Herramientas MCP que usa el orquestador:
 | `close_agent` | detiene el agente y opcionalmente borra su worktree |
 | `list_agents` / `list_models` / `read_skill` | inventario, hoja de modelos y lectura de skills de pstack |
 
+### Ver los subagentes
+
+- **En el chat**: cada respuesta de `spawn_agent` y `wait_agent` empieza con una lista al estilo de Cursor, y el orquestador la publica en su mensaje:
+
+  ```
+  ⠿ How: backend tracking SQL  composer-2.5 · Cursor
+    > Searching for "UPDATE tracking"
+  ⠿ Why: git history  gpt-6.1-sol · Codex
+    Leo el diff y comparo.
+  ✓ How: frontend tracking PUT  haiku → claude-haiku-4-5 · Claude
+    done in 48s
+  ```
+
+  `haiku → claude-haiku-4-5` es el modelo que el CLI realmente usó.
+- **En vivo**: `node scripts/dispatch.mjs top` en un panel de terminal (por ejemplo el de Zed) redibuja la lista con spinners y tiempo transcurrido.
+- **Dentro de la herramienta**: `wait_agent` envía notificaciones de progreso MCP con la lista; el host las muestra si las soporta.
+
 Sin MCP, los mismos comandos existen en la CLI: `node scripts/dispatch.mjs agent spawn|wait|status|result|apply|close|list` (salida JSON).
 
 ## Modelos
