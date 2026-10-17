@@ -172,3 +172,7 @@ Los ocho cortes están implementados. Permanecen abiertos estos límites:
 - Las pruebas que requieren sockets Unix y credenciales o red no pueden darse por verificadas en un sandbox que los prohíbe. El corte 8 conserva esas pruebas para ejecutarlas fuera de ese entorno.
 
 La verificación final del corte 8 en este sandbox aprobó 316 pruebas sin las suites que requieren el puente de permisos, tanto sin variables de origen como con las tres heredadas. Con HOME vacío aprobó 309 y omitió 7 pruebas que requieren una instalación local de pstack. Los intentos completos de `npm test` encontraron `listen EPERM` y una regresión de limpieza corregida después, cuya prueba ya pasa con el engine falso. Las suites completas y el puente entre hubs quedan pendientes de validación fuera del sandbox. Cursor real anunció `cursor_login` y rechazó `authenticate` con "Login failed or timed out". No se ejecutó el prompt de escritura en `agent`, `ask` ni `plan`.
+
+## Material de apoyo
+
+El [índice ACP](./acp/README.md) reúne el rastro de implementación, los briefs originales y los tres candidatos de arquitectura. Conserva el contexto histórico; las decisiones vigentes y los límites están en este documento.

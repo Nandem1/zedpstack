@@ -15,11 +15,11 @@ git clone https://github.com/Nandem1/zedpstack.git
 cd zedpstack
 npm test
 node scripts/dispatch.mjs install            # vista previa
-node scripts/dispatch.mjs install --apply    # registra MCP + skill en Claude Code, Codex y Cursor
+node scripts/dispatch.mjs install --apply    # registra MCP + skills en Claude Code, Codex y Cursor
 node scripts/dispatch.mjs doctor --human
 ```
 
-`install` registra el servidor MCP (`scripts/mcp.mjs`) y enlaza los skills `zedpstack` y `setup-zedpstack`. Zed usa JSONC, así que `install --host zed` imprime el bloque `context_servers` para que lo pegues tú. Reinicia el host después.
+`install` registra el servidor MCP (`scripts/mcp.mjs`) y enlaza los skills `zedpstack`, `setup-zedpstack` y `zedpstack-bitacora`. Zed usa JSONC, así que `install --host zed` imprime el bloque `context_servers` para que lo pegues tú. Reinicia el host después.
 
 ## Uso
 
@@ -139,6 +139,13 @@ node scripts/dispatch.mjs run --playbook how-investigation --goal "¿Cómo funci
 ```
 
 Ver [docs/PSTACK_ADAPTERS.md](./docs/PSTACK_ADAPTERS.md) y [docs/STREAMING.md](./docs/STREAMING.md). El diseño completo está en [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+
+## Documentación
+
+- [Diseño ACP](./docs/ACP_DESIGN.md) y [arquitectura](./docs/ARCHITECTURE.md).
+- [Bitácora](./docs/BITACORA.md) y [material de apoyo ACP](./docs/acp/README.md), con el rastro, los briefs y los candidatos de arquitectura.
+- Skills [zedpstack](./SKILL.md), [setup-zedpstack](./setup-zedpstack/SKILL.md) y [zedpstack-bitacora](./zedpstack-bitacora/SKILL.md).
+- [Historial de cambios](./CHANGELOG.md).
 
 ## Licencia
 
