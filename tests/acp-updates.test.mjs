@@ -1,11 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSpec, writeRun } from '../src/agents/store.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { agentDir, createSpec, writeRun } from '../src/agents/store.mjs';
 import {
   THROTTLE_MS,
   STREAM_TOOL_KIND,
   createThrottleGate,
   createWorkerUpdateSink,
+  workerTitle,
 } from '../src/acp/updates.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
@@ -231,5 +234,72 @@ describe('createWorkerUpdateSink (terminal mode)', () => {
     assert.equal(exitUpdate.status, 'completed');
     assert.equal(exitUpdate._meta.terminal_exit.terminal_id, agentId);
     assert.equal(exitUpdate._meta.terminal_exit.exit_code, 0);
+  });
+});
+
+describe('worker card model check', () => {
+  function seedModelRun(repo, id, { model, effectiveModel, expectedModel }) {
+    const now = new Date().toISOString();
+    createSpec(repo, {
+      id,
+      binding: { runtime: 'claude', model, permissionProfile: 'read-only' },
+      description: 'Review plan',
+      role: 'judgment and prose',
+      repoRoot: repo,
+      cwd: repo,
+      isolation: 'none',
+      worktree: null,
+      createdAt: now,
+      expectedModel,
+    });
+    writeRun(repo, id, {
+      runnerPid: null,
+      workerPid: null,
+      startedAt: now,
+      effectiveModel,
+      outcome: { ok: true, exitCode: 0, timedOut: false, error: null, changes: null, changeError: null, finishedAt: now },
+    });
+    fs.writeFileSync(path.join(agentDir(repo, id), 'result.json'), JSON.stringify({ text: 'Respaldo con condiciones.' }));
+    return id;
+  }
+
+  async function finishCard(repo, agentId) {
+    const updates = [];
+    const sink = createWorkerUpdateSink({
+      notify: ({ update }) => updates.push(update),
+      sessionId: 'sess-model',
+      repo,
+      agentId,
+      title: workerTitle({ description: 'Review plan', model: 'opus', runtime: 'claude' }),
+      streamMode: 'content',
+    });
+    sink.emitStart();
+    await sink.finish();
+    return updates.find((u) => u.status === 'completed');
+  }
+
+  it('a mismatch stays completed, retitles the card and leads its content with the warning', async () => {
+    const sb = makeSandbox();
+    const id = seedModelRun(sb.repo, 'card-mismatch', { model: 'opus', effectiveModel: 'claude-opus-4-8', expectedModel: 'claude-opus-5-5' });
+    const done = await finishCard(sb.repo, id);
+    assert.equal(done.title, 'Review plan · opus → claude-opus-4-8 ⚠ esperado claude-opus-5-5 (claude)');
+    const text = contentText(done);
+    assert.match(text.split('\n')[0], /^⚠ model mismatch: requested opus, the CLI ran claude-opus-4-8, expected claude-opus-5-5/);
+    assert.match(text, /Respaldo con condiciones/);
+  });
+
+  it('an unprobed alias gets a neutral note', async () => {
+    const sb = makeSandbox();
+    const id = seedModelRun(sb.repo, 'card-alias', { model: 'opus', effectiveModel: 'claude-opus-4-8', expectedModel: null });
+    const done = await finishCard(sb.repo, id);
+    assert.equal(done.title, 'Review plan · opus → claude-opus-4-8 (alias) (claude)');
+    assert.equal(contentText(done), 'Respaldo con condiciones.');
+  });
+
+  it('keeps the title when the model needs no label', async () => {
+    const sb = makeSandbox();
+    const id = seedModelRun(sb.repo, 'card-ok', { model: 'opus', effectiveModel: null, expectedModel: null });
+    const done = await finishCard(sb.repo, id);
+    assert.equal(done.title, undefined);
   });
 });

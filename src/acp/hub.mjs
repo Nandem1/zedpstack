@@ -3,6 +3,7 @@ import path from 'node:path';
 import { formatBoardText } from '../agents/board.mjs';
 import { agentBoard, liveSessionAgentIds, stopSessionAgents } from '../agents/lifecycle.mjs';
 import { ZEDPSTACK_VERSION } from '../constants.mjs';
+import { checkModel, isAlias, modelWarning } from '../modelCheck.mjs';
 import { orchestratorPrompt } from '../orchestratorPrompt.mjs';
 import { createWorkerCards } from './cards.mjs';
 import { isBoardCommand, isChildCommand } from './commands.mjs';
@@ -186,6 +187,25 @@ export function createHub({
     announceCommands(session);
   }
 
+  /**
+   * claude-agent-acp names the model that answered in `usage_update._meta`;
+   * Codex and Cursor engines report nothing, so their orchestrator stays unverified.
+   * An alias expects nothing here: the probe cache records the worker CLI, not
+   * the engine's bundled SDK, which may resolve the same alias differently.
+   * One warning per (requested, effective) pair, not one per usage update.
+   */
+  function warnOnModelMismatch(session, update) {
+    const effective = update._meta?.['_claude/model'];
+    const requested = session.childOptions.configOptions.find((option) => option.id === 'model')?.currentValue;
+    if (!effective || !requested) return;
+    const expected = isAlias(requested) ? null : requested;
+    const warning = modelWarning(checkModel({ requested, effective, expected }));
+    const key = `${requested}\n${effective}`;
+    if (!warning || session.modelWarned === key) return;
+    session.modelWarned = key;
+    notifyZed({ sessionId: session.sessionId, update: agentMessageChunk(`\n\n${warning}\n\n`) });
+  }
+
   function wireEnginePeer(session) {
     const peer = session.engine?.peer;
     if (!peer) return;
@@ -194,7 +214,9 @@ export function createHub({
       if (method !== 'session/update') return;
       const update = params.update ?? params;
       let outUpdate = update;
-      if (update.sessionUpdate === 'available_commands_update') {
+      if (update.sessionUpdate === 'usage_update') {
+        warnOnModelMismatch(session, update);
+      } else if (update.sessionUpdate === 'available_commands_update') {
         session.childCommands = update.availableCommands ?? [];
         if (!session.commandsAnnounced) return;
         outUpdate = {

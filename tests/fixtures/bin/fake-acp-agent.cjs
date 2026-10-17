@@ -304,6 +304,17 @@ async function handleRequest(msg) {
         respond(turn.cancelled ? 'cancelled' : 'end_turn');
         break;
       }
+      // claude-agent-acp@0.93.0 names the model that answered in usage_update._meta.
+      const usage = /\bUSAGE=(\S+)/.exec(text);
+      if (usage) {
+        for (let i = 0; i < 2; i += 1) {
+          write({
+            jsonrpc: '2.0',
+            method: 'session/update',
+            params: { sessionId, update: { sessionUpdate: 'usage_update', used: 1, size: 10, _meta: { '_claude/model': usage[1] } } },
+          });
+        }
+      }
       write({
         jsonrpc: '2.0',
         method: 'session/update',

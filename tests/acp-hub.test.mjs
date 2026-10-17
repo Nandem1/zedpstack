@@ -45,6 +45,21 @@ describe('acp hub', () => {
     assert.ok(ids.includes('model'));
   });
 
+  it('warns once in the thread when the engine reports another model than the one selected', async () => {
+    const { sessionId } = await ctx.rpc('session/new', { cwd: sb.repo, mcpServers: [] });
+    const warnings = () => ctx.updates.filter(
+      (u) => u.update?.sessionUpdate === 'agent_message_chunk' && /model mismatch/.test(u.update.content?.text ?? ''),
+    );
+    await ctx.rpc('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'USAGE=alpha-20260101' }] });
+    assert.equal(warnings().length, 0, 'the selected model ran');
+    assert.ok(ctx.updates.some((u) => u.update?.sessionUpdate === 'usage_update'), 'usage updates still reach Zed');
+
+    await ctx.rpc('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'USAGE=claude-opus-4-8' }] });
+    await ctx.rpc('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'USAGE=claude-opus-4-8' }] });
+    assert.equal(warnings().length, 1, 'one warning per requested/effective pair');
+    assert.match(warnings()[0].update.content.text, /requested alpha, the CLI ran claude-opus-4-8, expected alpha/);
+  });
+
   for (const timing of ['session/new', 'prompt']) {
     it(`merged commands survive child updates on ${timing}, runtime switch, and restart`, async () => {
       env.FAKE_ACP_COMMANDS_TIMING = timing;

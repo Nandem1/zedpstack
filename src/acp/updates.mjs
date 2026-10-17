@@ -1,4 +1,5 @@
 import { agentResult } from '../agents/lifecycle.mjs';
+import { modelLabel } from '../modelCheck.mjs';
 
 export const THROTTLE_MS = 250;
 const MAX_CONTENT_LINES = 200;
@@ -28,9 +29,11 @@ export function toolCallIdForAgent(agentId) {
   return `zp-${agentId}`;
 }
 
+/** `summary` is an agent summary; before the worker reports its model it may lack `model_check`. */
 export function workerTitle(summary) {
   const desc = summary.description ?? summary.role ?? 'worker';
-  return `${desc} · ${summary.model} (${summary.runtime})`;
+  const model = summary.model_check ? modelLabel(summary.model_check) : summary.model;
+  return `${desc} · ${model} (${summary.runtime})`;
 }
 
 function textContentBlock(text) {
@@ -205,6 +208,9 @@ export function createWorkerUpdateSink({ notify, sessionId, repo, agentId, title
     const terminal = ['completed', 'failed', 'stopped'].includes(result.status);
     const acpStatus = STATUS_MAP[result.status] ?? 'failed';
     const summary = resultSummaryText(result);
+    // The effective model is only known once the worker reported it, so the card title catches up here.
+    const finalTitle = workerTitle(result);
+    const retitle = finalTitle !== title ? { title: finalTitle } : {};
 
     if (streamMode === 'terminal') {
       const summaryData = toTerminalOutputData(
@@ -221,6 +227,7 @@ export function createWorkerUpdateSink({ notify, sessionId, repo, agentId, title
         sessionUpdate: 'tool_call_update',
         toolCallId,
         status: acpStatus,
+        ...retitle,
         _meta: {
           terminal_exit: {
             terminal_id: agentId,
@@ -234,6 +241,7 @@ export function createWorkerUpdateSink({ notify, sessionId, repo, agentId, title
         sessionUpdate: 'tool_call_update',
         toolCallId,
         status: acpStatus,
+        ...retitle,
         content: textContentBlock(summary),
       });
     }
