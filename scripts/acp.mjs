@@ -27,20 +27,27 @@ function main() {
     hub.notify({ method, params });
   });
 
-  const shutdown = async () => {
-    await hub.shutdown();
-    zedPeer.close();
+  let exiting = false;
+  const shutdown = (code) => {
+    if (exiting) return;
+    exiting = true;
+    hub.shutdown()
+      .catch((error) => process.stderr.write(`[zedpstack-acp] shutdown failed: ${error?.stack ?? error}\n`))
+      .finally(() => {
+        zedPeer.close();
+        process.exit(code);
+      });
+  };
+  const crash = (error) => {
+    process.stderr.write(`[zedpstack-acp] ${error?.stack ?? error}\n`);
+    shutdown(1);
   };
 
-  process.stdin.on('close', () => {
-    shutdown().finally(() => process.exit(0));
-  });
-  process.on('SIGTERM', () => {
-    shutdown().finally(() => process.exit(0));
-  });
-  process.on('SIGINT', () => {
-    shutdown().finally(() => process.exit(0));
-  });
+  process.stdin.on('close', () => shutdown(0));
+  process.on('SIGTERM', () => shutdown(0));
+  process.on('SIGINT', () => shutdown(0));
+  process.on('uncaughtException', crash);
+  process.on('unhandledRejection', crash);
 }
 
 main();

@@ -87,6 +87,7 @@ export function engineMcpServers({ clientServers = [], sessionId, repo }) {
       env: [
         { name: 'ZEDPSTACK_ACP_SESSION', value: sessionId },
         { name: 'ZEDPSTACK_REPO', value: repo },
+        { name: 'ZEDPSTACK_PARENT_PID', value: String(process.pid) },
       ],
     },
   ];
@@ -186,7 +187,8 @@ export async function startEngine({
 
   const child = spawnFn(command[0], command.slice(1), {
     cwd,
-    env: { ...env },
+    // Its own group means a SIGKILLed hub cannot take it down; the pid lets it notice instead.
+    env: { ...env, ZEDPSTACK_PARENT_PID: String(process.pid) },
     stdio: ['pipe', 'pipe', 'pipe'],
     detached: true,
   });
@@ -216,7 +218,9 @@ export async function startEngine({
     peer.close(reason);
   };
   let terminationError;
+  let exitStatus = { code: null, signal: null };
   child.on('exit', (code, signal) => {
+    exitStatus = { code, signal };
     terminationError = new Error(`child exited ${signal ? `with signal ${signal}` : `with code ${code}`}`);
     onDead(terminationError);
   });
@@ -229,7 +233,7 @@ export async function startEngine({
   const closed = new Promise((resolve) => child.once('close', () => {
     childClosed = true;
     for (const stream of child.stdio) stream?.destroy();
-    resolve();
+    resolve(exitStatus);
   }));
 
   let killPromise;
@@ -255,10 +259,27 @@ export async function startEngine({
         }
       };
 
+      const groupAlive = () => {
+        try {
+          process.kill(-pid, 0);
+          return true;
+        } catch (error) {
+          return error.code === 'EPERM';
+        }
+      };
+
+      const deadline = Date.now() + 3000;
       const timer = childClosed ? null : setTimeout(() => signal('SIGKILL'), 3000);
+      timer?.unref();
+      child.stdin?.end();
       signal('SIGTERM');
       await closed;
       clearTimeout(timer);
+      // npx exits before the agent it launched, so the rest of the group gets what is left of the 3 s.
+      while (groupAlive() && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      if (groupAlive()) signal('SIGKILL');
     })();
     return killPromise;
   };
@@ -298,6 +319,9 @@ export async function startEngine({
         return initialCommands;
       },
       kill,
+      /** Resolves with `{code, signal}` once the process exited and its pipes closed. */
+      exited: closed,
+      stderrTail: (lines) => stderr.trim().split('\n').slice(-lines).join('\n'),
       get dead() {
         return dead;
       },

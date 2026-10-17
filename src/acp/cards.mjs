@@ -12,6 +12,8 @@ import { createWorkerUpdateSink, workerTitle } from './updates.mjs';
 export function createWorkerCards({ repo, sessionId, notify, pollMs = 300, streamMode = 'content' }) {
   /** @type {Map<string, AbortController>} */
   const attached = new Map();
+  /** @type {Map<string, Promise<unknown>>} settles once the card closed or was dropped */
+  const finished = new Map();
   // origin lives in agent.json, which is never rewritten, so a foreign agent stays foreign.
   const foreign = new Set();
   let timer = null;
@@ -41,9 +43,9 @@ export function createWorkerCards({ repo, sessionId, notify, pollMs = 300, strea
       streamMode,
     });
     sink.emitStart();
-    followAgent(repo, spec.id, (event) => sink.onFollowEvent(event), { signal: controller.signal, intervalMs: pollMs })
+    finished.set(spec.id, followAgent(repo, spec.id, (event) => sink.onFollowEvent(event), { signal: controller.signal, intervalMs: pollMs })
       .then(() => (controller.signal.aborted ? null : sink.finish()))
-      .catch(() => {});
+      .catch(() => {}));
   }
 
   function resync() {
@@ -75,6 +77,11 @@ export function createWorkerCards({ repo, sessionId, notify, pollMs = 300, strea
       timer.unref();
     },
     resync,
+    /** Resolves once every card among `ids` sent its terminal update (or the cards were disposed). */
+    whenFinished(ids) {
+      resync();
+      return Promise.all(ids.map((id) => finished.get(id)));
+    },
     dispose() {
       disposed = true;
       clearInterval(timer);
