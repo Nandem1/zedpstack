@@ -1,10 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { pstackAvailable } from './helpers/pstack.mjs';
 import { loadPlaybook, loadStepPrompt } from '../src/playbook.mjs';
 import {
   buildInterrogateReviewerPrompt,
   buildWhyInvestigatorPrompt,
 } from '../src/pstackPrompts.mjs';
+
+const requiresPstack = { skip: pstackAvailable() ? false : 'pstack plugin not installed' };
 
 const PLAYBOOKS = [
   'how-investigation',
@@ -23,12 +26,12 @@ describe('pstack playbooks smoke', () => {
     });
   }
 
-  it('why investigator prompt includes code-archaeology', () => {
+  it('why investigator prompt includes code-archaeology', requiresPstack, () => {
     const t = buildWhyInvestigatorPrompt({ question: 'Why auth?' });
     assert.match(t, /code-archaeology|source control/i);
   });
 
-  it('interrogate reviewer embeds rubric', () => {
+  it('interrogate reviewer embeds rubric', requiresPstack, () => {
     const t = buildInterrogateReviewerPrompt({
       intent: 'Fix bug',
       codeContext: 'diff here',
@@ -37,7 +40,7 @@ describe('pstack playbooks smoke', () => {
     assert.match(t, /adversarial code reviewer/i);
   });
 
-  it('reflect reviewer embeds digest', () => {
+  it('reflect reviewer embeds digest', requiresPstack, () => {
     const pb = loadPlaybook('reflect-session');
     const step = pb.def.steps[0];
     const text = loadStepPrompt({
@@ -51,7 +54,7 @@ describe('pstack playbooks smoke', () => {
     assert.match(text, /TRANSCRIPT_LINE_1/);
   });
 
-  it('architect sketch first step renders', () => {
+  it('architect sketch first step renders', requiresPstack, () => {
     const pb = loadPlaybook('architect-sketch');
     const step = pb.def.steps[0];
     const text = loadStepPrompt({

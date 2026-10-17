@@ -136,7 +136,7 @@ function claudeCodeActions(home) {
         const res = spawnSync('claude', ['mcp', 'add', '--scope', 'user', 'zedpstack', '--', command, ...args], {
           encoding: 'utf8',
         });
-        return res.status === 0 ? 'registered' : `failed: ${(res.stderr || res.stdout).trim()}`;
+        return res.status === 0 ? 'registered' : `failed: ${res.error?.message ?? (res.stderr || res.stdout || '').trim()}`;
       },
     },
   ];

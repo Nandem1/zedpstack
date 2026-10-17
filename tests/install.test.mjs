@@ -41,6 +41,21 @@ describe('install', () => {
 });
 
 describe('claude-code orchestrator edit guard hook', () => {
+  it('reports a missing Claude CLI without interrupting installation', (t) => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-claude-missing-'));
+    const originalPath = process.env.PATH;
+    t.after(() => {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+      fs.rmSync(home, { recursive: true, force: true });
+    });
+    process.env.PATH = home;
+
+    const [installed] = runInstall({ hosts: ['claude-code'], home, apply: true });
+    assert.match(installed.actions.find((a) => a.kind === 'mcp').result, /^failed: .*ENOENT/);
+    assert.equal(installed.actions.find((a) => a.kind === 'orchestrator-edit-guard').result, 'installed');
+  });
+
   it('installs idempotently and preserves other PreToolUse hooks', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-claude-hook-'));
     const settingsPath = path.join(home, '.claude', 'settings.json');

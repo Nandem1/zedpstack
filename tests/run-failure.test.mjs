@@ -5,9 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { runPlaybook } from '../src/run.mjs';
 import { readManifest } from '../src/manifest.mjs';
+import { pstackAvailable } from './helpers/pstack.mjs';
 
 describe('runPlaybook when a worker cannot start', () => {
-  it('marks the step failed instead of leaving it running, and resume never reaches judgment', async () => {
+  it('marks the step failed instead of leaving it running, and resume never reaches judgment', {
+    skip: pstackAvailable() ? false : 'pstack plugin not installed',
+  }, async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zp-runfail-'));
     const repo = path.join(dir, 'repo');
     fs.mkdirSync(repo);
